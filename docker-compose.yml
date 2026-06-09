@@ -133,6 +133,8 @@ services:
       TZ: America/Sao_Paulo
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
       N8N_RUNNERS_ENABLED: "true"
+      # Libera acesso a env vars ($env) dentro dos nodes — workflow lê AGENT_SYSTEM_PROMPT
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       #WEBHOOK_URL: https://<seu-dominio>/
       #N8N_EDITOR_BASE_URL: https://<seu-dominio>/
       N8N_HOST: 0.0.0.0
