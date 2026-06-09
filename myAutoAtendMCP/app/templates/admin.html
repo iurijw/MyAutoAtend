@@ -146,6 +146,11 @@
     .ia-msg.ok{color:var(--green);}
     .ia-msg.err{color:var(--oxblood);}
     .ia-acts{display:flex; gap:8px; margin-top:14px;}
+    /* card IA colapsável (mesmo padrão do card WhatsApp) */
+    #ia-card .card-head{cursor:pointer; user-select:none;}
+    #ia-card.collapsed .card-head{margin-bottom:0; padding-bottom:0; border-bottom:none;}
+    #ia-card.collapsed #ia-body{display:none;}
+    #ia-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 
     /* page-load reveal */
     .reveal{opacity:0; transform:translateY(14px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;}
@@ -208,11 +213,13 @@
     </div>
 
     <!-- ============ PROVEDORES DE IA ============ -->
-    <div class="card" id="ia-card">
-      <div class="card-head">
+    <div class="card collapsed" id="ia-card">
+      <div class="card-head" id="ia-head">
         <h2>Provedores de IA</h2>
         <span class="tag">chaves só entram</span>
+        <span class="wa-chevron" title="Expandir/recolher">▾</span>
       </div>
+      <div id="ia-body">
       <p class="ia-note" style="margin:-8px 0 18px">
         As chaves vão direto para as credenciais do n8n e <b>nunca são exibidas de volta</b> — nem mascaradas.
         Trocar o modelo atualiza e republica o workflow na hora.
@@ -257,6 +264,7 @@
           </div>
           <p class="ia-msg" id="ia-msg-midia"></p>
         </div>
+      </div>
       </div>
     </div>
 
@@ -598,7 +606,18 @@
       b.addEventListener('click', () => salvarChave(b.dataset.iaKey, b)));
     document.querySelectorAll('[data-ia-modelo]').forEach(b =>
       b.addEventListener('click', () => salvarModelo(b.dataset.iaModelo, b)));
-    carregarEstado();
+
+    // Card começa recolhido; estado só é buscado na primeira expansão
+    // (evita login no n8n a cada carregamento da página).
+    const iaCard = document.getElementById('ia-card');
+    let estadoCarregado = false;
+    document.getElementById('ia-head').addEventListener('click', () => {
+      iaCard.classList.toggle('collapsed');
+      if (!iaCard.classList.contains('collapsed') && !estadoCarregado){
+        estadoCarregado = true;
+        carregarEstado();
+      }
+    });
   })();
   </script>
 </body>
