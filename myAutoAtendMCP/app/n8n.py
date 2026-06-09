@@ -51,15 +51,30 @@ def _data(r: httpx.Response) -> Any:
     return j.get("data", j) if isinstance(j, dict) else j
 
 
+# Cookie de sessão cacheado entre chamadas: o POST /rest/login do n8n tem rate
+# limit (429 com logins repetidos) e o painel faz várias chamadas em sequência.
+_cookie_cache: str | None = None
+
+
 @contextmanager
 def _sessao() -> Iterator[httpx.Client]:
     """Abre cliente já logado no n8n.
 
     O cookie `n8n-auth` vem com flag `Secure`, e o tráfego interno é http://,
     então o jar do httpx o descartaria — copiamos o header na mão, como o
-    init-n8n.sh faz.
+    init-n8n.sh faz. Cookie reutilizado enquanto válido (GET /rest/login é o
+    "whoami" do n8n); refeito o login quando expira.
     """
+    global _cookie_cache
     with httpx.Client(base_url=settings.n8n_api_url.rstrip("/"), timeout=30.0) as c:
+        if _cookie_cache:
+            c.headers["Cookie"] = _cookie_cache
+            if c.get("/rest/login").status_code == 200:
+                yield c
+                return
+            del c.headers["Cookie"]
+            _cookie_cache = None
+
         r = c.post(
             "/rest/login",
             json={
@@ -82,6 +97,7 @@ def _sessao() -> Iterator[httpx.Client]:
         )
         if not auth:
             raise RuntimeError("Login no n8n não retornou cookie de sessão.")
+        _cookie_cache = auth
         c.headers["Cookie"] = auth
         yield c
 
@@ -150,6 +166,37 @@ def _provedor_da_url(url: str | None) -> str | None:
         if p["base_url"] and p["base_url"].rstrip("/") == u:
             return chave
     return "custom"
+
+
+def listar_modelos(alvo: str) -> list[dict]:
+    """Modelos disponíveis no provedor do alvo, SEM expor a chave.
+
+    Usa o endpoint interno do n8n que resolve `listSearch` de nodes
+    (`modelSearch` chama o `GET /models` do provedor com a credencial
+    armazenada). A chave fica do lado do n8n o tempo todo.
+    """
+    with _sessao() as c:
+        cred = _achar_credencial(c, alvo)
+        r = c.post(
+            "/rest/dynamic-node-parameters/resource-locator-results",
+            json={
+                "nodeTypeAndVersion": {
+                    "name": "@n8n/n8n-nodes-langchain.openAi",
+                    "version": 1.8,
+                },
+                "path": "parameters.modelId",
+                "methodName": "modelSearch",
+                "currentNodeParameters": {"resource": "image", "operation": "analyze"},
+                "credentials": {"openAiApi": {"id": cred["id"], "name": cred["name"]}},
+            },
+        )
+        if r.status_code != 200:
+            raise RuntimeError(
+                f"n8n não conseguiu listar os modelos (HTTP {r.status_code}). "
+                "Confira se a chave do provedor é válida."
+            )
+        resultados = (_data(r) or {}).get("results", [])
+        return [{"valor": x["value"]} for x in resultados if x.get("value")]
 
 
 # ---------------------------------------------------------------------------

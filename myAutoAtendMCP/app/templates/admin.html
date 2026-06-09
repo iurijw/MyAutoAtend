@@ -216,8 +216,7 @@
     <div class="card collapsed" id="ia-card">
       <div class="card-head" id="ia-head">
         <h2>Provedores de IA</h2>
-        <span class="tag">chaves só entram</span>
-        <span class="wa-chevron" title="Expandir/recolher">▾</span>
+        <span class="wa-chevron" style="margin-left:auto" title="Expandir/recolher">▾</span>
       </div>
       <div id="ia-body">
       <p class="ia-note" style="margin:-8px 0 18px">
@@ -237,6 +236,7 @@
           <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
           <input type="password" id="ia-key-texto" autocomplete="new-password" placeholder="cole a nova chave">
           <label>Modelo</label>
+          <select id="ia-modelo-sel-texto" style="display:none"></select>
           <input id="ia-modelo-texto" placeholder="ex.: gpt-5.1">
           <div class="ia-acts">
             <button class="btn-primary btn-sm" style="margin:0" data-ia-key="texto">Salvar chave</button>
@@ -257,6 +257,7 @@
           <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
           <input type="password" id="ia-key-midia" autocomplete="new-password" placeholder="cole a nova chave">
           <label>Modelo de visão (OCR)</label>
+          <select id="ia-modelo-sel-midia" style="display:none"></select>
           <input id="ia-modelo-midia" placeholder="ex.: gpt-4o">
           <div class="ia-acts">
             <button class="btn-primary btn-sm" style="margin:0" data-ia-key="midia">Salvar chave</button>
@@ -552,6 +553,8 @@
           }
           if (info.modelo) $('ia-modelo-' + alvo).value = info.modelo;
         }
+        // Após o estado (sessão n8n aquecida), busca os modelos do provedor.
+        for (const alvo of ALVOS) carregarModelos(alvo, (d[alvo] || {}).modelo);
       } catch(e){
         for (const alvo of ALVOS){
           const pill = $('ia-status-' + alvo);
@@ -559,6 +562,42 @@
           pill.textContent = 'n8n indisponível';
         }
       }
+    }
+
+    async function carregarModelos(alvo, atual){
+      const sel = $('ia-modelo-sel-' + alvo);
+      const inp = $('ia-modelo-' + alvo);
+      try {
+        const r = await fetch('/admin/ia/modelos?alvo=' + alvo);
+        const d = await r.json();
+        if (!r.ok || d.erro) throw new Error(d.erro || ('HTTP ' + r.status));
+        const modelos = (d.modelos || []).map(m => m.valor);
+        if (!modelos.length) throw new Error('lista vazia');
+        const atualVal = (atual || inp.value.trim());
+        if (atualVal && !modelos.includes(atualVal)) modelos.unshift(atualVal);
+        sel.innerHTML = '';
+        for (const m of modelos){
+          const o = document.createElement('option');
+          o.value = m; o.textContent = m;
+          sel.appendChild(o);
+        }
+        const outro = document.createElement('option');
+        outro.value = '__outro'; outro.textContent = 'Outro (digitar)…';
+        sel.appendChild(outro);
+        if (atualVal) sel.value = atualVal;
+        sel.style.display = '';
+        inp.style.display = 'none';
+        sel.onchange = () => {
+          inp.style.display = sel.value === '__outro' ? '' : 'none';
+          if (sel.value === '__outro') inp.focus();
+        };
+      } catch(e){ /* sem lista — segue com campo de texto livre */ }
+    }
+
+    function modeloEscolhido(alvo){
+      const sel = $('ia-modelo-sel-' + alvo);
+      if (sel.style.display !== 'none' && sel.value && sel.value !== '__outro') return sel.value;
+      return $('ia-modelo-' + alvo).value.trim();
     }
 
     async function postar(url, dados){
@@ -585,13 +624,13 @@
         });
         $('ia-key-' + alvo).value = '';   // chave some da tela na hora
         msg(alvo, 'Chave gravada no n8n.', true);
-        carregarEstado();
+        carregarEstado();                  // re-lista modelos do provedor novo
       } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
       finally { btn.disabled = false; }
     }
 
     async function salvarModelo(alvo, btn){
-      const modelo = $('ia-modelo-' + alvo).value.trim();
+      const modelo = modeloEscolhido(alvo);
       if (!modelo){ msg(alvo, 'Informe o nome do modelo.', false); return; }
       btn.disabled = true; msg(alvo, 'Atualizando workflow…', true);
       try {

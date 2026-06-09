@@ -103,6 +103,16 @@ def ia_estado(_: str = Depends(autenticar)):
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
+@router.get("/admin/ia/modelos")
+def ia_modelos(alvo: str, _: str = Depends(autenticar)):
+    if alvo not in ("texto", "midia"):
+        raise HTTPException(status_code=400, detail="Alvo inválido.")
+    try:
+        return {"modelos": n8n.listar_modelos(alvo)}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
 @router.post("/admin/ia/credencial")
 def ia_credencial(
     _: str = Depends(autenticar),
