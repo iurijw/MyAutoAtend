@@ -1,0 +1,21 @@
+# Segredos — NUNCA commitar
+.env
+
+# Banco de dados local do MCP
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

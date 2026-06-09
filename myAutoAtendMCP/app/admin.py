@@ -1,0 +1,169 @@
+"""Painel web de configuração (/admin).
+
+Autenticação: HTTP Basic, credenciais vindas de variáveis de ambiente
+(ADMIN_USER / ADMIN_PASS). Controla parâmetros críticos (telefone do dono,
+instruções, serviços) — NUNCA deixe o painel exposto sem credencial forte.
+
+PARA EVOLUÇÃO FUTURA: trocar Basic por login de sessão com senha em hash
+(passlib/bcrypt) e cookie seguro.
+"""
+
+import secrets
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.templating import Jinja2Templates
+
+from . import db
+from .config import settings
+
+router = APIRouter()
+templates = Jinja2Templates(directory="app/templates")
+security = HTTPBasic()
+
+
+def autenticar(cred: HTTPBasicCredentials = Depends(security)) -> str:
+    ok_user = secrets.compare_digest(cred.username, settings.admin_user)
+    ok_pass = secrets.compare_digest(cred.password, settings.admin_pass)
+    if not (ok_user and ok_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciais inválidas",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return cred.username
+
+
+@router.get("/admin", response_class=HTMLResponse)
+def painel(request: Request, _: str = Depends(autenticar)):
+    servicos = db.listar_todos_servicos()
+    nome_por_id = {s.id: s.nome for s in servicos}
+    agendamentos = sorted(db.listar_agendamentos(), key=lambda a: a.inicio)
+    bloqueios = sorted(db.listar_bloqueios(), key=lambda b: (b.data, b.inicio or ""))
+    return templates.TemplateResponse(
+        request,
+        "admin.html",
+        {
+            "config": db.get_config(),
+            "servicos": servicos,
+            "bloqueios": bloqueios,
+            "agendamentos": agendamentos,
+            "servico_nome": nome_por_id,
+            "n_ativos": sum(1 for s in servicos if s.ativo),
+        },
+    )
+
+
+@router.post("/admin/config")
+def salvar_config(
+    _: str = Depends(autenticar),
+    telefone_dono: str = Form(...),
+    instrucoes_gerais: str = Form(...),
+    fuso: str = Form(...),
+    abertura: str = Form(...),
+    fechamento: str = Form(...),
+    duracao_slot_min: int = Form(...),
+):
+    db.update_config(
+        telefone_dono=telefone_dono,
+        instrucoes_gerais=instrucoes_gerais,
+        fuso=fuso,
+        abertura=abertura,
+        fechamento=fechamento,
+        duracao_slot_min=duracao_slot_min,
+    )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/servico")
+def novo_servico(
+    _: str = Depends(autenticar),
+    nome: str = Form(...),
+    descricao: str = Form(...),
+    valor: float = Form(...),
+    duracao_min: int = Form(...),
+):
+    db.criar_servico(nome, descricao, valor, duracao_min)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/servico/{servico_id}/toggle")
+def alternar_servico(servico_id: int, _: str = Depends(autenticar)):
+    srv = db.get_servico(servico_id)
+    if srv:
+        db.editar_servico(servico_id, ativo=not srv.ativo)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/servico/{servico_id}/excluir")
+def excluir_servico(servico_id: int, _: str = Depends(autenticar)):
+    db.deletar_servico(servico_id)
+    return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Agendamentos
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/agendamento/{agendamento_id}/cancelar")
+def cancelar_agendamento(agendamento_id: int, _: str = Depends(autenticar)):
+    db.cancelar_agendamento(agendamento_id)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/agendamento/{agendamento_id}/reagendar")
+def reagendar_agendamento(
+    agendamento_id: int,
+    _: str = Depends(autenticar),
+    novo_inicio: str = Form(...),
+):
+    """Remarca um agendamento. `novo_inicio` no formato YYYY-MM-DDTHH:MM.
+
+    O dono opera pelo painel (já autenticado por Basic), então não passa pela
+    autorização das tools MCP. O fim é recalculado pela duração do serviço.
+    """
+    ag = db.get_agendamento(agendamento_id)
+    if not ag:
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado.")
+    servico = db.get_servico(ag.servico_id)
+    try:
+        dt_inicio = datetime.fromisoformat(novo_inicio)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Horário inválido.")
+    dur = servico.duracao_min if servico else 30
+    novo_fim = (dt_inicio + timedelta(minutes=dur)).isoformat(timespec="minutes")
+    db.reagendar_agendamento(
+        agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim
+    )
+    return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Bloqueios
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/bloqueio")
+def novo_bloqueio(
+    _: str = Depends(autenticar),
+    data: str = Form(...),
+    inicio: str = Form(""),
+    fim: str = Form(""),
+    motivo: str = Form(""),
+):
+    db.criar_bloqueio(
+        data=data,
+        inicio=inicio or None,
+        fim=fim or None,
+        motivo=motivo,
+    )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/bloqueio/{bloqueio_id}/excluir")
+def excluir_bloqueio(bloqueio_id: int, _: str = Depends(autenticar)):
+    db.remover_bloqueio(bloqueio_id)
+    return RedirectResponse("/admin", status_code=303)

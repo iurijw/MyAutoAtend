@@ -1,0 +1,6 @@
+# Força LF em todos os arquivos de texto — evita quebrar scripts shell no Linux
+* text=auto eol=lf
+*.sh text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.env text eol=lf
