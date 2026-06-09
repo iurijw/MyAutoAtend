@@ -199,6 +199,28 @@ def listar_modelos(alvo: str) -> list[dict]:
         return [{"valor": x["value"]} for x in resultados if x.get("value")]
 
 
+def listar_modelos_do_provedor(base_url: str, api_key: str) -> list[dict]:
+    """Lista modelos direto no provedor, com chave recém-digitada no painel.
+
+    Uso transiente (preview antes de salvar): a chave acabou de ser digitada
+    pelo usuário, é usada numa única chamada `GET /models` e descartada —
+    não é armazenada nem aparece em resposta alguma. Depois de salva, a
+    listagem passa a ser feita via n8n (`listar_modelos`).
+    """
+    r = httpx.get(
+        base_url.rstrip("/") + "/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=20.0,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"Provedor respondeu HTTP {r.status_code} ao listar modelos — confira a chave."
+        )
+    data = r.json().get("data", [])
+    modelos = sorted(m["id"] for m in data if m.get("id"))
+    return [{"valor": m} for m in modelos]
+
+
 # ---------------------------------------------------------------------------
 # Workflow (modelo dos nodes)
 # ---------------------------------------------------------------------------

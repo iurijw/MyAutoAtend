@@ -113,6 +113,33 @@ def ia_modelos(alvo: str, _: str = Depends(autenticar)):
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
+@router.post("/admin/ia/modelos-preview")
+def ia_modelos_preview(
+    _: str = Depends(autenticar),
+    provedor: str = Form(...),
+    api_key: str = Form(...),
+    base_url: str = Form(""),
+):
+    """Lista modelos do provedor com a chave recém-digitada (antes de salvar).
+
+    A chave é usada numa única chamada ao provedor e descartada — não é
+    gravada nem ecoada na resposta.
+    """
+    preset = n8n.PROVEDORES.get(provedor)
+    if not preset:
+        raise HTTPException(status_code=400, detail="Provedor desconhecido.")
+    url = (preset["base_url"] or base_url).strip().rstrip("/")
+    if not url:
+        raise HTTPException(status_code=400, detail="Provedor personalizado exige a base URL.")
+    chave = api_key.strip()
+    if not chave:
+        raise HTTPException(status_code=400, detail="Informe a chave de API.")
+    try:
+        return {"modelos": n8n.listar_modelos_do_provedor(url, chave)}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
 @router.post("/admin/ia/credencial")
 def ia_credencial(
     _: str = Depends(autenticar),

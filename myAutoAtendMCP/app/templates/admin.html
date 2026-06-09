@@ -509,6 +509,7 @@
   (function(){
     const PROVEDORES = {{ provedores_ia | tojson }};
     const ALVOS = ['texto', 'midia'];
+    const provedorSalvo = { texto: null, midia: null };  // o que está no n8n hoje
 
     const $ = (id) => document.getElementById(id);
 
@@ -529,7 +530,10 @@
       }
       sel.addEventListener('change', () => {
         $('ia-url-wrap-' + alvo).style.display = sel.value === 'custom' ? '' : 'none';
+        aoTrocarProvedor(alvo);
       });
+      // Chave colada/alterada → tenta listar modelos do provedor escolhido.
+      $('ia-key-' + alvo).addEventListener('change', () => previewModelos(alvo));
     }
 
     async function carregarEstado(){
@@ -547,6 +551,7 @@
             pill.className = 'pill off';
             pill.textContent = 'sem registro';
           }
+          provedorSalvo[alvo] = info.provedor || null;
           if (info.provedor && $('ia-prov-' + alvo).querySelector('option[value="' + info.provedor + '"]')){
             $('ia-prov-' + alvo).value = info.provedor;
             $('ia-url-wrap-' + alvo).style.display = info.provedor === 'custom' ? '' : 'none';
@@ -564,34 +569,73 @@
       }
     }
 
-    async function carregarModelos(alvo, atual){
+    function popularModelos(alvo, modelos, atual){
       const sel = $('ia-modelo-sel-' + alvo);
       const inp = $('ia-modelo-' + alvo);
+      if (!modelos.length) return;
+      const atualVal = atual || '';
+      if (atualVal && !modelos.includes(atualVal)) modelos.unshift(atualVal);
+      sel.innerHTML = '';
+      for (const m of modelos){
+        const o = document.createElement('option');
+        o.value = m; o.textContent = m;
+        sel.appendChild(o);
+      }
+      const outro = document.createElement('option');
+      outro.value = '__outro'; outro.textContent = 'Outro (digitar)…';
+      sel.appendChild(outro);
+      if (atualVal) sel.value = atualVal;
+      sel.style.display = '';
+      inp.style.display = 'none';
+      sel.onchange = () => {
+        inp.style.display = sel.value === '__outro' ? '' : 'none';
+        if (sel.value === '__outro') inp.focus();
+      };
+    }
+
+    function resetarModelos(alvo){
+      const sel = $('ia-modelo-sel-' + alvo);
+      sel.style.display = 'none'; sel.innerHTML = '';
+      $('ia-modelo-' + alvo).style.display = '';
+    }
+
+    // Lista via n8n — usa a chave JÁ SALVA na credencial (provedor atual).
+    async function carregarModelos(alvo, atual){
       try {
         const r = await fetch('/admin/ia/modelos?alvo=' + alvo);
         const d = await r.json();
         if (!r.ok || d.erro) throw new Error(d.erro || ('HTTP ' + r.status));
-        const modelos = (d.modelos || []).map(m => m.valor);
-        if (!modelos.length) throw new Error('lista vazia');
-        const atualVal = (atual || inp.value.trim());
-        if (atualVal && !modelos.includes(atualVal)) modelos.unshift(atualVal);
-        sel.innerHTML = '';
-        for (const m of modelos){
-          const o = document.createElement('option');
-          o.value = m; o.textContent = m;
-          sel.appendChild(o);
-        }
-        const outro = document.createElement('option');
-        outro.value = '__outro'; outro.textContent = 'Outro (digitar)…';
-        sel.appendChild(outro);
-        if (atualVal) sel.value = atualVal;
-        sel.style.display = '';
-        inp.style.display = 'none';
-        sel.onchange = () => {
-          inp.style.display = sel.value === '__outro' ? '' : 'none';
-          if (sel.value === '__outro') inp.focus();
-        };
+        popularModelos(alvo, (d.modelos || []).map(m => m.valor),
+                       atual || $('ia-modelo-' + alvo).value.trim());
       } catch(e){ /* sem lista — segue com campo de texto livre */ }
+    }
+
+    // Lista direto no provedor com a chave recém-digitada (antes de salvar).
+    async function previewModelos(alvo){
+      const chave = $('ia-key-' + alvo).value.trim();
+      if (!chave) return;
+      msg(alvo, 'Listando modelos do provedor…', true);
+      try {
+        const d = await postar('/admin/ia/modelos-preview', {
+          provedor: $('ia-prov-' + alvo).value,
+          api_key: chave,
+          base_url: $('ia-url-' + alvo).value.trim(),
+        });
+        popularModelos(alvo, (d.modelos || []).map(m => m.valor), null);
+        msg(alvo, 'Modelos carregados — escolha um e salve a chave.', true);
+      } catch(e){ msg(alvo, 'Falha ao listar modelos: ' + e.message, false); }
+    }
+
+    function aoTrocarProvedor(alvo){
+      if ($('ia-prov-' + alvo).value === provedorSalvo[alvo]){
+        // Voltou ao provedor já salvo no n8n — lista com a chave armazenada.
+        resetarModelos(alvo);
+        carregarModelos(alvo, null);
+        return;
+      }
+      resetarModelos(alvo);
+      if ($('ia-key-' + alvo).value.trim()) previewModelos(alvo);
+      else msg(alvo, 'Cole a chave do provedor para listar os modelos dele.', true);
     }
 
     function modeloEscolhido(alvo){
