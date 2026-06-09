@@ -14,7 +14,6 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 ![Setup](https://img.shields.io/badge/setup-1_comando-8a2a2f?style=for-the-badge&labelColor=211c16)
 ![License](https://img.shields.io/badge/license-MIT-b8862f?style=for-the-badge&labelColor=211c16)
 
-<sub>Sobre · </sub>
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white&labelColor=211c16)
 ![n8n](https://img.shields.io/badge/n8n-EA4B71?logo=n8n&logoColor=white&labelColor=211c16)
 ![Evolution API](https://img.shields.io/badge/Evolution_API-25D366?logo=whatsapp&logoColor=white&labelColor=211c16)
