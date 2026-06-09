@@ -22,6 +22,11 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white&labelColor=211c16)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white&labelColor=211c16)
 
+<br>
+<br>
+
+<img src="assets/portal_admin.png" alt="Painel admin do myAutoAtend" width="860">
+
 </div>
 
 <br>
@@ -120,6 +125,8 @@ docker logs -f n8n          # ver a inicialização
 - [ ] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin
 - [ ] Poder bloquear/fechar range de datas pelo portal do admin e conversa com o bot no WhatsApp
 - [ ] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT)
+- [ ] Adicionar opção de avisar o cliente que foi reagendado/cancelado o serviço dele (a IA avisar a ação do dono/adminsitrador com o aval do mesmo)
+- [ ] Adicionar a opção de ativar (no painel de admin ou pedindo para o bot no whatsapp) o aviso para o Whatsapp do dono/administrador de agendamentos/cancelamentos, etc...
 
 <br>
 
