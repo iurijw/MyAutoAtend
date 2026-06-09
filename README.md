@@ -115,7 +115,7 @@ docker logs -f n8n          # ver a inicialização
 
 ## Todo
 
-- [ ] Adicionar novas opções de provedores de IA 
+- [X] Adicionar novas opções de provedores de IA (chave/modelo atualizados no n8n pelo portal admin; fluxo unidirecional — a chave nunca é exibida de volta)
 - [X] Transferir lógica de pareamento do Whatsapp para o portal admin
 - [X] Adicionar shortchuts para abertura dos portais auxiliares (Evolution API e n8n) no portal admin
 - [ ] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin

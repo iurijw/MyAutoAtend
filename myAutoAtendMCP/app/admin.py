@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import db, evolution
+from . import db, evolution, n8n
 from .config import settings
 
 router = APIRouter()
@@ -54,6 +54,7 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "n_ativos": sum(1 for s in servicos if s.ativo),
             "n8n_url": settings.n8n_external_url,
             "evolution_url": settings.evolution_external_url,
+            "provedores_ia": n8n.PROVEDORES,
         },
     )
 
@@ -83,6 +84,68 @@ def whatsapp_qr(_: str = Depends(autenticar)):
 def whatsapp_desconectar(_: str = Depends(autenticar)):
     try:
         return evolution.desconectar()
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
+# ---------------------------------------------------------------------------
+# Provedores de IA (credenciais no n8n) — consumido por JS no painel.
+# Fluxo unidirecional: a chave entra pelo form e vai direto pro n8n via
+# app/n8n.py; nenhuma rota devolve segredo (nem mascarado).
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/ia/estado")
+def ia_estado(_: str = Depends(autenticar)):
+    try:
+        return n8n.estado()
+    except Exception as e:  # noqa: BLE001 — superfície de erro p/ o painel
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
+@router.post("/admin/ia/credencial")
+def ia_credencial(
+    _: str = Depends(autenticar),
+    alvo: str = Form(...),
+    provedor: str = Form(...),
+    api_key: str = Form(...),
+    base_url: str = Form(""),
+):
+    if alvo not in ("texto", "midia"):
+        raise HTTPException(status_code=400, detail="Alvo inválido.")
+    preset = n8n.PROVEDORES.get(provedor)
+    if not preset:
+        raise HTTPException(status_code=400, detail="Provedor desconhecido.")
+    if not preset[alvo]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{preset['nome']} não suporta o uso '{alvo}' "
+            "(áudio exige API compatível com Whisper/whisper-1).",
+        )
+    url = (preset["base_url"] or base_url).strip().rstrip("/")
+    if not url:
+        raise HTTPException(status_code=400, detail="Provedor personalizado exige a base URL.")
+    chave = api_key.strip()
+    if not chave:
+        raise HTTPException(status_code=400, detail="Informe a chave de API.")
+    try:
+        return n8n.atualizar_chave(alvo, chave, url)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
+@router.post("/admin/ia/modelo")
+def ia_modelo(
+    _: str = Depends(autenticar),
+    alvo: str = Form(...),
+    modelo: str = Form(...),
+):
+    if alvo not in ("texto", "midia"):
+        raise HTTPException(status_code=400, detail="Alvo inválido.")
+    if not modelo.strip():
+        raise HTTPException(status_code=400, detail="Informe o nome do modelo.")
+    try:
+        return n8n.atualizar_modelo(alvo, modelo.strip())
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
 

@@ -135,6 +135,18 @@
     #wa-card.collapsed .wa-body{display:none;}
     #wa-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 
+    /* ---------- Provedores de IA ---------- */
+    .ia-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+    @media(max-width:860px){ .ia-grid{grid-template-columns:1fr;} }
+    .ia-bloco{background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 18px 20px;}
+    .ia-bloco h3{font-family:"DM Serif Display",serif; font-weight:400; font-size:19px; margin:0; display:flex; align-items:center; gap:10px;}
+    .ia-bloco h3 .pill{margin-left:auto;}
+    .ia-note{color:var(--ink-soft); font-size:13.5px; margin:6px 0 0;}
+    .ia-msg{font-family:"JetBrains Mono",monospace; font-size:12.5px; margin:12px 0 0; min-height:1em;}
+    .ia-msg.ok{color:var(--green);}
+    .ia-msg.err{color:var(--oxblood);}
+    .ia-acts{display:flex; gap:8px; margin-top:14px;}
+
     /* page-load reveal */
     .reveal{opacity:0; transform:translateY(14px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;}
     @keyframes rise{to{opacity:1; transform:none;}}
@@ -191,6 +203,59 @@
             <button class="btn-primary" id="wa-connect" style="margin:0">Gerar QR Code</button>
             <button class="btn-danger btn-sm" id="wa-logout" style="display:none">Desconectar</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PROVEDORES DE IA ============ -->
+    <div class="card" id="ia-card">
+      <div class="card-head">
+        <h2>Provedores de IA</h2>
+        <span class="tag">chaves só entram</span>
+      </div>
+      <p class="ia-note" style="margin:-8px 0 18px">
+        As chaves vão direto para as credenciais do n8n e <b>nunca são exibidas de volta</b> — nem mascaradas.
+        Trocar o modelo atualiza e republica o workflow na hora.
+      </p>
+      <div class="ia-grid">
+        <div class="ia-bloco">
+          <h3>💬 Geração de texto <span class="pill off" id="ia-status-texto">…</span></h3>
+          <p class="ia-note">Modelo LLM que conversa com o cliente.</p>
+          <label>Provedor</label>
+          <select id="ia-prov-texto"></select>
+          <div id="ia-url-wrap-texto" style="display:none">
+            <label>Base URL (compatível OpenAI)</label>
+            <input id="ia-url-texto" placeholder="https://meu-provedor/v1">
+          </div>
+          <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
+          <input type="password" id="ia-key-texto" autocomplete="new-password" placeholder="cole a nova chave">
+          <label>Modelo</label>
+          <input id="ia-modelo-texto" placeholder="ex.: gpt-5.1">
+          <div class="ia-acts">
+            <button class="btn-primary btn-sm" style="margin:0" data-ia-key="texto">Salvar chave</button>
+            <button class="btn-ghost btn-sm" data-ia-modelo="texto">Salvar modelo</button>
+          </div>
+          <p class="ia-msg" id="ia-msg-texto"></p>
+        </div>
+
+        <div class="ia-bloco">
+          <h3>🎙 Áudio &amp; imagem <span class="pill off" id="ia-status-midia">…</span></h3>
+          <p class="ia-note">Whisper (transcrição) + visão (OCR de imagem). O node de áudio do n8n usa <code>whisper-1</code> fixo — por isso só OpenAI ou URL própria compatível.</p>
+          <label>Provedor</label>
+          <select id="ia-prov-midia"></select>
+          <div id="ia-url-wrap-midia" style="display:none">
+            <label>Base URL (compatível OpenAI)</label>
+            <input id="ia-url-midia" placeholder="https://meu-provedor/v1">
+          </div>
+          <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
+          <input type="password" id="ia-key-midia" autocomplete="new-password" placeholder="cole a nova chave">
+          <label>Modelo de visão (OCR)</label>
+          <input id="ia-modelo-midia" placeholder="ex.: gpt-4o">
+          <div class="ia-acts">
+            <button class="btn-primary btn-sm" style="margin:0" data-ia-key="midia">Salvar chave</button>
+            <button class="btn-ghost btn-sm" data-ia-modelo="midia">Salvar modelo</button>
+          </div>
+          <p class="ia-msg" id="ia-msg-midia"></p>
         </div>
       </div>
     </div>
@@ -429,6 +494,111 @@
     btnOut.addEventListener('click', desconectar);
     elHead.addEventListener('click', () => elCard.classList.toggle('collapsed'));
     estado();
+  })();
+
+  /* ---------- Provedores de IA (chaves one-way → n8n) ---------- */
+  (function(){
+    const PROVEDORES = {{ provedores_ia | tojson }};
+    const ALVOS = ['texto', 'midia'];
+
+    const $ = (id) => document.getElementById(id);
+
+    function msg(alvo, texto, ok){
+      const el = $('ia-msg-' + alvo);
+      el.textContent = texto;
+      el.className = 'ia-msg ' + (ok ? 'ok' : 'err');
+    }
+
+    function montarSelect(alvo){
+      const sel = $('ia-prov-' + alvo);
+      for (const [chave, p] of Object.entries(PROVEDORES)){
+        if (!p[alvo]) continue;
+        const opt = document.createElement('option');
+        opt.value = chave;
+        opt.textContent = p.nome;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', () => {
+        $('ia-url-wrap-' + alvo).style.display = sel.value === 'custom' ? '' : 'none';
+      });
+    }
+
+    async function carregarEstado(){
+      try {
+        const r = await fetch('/admin/ia/estado');
+        const d = await r.json();
+        if (d.erro) throw new Error(d.erro);
+        for (const alvo of ALVOS){
+          const info = d[alvo] || {};
+          const pill = $('ia-status-' + alvo);
+          if (info.atualizado_em){
+            pill.className = 'pill on';
+            pill.textContent = 'chave de ' + new Date(info.atualizado_em).toLocaleDateString('pt-BR');
+          } else {
+            pill.className = 'pill off';
+            pill.textContent = 'sem registro';
+          }
+          if (info.provedor && $('ia-prov-' + alvo).querySelector('option[value="' + info.provedor + '"]')){
+            $('ia-prov-' + alvo).value = info.provedor;
+            $('ia-url-wrap-' + alvo).style.display = info.provedor === 'custom' ? '' : 'none';
+          }
+          if (info.modelo) $('ia-modelo-' + alvo).value = info.modelo;
+        }
+      } catch(e){
+        for (const alvo of ALVOS){
+          const pill = $('ia-status-' + alvo);
+          pill.className = 'pill off';
+          pill.textContent = 'n8n indisponível';
+        }
+      }
+    }
+
+    async function postar(url, dados){
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: new URLSearchParams(dados),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.erro || d.detail || ('HTTP ' + r.status));
+      return d;
+    }
+
+    async function salvarChave(alvo, btn){
+      const chave = $('ia-key-' + alvo).value.trim();
+      if (!chave){ msg(alvo, 'Cole a chave antes de salvar.', false); return; }
+      btn.disabled = true; msg(alvo, 'Enviando chave para o n8n…', true);
+      try {
+        await postar('/admin/ia/credencial', {
+          alvo,
+          provedor: $('ia-prov-' + alvo).value,
+          api_key: chave,
+          base_url: $('ia-url-' + alvo).value.trim(),
+        });
+        $('ia-key-' + alvo).value = '';   // chave some da tela na hora
+        msg(alvo, 'Chave gravada no n8n.', true);
+        carregarEstado();
+      } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
+      finally { btn.disabled = false; }
+    }
+
+    async function salvarModelo(alvo, btn){
+      const modelo = $('ia-modelo-' + alvo).value.trim();
+      if (!modelo){ msg(alvo, 'Informe o nome do modelo.', false); return; }
+      btn.disabled = true; msg(alvo, 'Atualizando workflow…', true);
+      try {
+        await postar('/admin/ia/modelo', { alvo, modelo });
+        msg(alvo, 'Modelo atualizado e workflow republicado.', true);
+      } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
+      finally { btn.disabled = false; }
+    }
+
+    for (const alvo of ALVOS) montarSelect(alvo);
+    document.querySelectorAll('[data-ia-key]').forEach(b =>
+      b.addEventListener('click', () => salvarChave(b.dataset.iaKey, b)));
+    document.querySelectorAll('[data-ia-modelo]').forEach(b =>
+      b.addEventListener('click', () => salvarModelo(b.dataset.iaModelo, b)));
+    carregarEstado();
   })();
   </script>
 </body>
