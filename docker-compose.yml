@@ -172,6 +172,13 @@ services:
       # Credenciais do painel /admin — troque em produção.
       ADMIN_USER: ${MCP_ADMIN_USER:-admin}
       ADMIN_PASS: ${MCP_ADMIN_PASS:-admin123}
+      # Evolution API — pareamento do WhatsApp pelo painel (rede docker interna).
+      EVOLUTION_API_URL: http://evolution_api:9090
+      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      EVOLUTION_INSTANCE: evo_n8n
+      # URLs externas (browser do host) p/ atalhos no painel.
+      N8N_EXTERNAL_URL: ${N8N_EXTERNAL_URL:-http://localhost:5678}
+      EVOLUTION_EXTERNAL_URL: ${EVOLUTION_EXTERNAL_URL:-http://localhost:9090}
     volumes:
       - mcp_data:/data
     networks:

@@ -112,6 +112,17 @@ docker logs -f n8n          # ver a inicialização
 
 <br>
 
+## Todo
+
+- [ ] Adicionar novas opções de provedores de IA 
+- [X] Transferir lógica de pareamento do Whatsapp para o portal admin
+- [X] Adicionar shortchuts para abertura dos portais auxiliares (Evolution API e n8n) no portal admin
+- [ ] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin
+- [ ] Poder bloquear/fechar range de datas pelo portal do admin e conversa com o bot no WhatsApp
+- [ ] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT)
+
+<br>
+
 ---
 
 <div align="center">

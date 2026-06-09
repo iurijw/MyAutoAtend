@@ -91,6 +91,13 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
   sempre prefere esse valor. Autorização (dono/próprio) decidida em `app/auth.py`, em código.
 - No workflow: nó **"Agendamentos (MCP)"** (`mcpClientTool`, HTTP Streamable) → `Agente IA` (ai_tool).
 - Env: `MCP_OWNER_PHONE`, `MCP_ADMIN_USER`, `MCP_ADMIN_PASS` (no `.env`).
+- **Pareamento WhatsApp no painel** (`app/evolution.py`): o `/admin` fala direto com a
+  Evolution API pela rede docker (`EVOLUTION_API_URL`/`EVOLUTION_API_KEY`/`EVOLUTION_INSTANCE`)
+  e mostra o QR Code dentro do próprio painel. Rotas: `GET /admin/whatsapp/estado`,
+  `GET /admin/whatsapp/qr`, `POST /admin/whatsapp/desconectar`.
+- **Atalhos** no header do painel p/ n8n e Evolution manager (`N8N_EXTERNAL_URL`,
+  `EVOLUTION_EXTERNAL_URL` — URLs do host, abrem em nova aba).
+- Após mudar essas envs/código: `docker compose up -d --build mcp-agendamentos`.
 
 ## Comandos Úteis
 

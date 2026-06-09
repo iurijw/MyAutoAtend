@@ -23,5 +23,16 @@ class Settings:
     # Fuso usado nas conversões de data/hora (validação de passado, slots).
     timezone: str = os.getenv("MCP_TZ", "America/Sao_Paulo")
 
+    # Evolution API — pareamento do WhatsApp pelo painel (rede docker interna).
+    evolution_api_url: str = os.getenv("EVOLUTION_API_URL", "http://evolution_api:9090")
+    evolution_api_key: str = os.getenv("EVOLUTION_API_KEY", "")
+    evolution_instance: str = os.getenv("EVOLUTION_INSTANCE", "evo_n8n")
+
+    # URLs externas (acessadas pelo browser do host) p/ atalhos no painel.
+    n8n_external_url: str = os.getenv("N8N_EXTERNAL_URL", "http://localhost:5678")
+    evolution_external_url: str = os.getenv(
+        "EVOLUTION_EXTERNAL_URL", "http://localhost:9090"
+    )
+
 
 settings = Settings()

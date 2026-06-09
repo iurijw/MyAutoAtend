@@ -12,11 +12,11 @@ import secrets
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import db
+from . import db, evolution
 from .config import settings
 
 router = APIRouter()
@@ -52,8 +52,39 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "agendamentos": agendamentos,
             "servico_nome": nome_por_id,
             "n_ativos": sum(1 for s in servicos if s.ativo),
+            "n8n_url": settings.n8n_external_url,
+            "evolution_url": settings.evolution_external_url,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp (pareamento via Evolution API) — consumido por JS no painel
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/whatsapp/estado")
+def whatsapp_estado(_: str = Depends(autenticar)):
+    try:
+        return evolution.estado()
+    except Exception as e:  # noqa: BLE001 — superfície de erro p/ o painel
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
+@router.get("/admin/whatsapp/qr")
+def whatsapp_qr(_: str = Depends(autenticar)):
+    try:
+        return evolution.conectar()
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
+@router.post("/admin/whatsapp/desconectar")
+def whatsapp_desconectar(_: str = Depends(autenticar)):
+    try:
+        return evolution.desconectar()
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
 
 
 @router.post("/admin/config")
