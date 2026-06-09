@@ -78,7 +78,7 @@ Abra o `.env` e ajuste **no mínimo** estes valores:
 docker compose up -d
 ```
 
-A primeira inicialização leva alguns minutos. Acompanhe:
+A primeira inicialização leva alguns minutos. Acompanhe (se quiser):
 
 ```bash
 docker logs -f n8n
@@ -86,13 +86,9 @@ docker logs -f n8n
 
 Espere por: `✔ Workflow "Agente Whatsapp" importado e publicado!`
 
-### 4 · Conectar o WhatsApp
+### 4 · Conectar o WhatsApp e Configurar Serviços (entre outras opções)
 
-Abra **http://localhost:9090** e escaneie o QR Code da instância `evo_n8n`.
-
-### 5 · Cadastrar seus serviços
-
-Abra **http://localhost:8000/admin** (login = `MCP_ADMIN_USER` / `MCP_ADMIN_PASS`) e cadastre os serviços do seu negócio. **Pronto** — o atendente já responde.
+Abra **http://localhost:8000/admin** (login = `MCP_ADMIN_USER` / `MCP_ADMIN_PASS`) e conecte seu Whatsapp via QRCode, bem como, cadastre os serviços. **Pronto** — o atendente já responde.
 
 <br>
 
