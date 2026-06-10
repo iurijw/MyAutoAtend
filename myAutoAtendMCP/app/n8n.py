@@ -304,7 +304,13 @@ def _achar_workflow(c: httpx.Client) -> dict:
 
 
 def _publicar_workflow(c: httpx.Client, wf: dict) -> dict:
-    """PATCH no workflow e, se estava no ar, garante a republicação (versionId)."""
+    """PATCH no workflow e, se estava no ar, republica a versão nova.
+
+    n8n v2: o PATCH cria um versionId novo mas a PRODUÇÃO segue na versão
+    apontada por `activeVersionId` (e a resposta vem com `active: true`,
+    enganosamente). Publicar = POST .../activate com o versionId recém-criado
+    — sempre, não só quando `active` volta false.
+    """
     estava_ativo = bool(wf.get("active"))
     r = c.patch(
         f"/rest/workflows/{wf['id']}",
@@ -319,7 +325,7 @@ def _publicar_workflow(c: httpx.Client, wf: dict) -> dict:
     if r.status_code != 200:
         raise RuntimeError(f"n8n recusou o PATCH do workflow (HTTP {r.status_code}): {r.text[:200]}")
     novo = _data(r)
-    if estava_ativo and not novo.get("active"):
+    if estava_ativo:
         ar = c.post(
             f"/rest/workflows/{wf['id']}/activate",
             json={"versionId": novo["versionId"]},
