@@ -23,6 +23,7 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 ![FastMCP](https://img.shields.io/badge/FastMCP-8a2a2f?labelColor=211c16)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white&labelColor=211c16)
 ![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white&labelColor=211c16)
+![Claude](https://img.shields.io/badge/co--autoria-Claude_%28Anthropic%29-D97757?logo=claude&logoColor=white&labelColor=211c16)
 
 <br>
 <br>
@@ -99,6 +100,28 @@ Abra **http://localhost:8000/admin** (login = `MCP_ADMIN_USER` / `MCP_ADMIN_PASS
 | **Admin** (agendamentos) | http://localhost:8000/admin | Serviços, agenda e bloqueios |
 | **n8n** | http://localhost:5678 | Editar o fluxo do agente |
 | **Evolution API** | http://localhost:9090 | Conexão do WhatsApp |
+
+> ⚠️ O painel `/admin` não foi projetado para ser exposto na internet — use apenas em `localhost`.
+
+### Por dentro do `/admin`
+
+<details>
+<summary><b>📲 Conexão WhatsApp</b> — pareie pelo QR Code sem sair do painel</summary>
+<br>
+<img src="assets/conexao_via_qr_code_whatsapp.png" alt="Card Conexão WhatsApp com QR Code" width="860">
+</details>
+
+<details>
+<summary><b>🧠 Provedores de IA</b> — provedor, chave e modelo por uso: texto · áudio · imagem</summary>
+<br>
+<img src="assets/definicao_de_provedores_ia.png" alt="Card Provedores de IA com os três blocos" width="860">
+</details>
+
+<details>
+<summary><b>✍️ Instruções do Agente</b> — edite a personalidade do atendente e republique na hora</summary>
+<br>
+<img src="assets/instrucoes_do_agente.png" alt="Card Instruções do Agente" width="860">
+</details>
 
 <br>
 
