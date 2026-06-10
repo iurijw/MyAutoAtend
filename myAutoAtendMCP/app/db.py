@@ -26,12 +26,11 @@ from .phone import mesmo_numero
 
 
 class Config(SQLModel, table=True):
+    # Nota de migração: bancos antigos têm a coluna `instrucoes_gerais` órfã
+    # (o contexto da IA passou a viver no system prompt, card "Instruções do
+    # Agente"). SQLite ignora colunas fora do modelo — sem migração.
     id: int = Field(default=1, primary_key=True)
     telefone_dono: str = settings.owner_phone
-    instrucoes_gerais: str = (
-        "Você é o assistente de atendimento do estabelecimento. Seja cordial e "
-        "confirme sempre data e horário antes de finalizar um agendamento."
-    )
     fuso: str = settings.timezone
     abertura: str = "09:00"
     fechamento: str = "18:00"

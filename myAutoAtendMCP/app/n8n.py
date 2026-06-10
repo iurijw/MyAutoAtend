@@ -54,9 +54,13 @@ PREFIXO_DATA = (
 # Cabeçalho da seção MCP — também usado p/ separá-la do prompt vindo da env.
 _SECAO_MCP = "## Ferramentas (MCP Agendamentos)"
 
-# Bloco que ensina o agente a usar as tools MCP. Editável pelo painel (seção
-# avançada, com aviso), restaurável a este padrão. Deve refletir as tools de
-# app/tools.py — atualizar os dois juntos.
+# Cabeçalho da seção de formatação — vive no bloco MCP porque está amarrada
+# ao node "Code - Dividir Resposta" do workflow ([quebrar] → bolhas).
+_SECAO_FORMATACAO = "## Formatação"
+
+# Bloco "infra" do prompt: tools MCP + formatação das mensagens. Editável pelo
+# painel (seção avançada, com aviso), restaurável a este padrão. Deve refletir
+# as tools de app/tools.py — atualizar os dois juntos.
 PROMPT_MCP_PADRAO = f"""{_SECAO_MCP}
 Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
 - listar_servicos: catálogo com nome, descrição, valor e duração.
@@ -64,7 +68,9 @@ Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, p
 - agendar(servico_id, nome_cliente, inicio): cria agendamento; inicio = YYYY-MM-DDTHH:MM.
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).
-- instrucoes_gerais: contexto e regras do negócio."""
+
+{_SECAO_FORMATACAO} (quebra de linha)
+- O texto é dividido em bolhas de WhatsApp. Use [quebrar] OU Enter para separar bolhas. Máximo 2-3 bolhas por resposta. No máximo *negrito* do WhatsApp."""
 
 # Fallback da instrução geral quando a env AGENT_SYSTEM_PROMPT está vazia.
 PROMPT_GERAL_PADRAO = (
@@ -394,21 +400,28 @@ def compor_system_message(geral: str, mcp: str) -> str:
     return "=" + "\n\n".join(p for p in partes if p)
 
 
+def _remover_secao(texto: str, cabecalho: str) -> str:
+    """Remove uma seção markdown (do cabeçalho até o próximo `## ` ou o fim)."""
+    ini = texto.find(cabecalho)
+    if ini == -1:
+        return texto
+    fim = texto.find("\n## ", ini + len(cabecalho))
+    resto = texto[fim + 1 :] if fim != -1 else ""
+    return (texto[:ini].rstrip() + "\n\n" + resto).strip()
+
+
 def seed_prompt_geral(prompt_env: str) -> str:
     """Instrução geral inicial a partir da env AGENT_SYSTEM_PROMPT.
 
-    A env de fábrica traz o prompt completo (geral + seção MCP); aqui a seção
-    MCP é removida para não duplicar — ela passa a viver no campo próprio.
+    A env de fábrica traz o prompt completo; as seções MCP e Formatação são
+    removidas para não duplicar — elas passam a viver no bloco MCP do painel.
     """
     texto = (prompt_env or "").strip()
     if not texto:
         return PROMPT_GERAL_PADRAO
-    ini = texto.find(_SECAO_MCP)
-    if ini == -1:
-        return texto
-    fim = texto.find("\n## ", ini + len(_SECAO_MCP))
-    resto = texto[fim + 1 :] if fim != -1 else ""
-    return (texto[:ini].rstrip() + "\n\n" + resto).strip()
+    for cabecalho in (_SECAO_MCP, _SECAO_FORMATACAO):
+        texto = _remover_secao(texto, cabecalho)
+    return texto or PROMPT_GERAL_PADRAO
 
 
 def atualizar_prompt(geral: str, mcp: str) -> dict:

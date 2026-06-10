@@ -123,13 +123,18 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
 - **Instruções do agente no painel** (`app/n8n.py` + tabela `Prompt` no SQLite): card
   "Instruções do Agente" edita o system prompt do node "Agente IA" em duas partes —
   **instrução geral** (livre) e **bloco MCP** (seção avançada retrátil, com aviso
-  "não recomendado" e botão restaurar padrão, `PROMPT_MCP_PADRAO` em `n8n.py` —
-  manter em sincronia com `app/tools.py`). Save: n8n primeiro (PATCH no
-  `systemMessage` + republicação), só então persiste no SQLite (chaves `geral`/`mcp`).
-  Seed pré-primeiro-save: env `AGENT_SYSTEM_PROMPT` (repassada ao container MCP no
-  compose) com a seção `## Ferramentas (MCP Agendamentos)` removida + bloco MCP padrão.
+  "não recomendado" e botão restaurar padrão). O bloco MCP (`PROMPT_MCP_PADRAO` em
+  `n8n.py` — manter em sincronia com `app/tools.py`) inclui também a seção
+  `## Formatação` (divisão em bolhas/[quebrar], amarrada ao node "Code - Dividir
+  Resposta"). Save: n8n primeiro (PATCH no `systemMessage` + republicação), só então
+  persiste no SQLite (chaves `geral`/`mcp`). Seed pré-primeiro-save: env
+  `AGENT_SYSTEM_PROMPT` (repassada ao container MCP no compose) com as seções
+  `## Ferramentas (MCP Agendamentos)` e `## Formatação` removidas + bloco MCP padrão.
   Prefixo de data/hora é fixo (`PREFIXO_DATA`); `{{` do usuário vira `{ {` p/ evitar
   injeção de expressão n8n. Rotas: `GET/POST /admin/agente/prompt`.
+  (A antiga textarea "Instruções gerais" da Configuração geral e a tool MCP
+  `instrucoes_gerais` foram removidas — coluna `instrucoes_gerais` fica órfã em
+  bancos antigos, sem migração.)
 - Após mudar essas envs/código: `docker compose up -d --build mcp-agendamentos`.
 
 ## Comandos Úteis

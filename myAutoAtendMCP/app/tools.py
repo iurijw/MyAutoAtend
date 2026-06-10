@@ -270,10 +270,3 @@ def ver_agenda_completa(telefone_solicitante: str) -> dict:
         "agendamentos": [db.como_dict(a) for a in db.listar_agendamentos()],
         "bloqueios": [db.como_dict(b) for b in db.listar_bloqueios()],
     }
-
-
-@mcp.tool()
-def instrucoes_gerais() -> dict:
-    """Retorna as instruções gerais configuradas (úteis como contexto da IA)."""
-    cfg = db.get_config()
-    return {"instrucoes": cfg.instrucoes_gerais, "fuso": cfg.fuso}

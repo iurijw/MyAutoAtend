@@ -235,7 +235,6 @@ def agente_prompt_salvar(
 def salvar_config(
     _: str = Depends(autenticar),
     telefone_dono: str = Form(...),
-    instrucoes_gerais: str = Form(...),
     fuso: str = Form(...),
     abertura: str = Form(...),
     fechamento: str = Form(...),
@@ -243,7 +242,6 @@ def salvar_config(
 ):
     db.update_config(
         telefone_dono=telefone_dono,
-        instrucoes_gerais=instrucoes_gerais,
         fuso=fuso,
         abertura=abertura,
         fechamento=fechamento,

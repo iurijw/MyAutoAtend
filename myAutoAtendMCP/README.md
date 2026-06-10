@@ -63,7 +63,7 @@ Dockerfile · requirements.txt
 ## Tools expostas
 
 Abertas: `listar_servicos`, `consultar_horarios_disponiveis`, `agendar`,
-`meus_agendamentos`, `instrucoes_gerais`.
+`meus_agendamentos`.
 
 Dono ou próprio cliente: `reagendar`, `cancelar`.
 

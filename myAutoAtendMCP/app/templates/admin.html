@@ -319,10 +319,11 @@
           <summary>⚙ Instruções do MCP (avançado)</summary>
           <p class="prompt-aviso">
             <b>Não recomendado alterar.</b> Este bloco ensina o agente a usar as ferramentas de
-            agendamento (MCP). Mudanças aqui podem fazer o agente parar de consultar horários,
-            agendar errado ou inventar dados. Se algo quebrar, use <i>Restaurar padrão</i>.
+            agendamento (MCP) e a formatação das mensagens (divisão em bolhas de WhatsApp).
+            Mudanças aqui podem fazer o agente parar de consultar horários, agendar errado ou
+            mandar mensagens quebradas. Se algo der errado, use <i>Restaurar padrão</i>.
           </p>
-          <label>Bloco de ferramentas (MCP)</label>
+          <label>Bloco de ferramentas (MCP) e formatação</label>
           <textarea id="prompt-mcp"></textarea>
           <div class="ia-acts">
             <button class="btn-ghost btn-sm" id="prompt-restaurar">Restaurar padrão</button>
@@ -451,14 +452,12 @@
 
     <!-- ============ CONFIGURAÇÃO ============ -->
     <div class="card">
-      <div class="card-head"><h2>Configuração geral</h2><span class="tag">Contexto da IA</span></div>
+      <div class="card-head"><h2>Configuração geral</h2><span class="tag">Funcionamento</span></div>
       <form method="post" action="/admin/config">
         <div class="row">
           <div><label>Telefone do dono <span style="text-transform:none;font-weight:400">(autoriza ações restritas)</span></label><input name="telefone_dono" value="{{ config.telefone_dono }}"></div>
           <div><label>Fuso horário</label><input name="fuso" value="{{ config.fuso }}"></div>
         </div>
-        <label>Instruções gerais</label>
-        <textarea name="instrucoes_gerais">{{ config.instrucoes_gerais }}</textarea>
         <div class="row3">
           <div><label>Abertura</label><input name="abertura" type="time" value="{{ config.abertura }}"></div>
           <div><label>Fechamento</label><input name="fechamento" type="time" value="{{ config.fechamento }}"></div>
