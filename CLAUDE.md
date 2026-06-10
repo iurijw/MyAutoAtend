@@ -101,6 +101,11 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
   Evolution API pela rede docker (`EVOLUTION_API_URL`/`EVOLUTION_API_KEY`/`EVOLUTION_INSTANCE`)
   e mostra o QR Code dentro do próprio painel. Rotas: `GET /admin/whatsapp/estado`,
   `GET /admin/whatsapp/qr`, `POST /admin/whatsapp/desconectar`.
+- **Avatar do cliente nos agendamentos**: tabela do painel mostra foto de perfil do
+  WhatsApp + número. JS busca `GET /admin/whatsapp/foto?numero=...` (uma vez por
+  número único); backend usa `POST /chat/fetchProfilePictureUrl/{instance}` da
+  Evolution (`evolution.foto_perfil`, timeout 5s, cache em memória: 1h com foto,
+  5min vazio). Sem foto/privada/instância desconectada → fallback de inicial do nome.
 - **Atalhos** no header do painel p/ n8n e Evolution manager (`N8N_EXTERNAL_URL`,
   `EVOLUTION_EXTERNAL_URL` — URLs do host, abrem em nova aba).
 - **Provedores de IA no painel** (`app/n8n.py`): card "Provedores de IA" com 3 blocos

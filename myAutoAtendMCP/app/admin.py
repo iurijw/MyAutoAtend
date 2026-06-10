@@ -88,6 +88,15 @@ def whatsapp_desconectar(_: str = Depends(autenticar)):
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
+@router.get("/admin/whatsapp/foto")
+def whatsapp_foto(numero: str, _: str = Depends(autenticar)):
+    """Foto de perfil do WhatsApp de um número — avatar na lista de agendamentos."""
+    try:
+        return {"url": evolution.foto_perfil(numero)}
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=502)
+
+
 # ---------------------------------------------------------------------------
 # Provedores de IA (credenciais no n8n) — consumido por JS no painel.
 # Fluxo unidirecional: a chave entra pelo form e vai direto pro n8n via

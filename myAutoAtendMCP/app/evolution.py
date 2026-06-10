@@ -10,9 +10,19 @@ Config vem de `settings` (variáveis de ambiente injetadas pelo compose):
 
 from __future__ import annotations
 
+import re
+import time
+
 import httpx
 
 from .config import settings
+
+# Foto de perfil raramente muda — cache em memória evita bater na Evolution
+# (e no WhatsApp) a cada recarga do painel. numero → (expira_em, url|None).
+# Resultado vazio expira rápido: instância pode estar só desconectada.
+_FOTO_TTL_S = 3600.0
+_FOTO_TTL_VAZIO_S = 300.0
+_foto_cache: dict[str, tuple[float, str | None]] = {}
 
 
 def _client() -> httpx.Client:
@@ -46,3 +56,35 @@ def desconectar() -> dict:
         r = c.delete(f"/instance/logout/{settings.evolution_instance}")
         r.raise_for_status()
         return r.json()
+
+
+def foto_perfil(numero: str) -> str | None:
+    """URL da foto de perfil do WhatsApp de um número (None se sem foto,
+    privada ou número fora do WhatsApp). Resultado cacheado por 1h."""
+    digitos = re.sub(r"\D", "", numero or "")
+    if not digitos:
+        return None
+
+    agora = time.monotonic()
+    em_cache = _foto_cache.get(digitos)
+    if em_cache and em_cache[0] > agora:
+        return em_cache[1]
+
+    with _client() as c:
+        # Timeout curto: com a instância desconectada a Evolution trava a
+        # chamada — o painel cai rápido no fallback de inicial.
+        r = c.post(
+            f"/chat/fetchProfilePictureUrl/{settings.evolution_instance}",
+            json={"number": digitos},
+            timeout=5.0,
+        )
+        # 4xx = sem foto / número inexistente — não é erro do painel.
+        url = None
+        if r.status_code < 400:
+            url = r.json().get("profilePictureUrl")
+        elif r.status_code >= 500:
+            r.raise_for_status()
+
+    ttl = _FOTO_TTL_S if url else _FOTO_TTL_VAZIO_S
+    _foto_cache[digitos] = (agora + ttl, url)
+    return url
