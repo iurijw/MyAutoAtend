@@ -8,23 +8,51 @@
 #   - Redis          (cache da Evolution API)
 #   - PostgreSQL     (banco de dados da Evolution API)
 #   - n8n            (automação de fluxos, com credenciais criadas automaticamente)
+#   - MCP Agendamentos (ferramentas do agente + painel /admin)
 #
-# CREDENCIAIS CRIADAS AUTOMATICAMENTE NO n8n:
-#   - "Evolution API" → http://evolution_api:9090 / ApiKey: ${AUTHENTICATION_API_KEY}
-#   - "Redis"         → host: redis, porta: 6379, sem senha
-#
-# O QUE DEVE SER ALTERADO ANTES DE USAR:
-#   1. Copie .env.example para .env e preencha — todas as senhas ficam lá
-#   2. WEBHOOK_URL e N8N_EDITOR_BASE_URL (se usar domínio) — altere no docker-compose.yml
+# CONFIGURAÇÃO:
+#   O .env tem só DUAS variáveis — LOGIN (e-mail) e SENHA — usadas em todos
+#   os portais (n8n, painel /admin e apikey da Evolution). Defina ANTES do
+#   primeiro `docker compose up -d`; trocar depois exige resetar os volumes.
+#   Chave de IA, telefone do dono e instruções do agente são configurados
+#   DEPOIS, pelo painel http://localhost:8000/admin.
 #
 # COMO USAR:
-#   1. cp .env.example .env  (e edite os valores)
-#   2. Suba os containers:
-#        docker compose up -d
-#   3. Acesse o n8n em: http://localhost:5678
-#   4. Login com as credenciais definidas no .env (N8N_OWNER_EMAIL / N8N_OWNER_PASSWORD)
+#   1. cp .env.example .env  (e edite LOGIN e SENHA)
+#   2. docker compose up -d
+#   3. Abra http://localhost:8000/admin e siga o README
 #
 # =============================================================================
+
+# System prompt inicial do agente — vale até o primeiro save no card
+# "Instruções do Agente" do painel /admin (depois a fonte de verdade é o
+# SQLite do MCP). Não usar ${...} nem aspas duplas no texto.
+x-agent-prompt: &agent-prompt |-
+  Você é o assistente virtual do estabelecimento, atendendo clientes pelo WhatsApp.
+
+  ## Ferramentas (MCP Agendamentos)
+  Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
+  - listar_servicos: catálogo com nome, descrição, valor e duração.
+  - consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD).
+  - agendar(servico_id, nome_cliente, inicio): cria agendamento; inicio = YYYY-MM-DDTHH:MM.
+  - meus_agendamentos: agendamentos do próprio cliente.
+  - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).
+
+  ## Regras
+  - NÃO peça nem use o telefone do cliente: ele é identificado automaticamente pelo sistema. Ignore o campo telefone_solicitante.
+  - Antes de agendar, reagendar ou cancelar, CONFIRME com o cliente o serviço, a data e o horário.
+  - Converta datas relativas (amanhã, sexta) para YYYY-MM-DD usando a data atual informada no início.
+  - Se faltar o nome do cliente para agendar, pergunte.
+  - Mostre valores em reais e durações em minutos.
+  - Gestão (fechar/abrir data, bloquear horário, criar/editar serviço, ver agenda completa) é restrita ao dono.
+  - Se uma ferramenta retornar erro, explique de forma simples e ofereça alternativa.
+
+  ## Persona
+  - Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações. Emojis com moderação.
+  - Seja breve, como numa conversa real de WhatsApp. Evite listas formais e linguagem corporativa.
+
+  ## Formatação (quebra de linha)
+  - O texto é dividido em bolhas de WhatsApp. Use [quebrar] OU Enter para separar bolhas. Máximo 2-3 bolhas por resposta. No máximo *negrito* do WhatsApp.
 
 services:
   evolution-api:
@@ -45,9 +73,10 @@ services:
       SERVER_TYPE: http
       SERVER_PORT: "9090"
       SERVER_URL: http://localhost:9090
-      POSTGRES_DATABASE: ${POSTGRES_DB}
-      POSTGRES_USERNAME: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Postgres é interno (sem porta no host) — credenciais constantes.
+      POSTGRES_DATABASE: evolution_api_db
+      POSTGRES_USERNAME: evolution
+      POSTGRES_PASSWORD: evolution_db_interno
       CORS_ORIGIN: "*"
       CORS_METHODS: GET,POST,PUT,DELETE
       CORS_CREDENTIALS: "true"
@@ -57,7 +86,7 @@ services:
       EVENT_EMITTER_MAX_LISTENERS: "50"
       DEL_INSTANCE: "false"
       DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@evolution-postgres:5432/${POSTGRES_DB}?schema=public
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution_db_interno@evolution-postgres:5432/evolution_api_db?schema=public
       DATABASE_CONNECTION_CLIENT_NAME: evolution_exchange
       DATABASE_SAVE_DATA_INSTANCE: "true"
       DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
@@ -81,8 +110,8 @@ services:
       CACHE_REDIS_PREFIX_KEY: evolution
       CACHE_REDIS_SAVE_INSTANCES: "false"
       CACHE_LOCAL_ENABLED: "false"
-      # Chave de autenticação da API
-      AUTHENTICATION_API_KEY: ${AUTHENTICATION_API_KEY}
+      # Chave de autenticação da API = SENHA única do stack
+      AUTHENTICATION_API_KEY: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
     expose:
       - "9090"
 
@@ -110,9 +139,10 @@ services:
       - -c
       - listen_addresses=*
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Interno (sem porta no host) — mesmos valores usados pela Evolution.
+      POSTGRES_DB: evolution_api_db
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution_db_interno
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -138,19 +168,20 @@ services:
       #WEBHOOK_URL: https://<seu-dominio>/
       #N8N_EDITOR_BASE_URL: https://<seu-dominio>/
       N8N_HOST: 0.0.0.0
-      # ---------- Credenciais do owner do n8n ----------
-      N8N_OWNER_EMAIL: ${N8N_OWNER_EMAIL}
+      # ---------- Credenciais do owner do n8n (LOGIN/SENHA únicos do stack) ----------
+      N8N_OWNER_EMAIL: ${LOGIN:?Defina LOGIN e SENHA no .env (copie de .env.example)}
       N8N_OWNER_FIRST_NAME: Admin
       N8N_OWNER_LAST_NAME: User
-      N8N_OWNER_PASSWORD: ${N8N_OWNER_PASSWORD}
+      N8N_OWNER_PASSWORD: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
       # ---------- Dados para criar credenciais ----------
       EVOLUTION_API_URL: http://evolution_api:9090
-      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      EVOLUTION_API_KEY: ${SENHA}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Chave de IA NÃO vem mais do .env: o init cria as credenciais com
+      # placeholder e a chave real é colada no painel /admin (Provedores de IA).
       # Instrução (system prompt) do agente — lido no workflow via {{ $env.AGENT_SYSTEM_PROMPT }}
-      AGENT_SYSTEM_PROMPT: ${AGENT_SYSTEM_PROMPT}
+      AGENT_SYSTEM_PROMPT: *agent-prompt
     volumes:
       - n8n_data:/home/node/.n8n
       - ./init-n8n.sh:/init-n8n.sh:ro
@@ -169,23 +200,24 @@ services:
     environment:
       MCP_DB_PATH: /data/agendamentos.db
       MCP_TZ: America/Sao_Paulo
-      # Telefone do dono (autoriza ações restritas). Ajuste para o seu número.
-      OWNER_PHONE: ${MCP_OWNER_PHONE:-5545999990000}
-      # Credenciais do painel /admin — troque em produção.
-      ADMIN_USER: ${MCP_ADMIN_USER:-admin}
-      ADMIN_PASS: ${MCP_ADMIN_PASS:-admin123}
+      # Telefone do dono (autoriza ações restritas) — configure pelo painel
+      # /admin (Configuração geral) depois de subir; este é só o placeholder.
+      OWNER_PHONE: "5500000000000"
+      # Credenciais do painel /admin = LOGIN/SENHA únicos do stack.
+      ADMIN_USER: ${LOGIN:?Defina LOGIN e SENHA no .env (copie de .env.example)}
+      ADMIN_PASS: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
       # Evolution API — pareamento do WhatsApp pelo painel (rede docker interna).
       EVOLUTION_API_URL: http://evolution_api:9090
-      EVOLUTION_API_KEY: ${AUTHENTICATION_API_KEY}
+      EVOLUTION_API_KEY: ${SENHA}
       EVOLUTION_INSTANCE: evo_n8n
       # n8n — API interna p/ atualizar credenciais de IA pelo painel (one-way:
       # a chave só entra no n8n, nunca é lida de volta).
       N8N_API_URL: http://n8n:5678
-      N8N_OWNER_EMAIL: ${N8N_OWNER_EMAIL}
-      N8N_OWNER_PASSWORD: ${N8N_OWNER_PASSWORD}
+      N8N_OWNER_EMAIL: ${LOGIN}
+      N8N_OWNER_PASSWORD: ${SENHA}
       # Seed da instrução geral no card "Instruções do Agente" (primeiro uso;
       # depois a fonte de verdade é o SQLite do MCP).
-      AGENT_SYSTEM_PROMPT: ${AGENT_SYSTEM_PROMPT}
+      AGENT_SYSTEM_PROMPT: *agent-prompt
       # URLs externas (browser do host) p/ atalhos no painel.
       N8N_EXTERNAL_URL: ${N8N_EXTERNAL_URL:-http://localhost:5678}
       EVOLUTION_EXTERNAL_URL: ${EVOLUTION_EXTERNAL_URL:-http://localhost:9090}

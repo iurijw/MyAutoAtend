@@ -73,7 +73,7 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
 - Debounce de mensagens via Redis (aguarda 13s antes de processar)
 - Memória de conversa por contato via Redis Chat Memory
 - Modelo: GPT-5.1 (alterar no node "OpenAI - Modelo LLM")
-- System prompt do agente: **editável pelo painel `/admin`** (card "Instruções do Agente", duas partes: instrução geral + bloco MCP avançado). O primeiro save substitui a referência `{{ $env.AGENT_SYSTEM_PROMPT }}` no node "Agente IA" por texto literal e republica o workflow — aplica na hora, sem recriar container. Antes do primeiro save, vale o `.env` (`AGENT_SYSTEM_PROMPT`), que também serve de seed do painel (valor em aspas duplas; `\n` viram quebras reais; não usar `"` nem `$` no texto). A data/hora atual é sempre injetada no início pelo node (prefixo fixo, fora do texto editável).
+- System prompt do agente: **editável pelo painel `/admin`** (card "Instruções do Agente", duas partes: instrução geral + bloco MCP avançado). O primeiro save substitui a referência `{{ $env.AGENT_SYSTEM_PROMPT }}` no node "Agente IA" por texto literal e republica o workflow — aplica na hora, sem recriar container. Antes do primeiro save, vale o default da âncora YAML `x-agent-prompt` do `docker-compose.yml` (vira env `AGENT_SYSTEM_PROMPT` nos containers n8n e MCP; também é o seed do painel; não usar `${...}` nem `"` no texto). A data/hora atual é sempre injetada no início pelo node (prefixo fixo, fora do texto editável).
 - Simula digitação proporcional ao tamanho da resposta
 
 ---
@@ -96,7 +96,8 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
   do endpoint (`?solicitante=<remoteJid>`); middleware ASGI grava em contextvar e `auth.requester()`
   sempre prefere esse valor. Autorização (dono/próprio) decidida em `app/auth.py`, em código.
 - No workflow: nó **"Agendamentos (MCP)"** (`mcpClientTool`, HTTP Streamable) → `Agente IA` (ai_tool).
-- Env: `MCP_OWNER_PHONE`, `MCP_ADMIN_USER`, `MCP_ADMIN_PASS` (no `.env`).
+- Auth do painel: `ADMIN_USER`/`ADMIN_PASS` = `LOGIN`/`SENHA` do `.env` (via compose).
+  Telefone do dono: placeholder no compose, configurado pelo painel.
 - **Pareamento WhatsApp no painel** (`app/evolution.py`): o `/admin` fala direto com a
   Evolution API pela rede docker (`EVOLUTION_API_URL`/`EVOLUTION_API_KEY`/`EVOLUTION_INSTANCE`)
   e mostra o QR Code dentro do próprio painel. Rotas: `GET /admin/whatsapp/estado`,
@@ -133,7 +134,7 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
   `## Formatação` (divisão em bolhas/[quebrar], amarrada ao node "Code - Dividir
   Resposta"). Save: n8n primeiro (PATCH no `systemMessage` + republicação), só então
   persiste no SQLite (chaves `geral`/`mcp`). Seed pré-primeiro-save: env
-  `AGENT_SYSTEM_PROMPT` (repassada ao container MCP no compose) com as seções
+  `AGENT_SYSTEM_PROMPT` (âncora `x-agent-prompt` do compose, repassada ao container MCP) com as seções
   `## Ferramentas (MCP Agendamentos)` e `## Formatação` removidas + bloco MCP padrão.
   Prefixo de data/hora é fixo (`PREFIXO_DATA`); `{{` do usuário vira `{ {` p/ evitar
   injeção de expressão n8n. Rotas: `GET/POST /admin/agente/prompt`.
@@ -169,16 +170,31 @@ curl -s -b /tmp/n8n_cookies.txt http://localhost:5678/rest/workflows/WORKFLOW_ID
 
 ## Variáveis de Ambiente (.env)
 
+O `.env` tem SÓ duas variáveis, compartilhadas por todos os portais:
+
 ```env
-POSTGRES_USER=
-POSTGRES_PASSWORD=
-POSTGRES_DB=
-AUTHENTICATION_API_KEY=   # chave da Evolution API
-N8N_OWNER_EMAIL=
-N8N_OWNER_PASSWORD=
-OPENAI_API_KEY=           # obrigatório para o agente funcionar
-AGENT_SYSTEM_PROMPT=      # system prompt do agente (aspas duplas, \n = quebra; sem " nem $)
+LOGIN=   # e-mail: owner do n8n + usuário do painel /admin
+SENHA=   # senha do n8n e do /admin + apikey da Evolution (AUTHENTICATION_API_KEY)
 ```
+
+> **Regras:** senha na política do n8n (8+ chars, 1 maiúscula, 1 número — o init
+> valida e loga erro claro). Definir ANTES do primeiro `up`; trocar depois exige
+> resetar volumes (senha fica gravada no banco do n8n). Guards `${VAR:?}` no
+> compose fazem o `up` falhar com mensagem se o `.env` faltar.
+
+O que saiu do `.env` e virou config pós-boot (pelo painel `/admin`):
+- **Chave de IA** (`OPENAI_API_KEY`) → init cria credenciais com placeholder
+  (`sk-cole-sua-chave-no-painel-admin`); usuário cola a chave no card
+  "Provedores de IA". Agente não responde até isso.
+- **Telefone do dono** (`MCP_OWNER_PHONE`) → placeholder no compose
+  (`5500000000000`); configurar em "Configuração geral".
+- **System prompt** (`AGENT_SYSTEM_PROMPT`) → default vive no
+  `docker-compose.yml` como âncora YAML `x-agent-prompt` (passada aos
+  containers n8n e MCP); editável no card "Instruções do Agente".
+
+Postgres é interno (sem porta no host): credenciais constantes hardcoded no
+compose (`evolution` / `evolution_db_interno` / `evolution_api_db`) — inclusive
+embutidas na `DATABASE_CONNECTION_URI` da Evolution.
 
 ---
 

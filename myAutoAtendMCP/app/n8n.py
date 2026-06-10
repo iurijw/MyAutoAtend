@@ -135,7 +135,7 @@ def _sessao() -> Iterator[httpx.Client]:
         if r.status_code != 200:
             raise RuntimeError(
                 f"Login no n8n falhou (HTTP {r.status_code}). "
-                "Confira N8N_OWNER_EMAIL/N8N_OWNER_PASSWORD no .env."
+                "Confira LOGIN/SENHA no .env."
             )
         auth = next(
             (

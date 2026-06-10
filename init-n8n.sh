@@ -265,7 +265,7 @@ async function setupEvolutionInstance() {
   console.log('[init] ✔ Instância ' + INSTANCE_NAME + ' criada e configurada!');
   console.log('[init] ────────────────────────────────────────────────────────');
   console.log('[init]  AÇÃO NECESSÁRIA: Conecte o WhatsApp manualmente.');
-  console.log('[init]  Use o painel da Evolution API para escanear o QR Code.');
+  console.log('[init]  Abra http://localhost:8000/admin e escaneie o QR Code.');
   console.log('[init] ────────────────────────────────────────────────────────');
 }
 
@@ -306,6 +306,16 @@ async function importWorkflow(cookie, evolCredId, textoCredId, audioCredId, imag
 async function main() {
   let cookie = null;
 
+  // Política de senha do n8n: 8-64 chars, ao menos 1 maiúscula e 1 número.
+  // Falha cedo com mensagem clara em vez de 20 tentativas de setup com 400.
+  const senha = process.env.N8N_OWNER_PASSWORD || '';
+  if (!/^(?=.*[A-Z])(?=.*\d).{8,64}$/.test(senha)) {
+    console.error('[init] ERRO: SENHA não atende à política do n8n:');
+    console.error('[init]   mínimo 8 caracteres, ao menos 1 letra MAIÚSCULA e 1 número.');
+    console.error('[init]   Corrija a SENHA no .env e suba de novo (docker compose up -d).');
+    process.exit(0);
+  }
+
   const needs = await needsOwnerSetup();
 
   if (needs) {
@@ -318,7 +328,7 @@ async function main() {
 
   if (!cookie) {
     console.error('[init] ERRO: Não foi possível obter sessão.');
-    console.error('[init] Verifique N8N_OWNER_EMAIL e N8N_OWNER_PASSWORD no docker-compose.');
+    console.error('[init] Verifique LOGIN e SENHA no .env (e se a SENHA não mudou após o primeiro boot).');
     process.exit(0);
   }
 
@@ -336,12 +346,13 @@ async function main() {
   try { evolCredId = (JSON.parse(evolRes.body).data || JSON.parse(evolRes.body)).id; } catch(e) {}
 
   // Criar credenciais de IA (separadas: texto, áudio e imagem — gerenciáveis pelo painel /admin do MCP)
+  // Nascem com placeholder: a chave real é colada no painel /admin (card "Provedores de IA").
   async function criarCredIA(nome) {
     const res = await post('/rest/credentials', {
       name: nome,
       type: 'openAiApi',
       data: {
-        apiKey: process.env.OPENAI_API_KEY,
+        apiKey: process.env.OPENAI_API_KEY || 'sk-cole-sua-chave-no-painel-admin',
         url: 'https://api.openai.com/v1',
       },
     }, cookie);

@@ -47,7 +47,7 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 
 ## ⚙ Configuração
 
-> **Pré-requisitos:** [Docker](https://docs.docker.com/get-docker/) + Docker Compose v2 · uma chave da [OpenAI](https://platform.openai.com/api-keys) · portas `5678` e `9090` livres.
+> **Pré-requisitos:** [Docker](https://docs.docker.com/get-docker/) + Docker Compose v2 · uma chave da [OpenAI](https://platform.openai.com/api-keys) · portas `5678`, `8000` e `9090` livres.
 
 ### 1 · Clonar
 
@@ -56,22 +56,21 @@ git clone https://github.com/iurijw/MyAutoAtend.git
 cd MyAutoAtend
 ```
 
-### 2 · Preencher o `.env`
+### 2 · Definir login e senha (`.env`)
 
 ```bash
 cp .env.example .env
 ```
 
-Abra o `.env` e ajuste **no mínimo** estes valores:
+O `.env` tem **apenas duas variáveis**, usadas em todos os portais:
 
-| Variável | O que é |
-|---|---|
-| `OPENAI_API_KEY` | Sua chave da OpenAI — **obrigatória** |
-| `POSTGRES_PASSWORD` · `AUTHENTICATION_API_KEY` | Senhas fortes que você escolhe |
-| `N8N_OWNER_EMAIL` · `N8N_OWNER_PASSWORD` | Login do painel n8n |
-| `MCP_OWNER_PHONE` | Seu WhatsApp (E.164, ex. `5599999999999`) — autoriza ações de dono |
-| `MCP_ADMIN_USER` · `MCP_ADMIN_PASS` | Login do painel `/admin` |
-| `AGENT_SYSTEM_PROMPT` | Personalidade e regras do atendente (já vem um exemplo genérico) |
+```env
+LOGIN=voce@exemplo.com
+SENHA=TroqueEsta123
+```
+
+> A senha precisa ter 8+ caracteres, 1 letra maiúscula e 1 número.
+> Defina antes do primeiro `up` — trocar depois exige resetar os volumes.
 
 ### 3 · Subir
 
@@ -87,9 +86,17 @@ docker logs -f n8n
 
 Espere por: `✔ Workflow "Agente Whatsapp" importado e publicado!`
 
-### 4 · Conectar o WhatsApp e Configurar Serviços (entre outras opções)
+### 4 · Configurar pelo painel
 
-Abra **http://localhost:8000/admin** (login = `MCP_ADMIN_USER` / `MCP_ADMIN_PASS`) e conecte seu Whatsapp via QRCode, bem como, cadastre os serviços. **Pronto** — o atendente já responde.
+Todo o resto acontece em **http://localhost:8000/admin** (entre com `LOGIN` / `SENHA`):
+
+1. **📲 Conectar o WhatsApp** — no card *Conexão WhatsApp*, escaneie o QR Code com o celular do número que vai atender.
+2. **🧠 Chave de IA** — no card *Provedores de IA*, cole sua chave (OpenAI ou outro provedor) e escolha os modelos de texto, áudio e imagem. *Sem isso o atendente não responde.*
+3. **📞 Seu número** — em *Configuração geral*, informe o telefone do dono (autoriza comandos de gestão pelo WhatsApp).
+4. **🛠 Serviços** — cadastre os serviços com preço e duração.
+5. **✍️ Instruções do agente** *(opcional)* — ajuste a personalidade e as regras do atendente no card *Instruções do Agente*; já vem um padrão pronto.
+
+**Pronto** — o atendente já responde no WhatsApp.
 
 <br>
 
@@ -97,10 +104,12 @@ Abra **http://localhost:8000/admin** (login = `MCP_ADMIN_USER` / `MCP_ADMIN_PASS
 
 | Painel | Endereço | Para quê |
 |---|---|---|
-| **Admin** (agendamentos) | http://localhost:8000/admin | Serviços, agenda e bloqueios |
+| **Admin** (agendamentos) | http://localhost:8000/admin | Serviços, agenda, WhatsApp, IA |
 | **n8n** | http://localhost:5678 | Editar o fluxo do agente |
-| **Evolution API** | http://localhost:9090 | Conexão do WhatsApp |
+| **Evolution API** | http://localhost:9090 | Gerenciar instâncias WhatsApp |
 
+> 🔑 Todos usam o mesmo acesso do `.env`: `LOGIN` / `SENHA` (na Evolution, a apikey é a `SENHA`).
+>
 > ⚠️ O painel `/admin` não foi projetado para ser exposto na internet — use apenas em `localhost`.
 
 ### Por dentro do `/admin`
@@ -141,7 +150,7 @@ docker logs -f n8n          # ver a inicialização
 - [X] Adicionar novas opções de provedores de IA (chave/modelo atualizados no n8n pelo portal admin; fluxo unidirecional — a chave nunca é exibida de volta)
 - [X] Transferir lógica de pareamento do Whatsapp para o portal admin
 - [X] Adicionar shortchuts para abertura dos portais auxiliares (Evolution API e n8n) no portal admin
-- [ ] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin
+- [X] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin
 - [ ] Poder bloquear/fechar range de datas pelo portal do admin e conversa com o bot no WhatsApp
 - [X] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT) — card "Instruções do Agente": instrução geral + bloco MCP separado (avançado, com aviso e restauração do padrão)
 - [ ] Adicionar opção de avisar o cliente que foi reagendado/cancelado o serviço dele (a IA avisar a ação do dono/adminsitrador com o aval do mesmo)

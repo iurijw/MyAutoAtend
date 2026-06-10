@@ -41,9 +41,9 @@ Container: `mcp_agendamentos` na rede `evolution-net`. O n8n alcança em
 | Var | Default | Função |
 |---|---|---|
 | `MCP_DB_PATH` | `agendamentos.db` (`/data/...` no Docker) | caminho do SQLite |
-| `OWNER_PHONE` / `MCP_OWNER_PHONE` | `5545999990000` | telefone do dono (autoriza ações restritas) |
+| `OWNER_PHONE` | placeholder no compose | telefone do dono — configurado pelo painel (Configuração geral) |
 | `MCP_TZ` | `America/Sao_Paulo` | fuso das conversões de data/hora |
-| `ADMIN_USER` / `ADMIN_PASS` | `admin` / `admin123` | credenciais do painel |
+| `ADMIN_USER` / `ADMIN_PASS` | `LOGIN` / `SENHA` do `.env` raiz | credenciais do painel |
 
 ## Estrutura
 
