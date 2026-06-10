@@ -270,13 +270,14 @@ async function setupEvolutionInstance() {
 }
 
 /* ---------- Importar e ativar workflow ---------- */
-async function importWorkflow(cookie, evolCredId, textoCredId, midiaCredId, redisCredId) {
+async function importWorkflow(cookie, evolCredId, textoCredId, audioCredId, imagemCredId, redisCredId) {
   try {
     let workflowJson = fs.readFileSync('/agente_whatsapp.json', 'utf8');
     workflowJson = workflowJson
       .replace(/oCZwvvYltMxJIzmA/g, evolCredId)
       .replace(/MU6adeGic3RPMvdM/g, textoCredId)
-      .replace(/MEDIAcredID00001/g, midiaCredId)
+      .replace(/AUDIOcredID00001/g, audioCredId)
+      .replace(/IMAGEcredID00001/g, imagemCredId)
       .replace(/trFJWRaDpUKn5nf8/g, redisCredId);
     const workflow = JSON.parse(workflowJson);
     delete workflow.id;
@@ -334,30 +335,22 @@ async function main() {
   let evolCredId = null;
   try { evolCredId = (JSON.parse(evolRes.body).data || JSON.parse(evolRes.body)).id; } catch(e) {}
 
-  // Criar credenciais de IA (separadas: texto e mídia, gerenciáveis pelo painel /admin do MCP)
-  const textoRes = await post('/rest/credentials', {
-    name: 'IA - Texto',
-    type: 'openAiApi',
-    data: {
-      apiKey: process.env.OPENAI_API_KEY,
-      url: 'https://api.openai.com/v1',
-    },
-  }, cookie);
-  console.log('[init] IA - Texto → HTTP ' + textoRes.status + ' ' + textoRes.body.substring(0, 200));
-  let textoCredId = null;
-  try { textoCredId = (JSON.parse(textoRes.body).data || JSON.parse(textoRes.body)).id; } catch(e) {}
-
-  const midiaRes = await post('/rest/credentials', {
-    name: 'IA - Mídia',
-    type: 'openAiApi',
-    data: {
-      apiKey: process.env.OPENAI_API_KEY,
-      url: 'https://api.openai.com/v1',
-    },
-  }, cookie);
-  console.log('[init] IA - Mídia → HTTP ' + midiaRes.status + ' ' + midiaRes.body.substring(0, 200));
-  let midiaCredId = null;
-  try { midiaCredId = (JSON.parse(midiaRes.body).data || JSON.parse(midiaRes.body)).id; } catch(e) {}
+  // Criar credenciais de IA (separadas: texto, áudio e imagem — gerenciáveis pelo painel /admin do MCP)
+  async function criarCredIA(nome) {
+    const res = await post('/rest/credentials', {
+      name: nome,
+      type: 'openAiApi',
+      data: {
+        apiKey: process.env.OPENAI_API_KEY,
+        url: 'https://api.openai.com/v1',
+      },
+    }, cookie);
+    console.log('[init] ' + nome + ' → HTTP ' + res.status + ' ' + res.body.substring(0, 200));
+    try { return (JSON.parse(res.body).data || JSON.parse(res.body)).id; } catch(e) { return null; }
+  }
+  const textoCredId  = await criarCredIA('IA - Texto');
+  const audioCredId  = await criarCredIA('IA - Áudio');
+  const imagemCredId = await criarCredIA('IA - Imagem');
 
   // Criar credencial Redis
   const redisRes = await post('/rest/credentials', {
@@ -378,8 +371,8 @@ async function main() {
   console.log('[init] Setup n8n concluído com sucesso!');
 
   // Importar workflow Agente Whatsapp
-  if (evolCredId && textoCredId && midiaCredId && redisCredId) {
-    await importWorkflow(cookie, evolCredId, textoCredId, midiaCredId, redisCredId);
+  if (evolCredId && textoCredId && audioCredId && imagemCredId && redisCredId) {
+    await importWorkflow(cookie, evolCredId, textoCredId, audioCredId, imagemCredId, redisCredId);
   } else {
     console.log('[init] AVISO: IDs de credenciais não capturados. Importe o workflow manualmente.');
   }

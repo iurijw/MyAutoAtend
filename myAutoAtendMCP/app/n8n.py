@@ -7,10 +7,13 @@ própria API do n8n redige campos sensíveis na leitura (`includeData` devolve
 o `apiKey` como sentinela em branco — usamos isso apenas para ler a `url`,
 que não é segredo, e deduzir o provedor atual).
 
-Autenticação igual à do init-n8n.sh: login de owner via `POST /rest/login`
-(cookie de sessão). Login é refeito a cada operação — uso do painel é raro.
+Três credenciais, uma por uso (texto / áudio / imagem), porque os limites de
+compatibilidade diferem: o node de áudio do n8n fixa `model=whisper-1` e envia
+multipart no formato OpenAI (só OpenAI ou proxy compatível atendem); já visão
+funciona em qualquer chat completions compatível (OpenRouter, Groq, Gemini…).
 
-Envs (injetadas pelo compose): N8N_API_URL · N8N_OWNER_EMAIL · N8N_OWNER_PASSWORD.
+Autenticação igual à do init-n8n.sh: login de owner via `POST /rest/login`
+(cookie de sessão). Envs: N8N_API_URL · N8N_OWNER_EMAIL · N8N_OWNER_PASSWORD.
 """
 
 from __future__ import annotations
@@ -22,26 +25,34 @@ import httpx
 
 from .config import settings
 
-# Nomes criados pelo init-n8n.sh. Fallback p/ ambientes antigos com 1 credencial só.
-CRED_POR_ALVO = {"texto": "IA - Texto", "midia": "IA - Mídia"}
-CRED_LEGADA = "OpenAi account"
+# Nomes criados pelo init-n8n.sh.
+CRED_POR_ALVO = {"texto": "IA - Texto", "audio": "IA - Áudio", "imagem": "IA - Imagem"}
+# Fallback de LEITURA p/ ambientes provisionados antes da separação em 3.
+# Na escrita, a credencial certa é criada e o node religado (ver atualizar_chave).
+CREDS_LEGADAS = ["IA - Mídia", "OpenAi account"]
 
 WORKFLOW_NAME = "Agente Whatsapp"
-# Nodes cujo modelo é editável. Áudio (Whisper) não expõe modelo no node do n8n
-# (fixo em whisper-1) — por isso "mídia" só aceita provedores compatíveis com ele.
-NODE_POR_ALVO = {"texto": "OpenAI - Modelo LLM", "midia": "OpenAI - Descrever Imagem"}
+NODE_POR_ALVO = {
+    "texto": "OpenAI - Modelo LLM",
+    "audio": "OpenAI - Transcrever Áudio",
+    "imagem": "OpenAI - Descrever Imagem",
+}
+# Áudio fica de fora: o node do n8n não expõe o modelo (fixa whisper-1).
+ALVOS_COM_MODELO = ("texto", "imagem")
 
-# Provedores com API compatível OpenAI. `midia: False` = não serve para a
-# credencial de mídia porque o node de áudio do n8n manda model=whisper-1 fixo.
+# Provedores com API compatível OpenAI, com capacidade por uso.
+# audio=False: endpoint /audio/transcriptions ausente ou incompatível com o
+# multipart + model=whisper-1 que o node do n8n envia (ex.: OpenRouter aceita
+# só JSON base64 e exige "openai/whisper-1"). imagem=False: sem modelo de visão.
 PROVEDORES: dict[str, dict[str, Any]] = {
-    "openai": {"nome": "OpenAI", "base_url": "https://api.openai.com/v1", "texto": True, "midia": True},
-    "groq": {"nome": "Groq", "base_url": "https://api.groq.com/openai/v1", "texto": True, "midia": False},
-    "openrouter": {"nome": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "texto": True, "midia": False},
-    "mistral": {"nome": "Mistral", "base_url": "https://api.mistral.ai/v1", "texto": True, "midia": False},
-    "xai": {"nome": "xAI (Grok)", "base_url": "https://api.x.ai/v1", "texto": True, "midia": False},
-    "gemini": {"nome": "Google Gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "texto": True, "midia": False},
-    "deepseek": {"nome": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "texto": True, "midia": False},
-    "custom": {"nome": "Personalizado (URL própria)", "base_url": "", "texto": True, "midia": True},
+    "openai": {"nome": "OpenAI", "base_url": "https://api.openai.com/v1", "texto": True, "audio": True, "imagem": True},
+    "groq": {"nome": "Groq", "base_url": "https://api.groq.com/openai/v1", "texto": True, "audio": False, "imagem": True},
+    "openrouter": {"nome": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "texto": True, "audio": False, "imagem": True},
+    "mistral": {"nome": "Mistral", "base_url": "https://api.mistral.ai/v1", "texto": True, "audio": False, "imagem": True},
+    "xai": {"nome": "xAI (Grok)", "base_url": "https://api.x.ai/v1", "texto": True, "audio": False, "imagem": True},
+    "gemini": {"nome": "Google Gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "texto": True, "audio": False, "imagem": True},
+    "deepseek": {"nome": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "texto": True, "audio": False, "imagem": False},
+    "custom": {"nome": "Personalizado (URL própria)", "base_url": "", "texto": True, "audio": True, "imagem": True},
 }
 
 
@@ -107,44 +118,57 @@ def _sessao() -> Iterator[httpx.Client]:
 # ---------------------------------------------------------------------------
 
 
-def _achar_credencial(c: httpx.Client, alvo: str) -> dict:
+def _credenciais_openai(c: httpx.Client) -> list[dict]:
     r = c.get("/rest/credentials")
     r.raise_for_status()
     creds = _data(r)
     if isinstance(creds, dict):  # algumas versões paginam: {count, data}
         creds = creds.get("data", [])
+    return [x for x in creds if x.get("type") == "openAiApi"]
+
+
+def _achar_credencial(c: httpx.Client, alvo: str, exata: bool = False) -> dict | None:
+    creds = _credenciais_openai(c)
     nome = CRED_POR_ALVO[alvo]
-    openai_creds = [x for x in creds if x.get("type") == "openAiApi"]
-    for x in openai_creds:
+    for x in creds:
         if x.get("name") == nome:
             return x
-    # Ambiente antigo (uma credencial única) — usa a que existir.
-    for x in openai_creds:
-        if x.get("name") == CRED_LEGADA:
-            return x
-    if len(openai_creds) == 1:
-        return openai_creds[0]
+    if exata:
+        return None
+    for legado in CREDS_LEGADAS:
+        for x in creds:
+            if x.get("name") == legado:
+                return x
+    if len(creds) == 1:
+        return creds[0]
     raise RuntimeError(
         f'Credencial "{nome}" não encontrada no n8n. '
-        "Refaça o init (remova o marker .credentials_initialized) ou crie-a manualmente."
+        "Salve a chave do provedor pelo painel para criá-la."
     )
 
 
 def atualizar_chave(alvo: str, api_key: str, base_url: str) -> dict:
-    """Grava chave + base URL na credencial do alvo. Não retorna segredo algum."""
+    """Grava chave + base URL na credencial do alvo. Não retorna segredo algum.
+
+    Se a credencial do alvo ainda não existe (ambiente provisionado antes da
+    separação em 3), ela é criada e o node do workflow é religado a ela.
+    """
     with _sessao() as c:
-        cred = _achar_credencial(c, alvo)
-        r = c.patch(
-            f"/rest/credentials/{cred['id']}",
-            json={
-                "name": cred["name"],
-                "type": cred["type"],
-                "data": {"apiKey": api_key, "url": base_url},
-            },
-        )
+        cred = _achar_credencial(c, alvo, exata=True)
+        corpo = {
+            "name": CRED_POR_ALVO[alvo],
+            "type": "openAiApi",
+            "data": {"apiKey": api_key, "url": base_url},
+        }
+        if cred:
+            r = c.patch(f"/rest/credentials/{cred['id']}", json=corpo)
+        else:
+            r = c.post("/rest/credentials", json=corpo)
         if r.status_code not in (200, 201):
             raise RuntimeError(f"n8n recusou a atualização (HTTP {r.status_code}): {r.text[:200]}")
-        return {"ok": True, "credencial": cred["name"]}
+        cred = cred or _data(r)
+        _religar_node(c, alvo, cred)
+        return {"ok": True, "credencial": CRED_POR_ALVO[alvo]}
 
 
 def _url_da_credencial(c: httpx.Client, cred_id: str) -> str | None:
@@ -222,7 +246,7 @@ def listar_modelos_do_provedor(base_url: str, api_key: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Workflow (modelo dos nodes)
+# Workflow (modelo dos nodes / religação de credencial)
 # ---------------------------------------------------------------------------
 
 
@@ -240,6 +264,51 @@ def _achar_workflow(c: httpx.Client) -> dict:
     raise RuntimeError(f'Workflow "{WORKFLOW_NAME}" não encontrado no n8n.')
 
 
+def _publicar_workflow(c: httpx.Client, wf: dict) -> dict:
+    """PATCH no workflow e, se estava no ar, garante a republicação (versionId)."""
+    estava_ativo = bool(wf.get("active"))
+    r = c.patch(
+        f"/rest/workflows/{wf['id']}",
+        json={
+            "name": wf["name"],
+            "nodes": wf["nodes"],
+            "connections": wf["connections"],
+            "settings": wf.get("settings") or {},
+            "versionId": wf["versionId"],
+        },
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"n8n recusou o PATCH do workflow (HTTP {r.status_code}): {r.text[:200]}")
+    novo = _data(r)
+    if estava_ativo and not novo.get("active"):
+        ar = c.post(
+            f"/rest/workflows/{wf['id']}/activate",
+            json={"versionId": novo["versionId"]},
+        )
+        if ar.status_code != 200:
+            raise RuntimeError(
+                f"Alteração salva, mas falhou ao republicar o workflow (HTTP {ar.status_code}). "
+                "Publique manualmente no n8n."
+            )
+    return novo
+
+
+def _religar_node(c: httpx.Client, alvo: str, cred: dict) -> None:
+    """Garante que o node do alvo usa a credencial certa (migra ambiente antigo)."""
+    wf = _achar_workflow(c)
+    node = next((n for n in wf["nodes"] if n["name"] == NODE_POR_ALVO[alvo]), None)
+    if node is None:
+        return
+    atual = (node.get("credentials") or {}).get("openAiApi") or {}
+    if atual.get("id") == cred["id"]:
+        return
+    node.setdefault("credentials", {})["openAiApi"] = {
+        "id": cred["id"],
+        "name": cred.get("name", CRED_POR_ALVO[alvo]),
+    }
+    _publicar_workflow(c, wf)
+
+
 def _modelo_do_node(node: dict) -> str | None:
     params = node.get("parameters", {})
     if isinstance(params.get("model"), str):  # lmChatOpenAi
@@ -251,7 +320,9 @@ def _modelo_do_node(node: dict) -> str | None:
 
 
 def atualizar_modelo(alvo: str, modelo: str) -> dict:
-    """Troca o modelo do node do alvo e republica o workflow (regra do versionId)."""
+    """Troca o modelo do node do alvo e republica o workflow."""
+    if alvo not in ALVOS_COM_MODELO:
+        raise RuntimeError("Este uso não tem modelo configurável (áudio fixa whisper-1).")
     with _sessao() as c:
         wf = _achar_workflow(c)
         node_nome = NODE_POR_ALVO[alvo]
@@ -264,32 +335,7 @@ def atualizar_modelo(alvo: str, modelo: str) -> dict:
         else:
             node["parameters"]["modelId"] = {"__rl": True, "value": modelo, "mode": "id"}
 
-        estava_ativo = bool(wf.get("active"))
-        r = c.patch(
-            f"/rest/workflows/{wf['id']}",
-            json={
-                "name": wf["name"],
-                "nodes": wf["nodes"],
-                "connections": wf["connections"],
-                "settings": wf.get("settings") or {},
-                "versionId": wf["versionId"],
-            },
-        )
-        if r.status_code != 200:
-            raise RuntimeError(f"n8n recusou o PATCH do workflow (HTTP {r.status_code}): {r.text[:200]}")
-        novo = _data(r)
-
-        # n8n v2: PATCH não (re)ativa — se caiu, republica com o versionId novo.
-        if estava_ativo and not novo.get("active"):
-            ar = c.post(
-                f"/rest/workflows/{wf['id']}/activate",
-                json={"versionId": novo["versionId"]},
-            )
-            if ar.status_code != 200:
-                raise RuntimeError(
-                    f"Modelo salvo, mas falhou ao republicar o workflow (HTTP {ar.status_code}). "
-                    "Publique manualmente no n8n."
-                )
+        _publicar_workflow(c, wf)
         return {"ok": True, "modelo": modelo}
 
 
@@ -307,7 +353,7 @@ def estado() -> dict:
             wf = _achar_workflow(c)
         except Exception:
             pass
-        for alvo in ("texto", "midia"):
+        for alvo in CRED_POR_ALVO:
             info: dict[str, Any] = {"provedor": None, "modelo": None, "atualizado_em": None}
             try:
                 cred = _achar_credencial(c, alvo)
@@ -315,7 +361,7 @@ def estado() -> dict:
                 info["provedor"] = _provedor_da_url(_url_da_credencial(c, cred["id"]))
             except Exception as e:
                 info["erro"] = str(e)
-            if wf:
+            if wf and alvo in ALVOS_COM_MODELO:
                 node = next(
                     (n for n in wf["nodes"] if n["name"] == NODE_POR_ALVO[alvo]), None
                 )

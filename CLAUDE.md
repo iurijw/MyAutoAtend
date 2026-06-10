@@ -56,11 +56,13 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
 |---|---|---|
 | `evolutionApi` | Evolution API | `oCZwvvYltMxJIzmA` |
 | `openAiApi` | **IA - Texto** (node LLM) | `MU6adeGic3RPMvdM` |
-| `openAiApi` | **IA - Mídia** (Whisper + OCR) | `MEDIAcredID00001` |
+| `openAiApi` | **IA - Áudio** (Whisper) | `AUDIOcredID00001` |
+| `openAiApi` | **IA - Imagem** (OCR/visão) | `IMAGEcredID00001` |
 | `redis` | Redis | `trFJWRaDpUKn5nf8` |
 
-> As duas credenciais de IA são separadas de propósito: o painel `/admin` do MCP
-> permite usar provedores diferentes para texto e mídia.
+> As três credenciais de IA são separadas de propósito: o painel `/admin` do MCP
+> permite provedor diferente para cada uso (compatibilidade difere: áudio só
+> OpenAI/custom; imagem aceita OpenRouter, Groq, Gemini etc.).
 
 ---
 
@@ -101,16 +103,23 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
   `GET /admin/whatsapp/qr`, `POST /admin/whatsapp/desconectar`.
 - **Atalhos** no header do painel p/ n8n e Evolution manager (`N8N_EXTERNAL_URL`,
   `EVOLUTION_EXTERNAL_URL` — URLs do host, abrem em nova aba).
-- **Provedores de IA no painel** (`app/n8n.py`): card "Provedores de IA" atualiza
-  chave/base URL das credenciais **IA - Texto** e **IA - Mídia** no n8n e troca o
-  modelo dos nodes ("OpenAI - Modelo LLM" / "OpenAI - Descrever Imagem"), republicando
-  o workflow. **Fluxo unidirecional**: a chave só ENTRA no n8n (PATCH `/rest/credentials/{id}`);
-  nenhuma rota devolve segredo — o n8n redige `apiKey` na leitura, e o painel só lê a
-  `url` (via `?includeData=true`) p/ deduzir o provedor atual. Provedores = presets
-  compatíveis com OpenAI (`n8n.PROVEDORES`); mídia restrita a OpenAI/custom porque o
-  node de áudio do n8n manda `model=whisper-1` fixo. Login no n8n com
-  `N8N_OWNER_EMAIL`/`N8N_OWNER_PASSWORD` (envs `N8N_API_URL` etc. no compose).
-  Rotas: `GET /admin/ia/estado`, `POST /admin/ia/credencial`, `POST /admin/ia/modelo`.
+- **Provedores de IA no painel** (`app/n8n.py`): card "Provedores de IA" com 3 blocos
+  (texto/áudio/imagem) atualiza chave/base URL das credenciais **IA - Texto**,
+  **IA - Áudio** e **IA - Imagem** no n8n e troca o modelo dos nodes ("OpenAI -
+  Modelo LLM" / "OpenAI - Descrever Imagem"), republicando o workflow. Áudio não tem
+  modelo configurável (node fixa `whisper-1`) → só OpenAI/custom; imagem aceita
+  OpenRouter/Groq/Gemini etc. (visão via chat completions). **Fluxo unidirecional**:
+  a chave só ENTRA no n8n (PATCH `/rest/credentials/{id}`); nenhuma rota devolve
+  segredo — o n8n redige `apiKey` na leitura, e o painel só lê a `url`
+  (via `?includeData=true`) p/ deduzir o provedor atual. **Migração automática**:
+  ambiente antigo (1 ou 2 credenciais) → ao salvar a chave de um alvo sem credencial
+  própria, ela é criada e o node religado (`_religar_node`). Listagem de modelos sem
+  expor chave: via n8n (`/rest/dynamic-node-parameters/resource-locator-results`,
+  `modelSearch`) p/ chave salva, ou `GET {base_url}/models` transiente no preview
+  (chave recém-digitada). Login no n8n com `N8N_OWNER_EMAIL`/`N8N_OWNER_PASSWORD`
+  (envs `N8N_API_URL` etc. no compose); cookie cacheado (login tem rate limit 429).
+  Rotas: `GET /admin/ia/estado`, `GET /admin/ia/modelos`, `POST /admin/ia/modelos-preview`,
+  `POST /admin/ia/credencial`, `POST /admin/ia/modelo`.
 - Após mudar essas envs/código: `docker compose up -d --build mcp-agendamentos`.
 
 ## Comandos Úteis

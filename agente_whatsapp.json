@@ -57,8 +57,8 @@
       "name": "OpenAI - Transcrever Áudio",
       "credentials": {
         "openAiApi": {
-          "id": "MEDIAcredID00001",
-          "name": "IA - Mídia"
+          "id": "AUDIOcredID00001",
+          "name": "IA - Áudio"
         }
       }
     },
@@ -809,8 +809,8 @@
       "name": "OpenAI - Descrever Imagem",
       "credentials": {
         "openAiApi": {
-          "id": "MEDIAcredID00001",
-          "name": "IA - Mídia"
+          "id": "IMAGEcredID00001",
+          "name": "IA - Imagem"
         }
       }
     },

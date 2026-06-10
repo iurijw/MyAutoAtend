@@ -105,7 +105,7 @@ def ia_estado(_: str = Depends(autenticar)):
 
 @router.get("/admin/ia/modelos")
 def ia_modelos(alvo: str, _: str = Depends(autenticar)):
-    if alvo not in ("texto", "midia"):
+    if alvo not in n8n.ALVOS_COM_MODELO:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
     try:
         return {"modelos": n8n.listar_modelos(alvo)}
@@ -148,7 +148,7 @@ def ia_credencial(
     api_key: str = Form(...),
     base_url: str = Form(""),
 ):
-    if alvo not in ("texto", "midia"):
+    if alvo not in n8n.CRED_POR_ALVO:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
     preset = n8n.PROVEDORES.get(provedor)
     if not preset:
@@ -177,8 +177,11 @@ def ia_modelo(
     alvo: str = Form(...),
     modelo: str = Form(...),
 ):
-    if alvo not in ("texto", "midia"):
-        raise HTTPException(status_code=400, detail="Alvo inválido.")
+    if alvo not in n8n.ALVOS_COM_MODELO:
+        raise HTTPException(
+            status_code=400,
+            detail="Alvo inválido (áudio tem modelo fixo whisper-1).",
+        )
     if not modelo.strip():
         raise HTTPException(status_code=400, detail="Informe o nome do modelo.")
     try:

@@ -136,8 +136,8 @@
     #wa-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 
     /* ---------- Provedores de IA ---------- */
-    .ia-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
-    @media(max-width:860px){ .ia-grid{grid-template-columns:1fr;} }
+    .ia-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
+    @media(max-width:1000px){ .ia-grid{grid-template-columns:1fr;} }
     .ia-bloco{background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 18px 20px;}
     .ia-bloco h3{font-family:"DM Serif Display",serif; font-weight:400; font-size:19px; margin:0; display:flex; align-items:center; gap:10px;}
     .ia-bloco h3 .pill{margin-left:auto;}
@@ -246,24 +246,41 @@
         </div>
 
         <div class="ia-bloco">
-          <h3>🎙 Áudio &amp; imagem <span class="pill off" id="ia-status-midia">…</span></h3>
-          <p class="ia-note">Whisper (transcrição) + visão (OCR de imagem). O node de áudio do n8n usa <code>whisper-1</code> fixo — por isso só OpenAI ou URL própria compatível.</p>
+          <h3>🎙 Áudio <span class="pill off" id="ia-status-audio">…</span></h3>
+          <p class="ia-note">Transcrição das mensagens de voz. O node do n8n usa <code>whisper-1</code> fixo — por isso só OpenAI ou URL própria compatível.</p>
           <label>Provedor</label>
-          <select id="ia-prov-midia"></select>
-          <div id="ia-url-wrap-midia" style="display:none">
+          <select id="ia-prov-audio"></select>
+          <div id="ia-url-wrap-audio" style="display:none">
             <label>Base URL (compatível OpenAI)</label>
-            <input id="ia-url-midia" placeholder="https://meu-provedor/v1">
+            <input id="ia-url-audio" placeholder="https://meu-provedor/v1">
           </div>
           <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
-          <input type="password" id="ia-key-midia" autocomplete="new-password" placeholder="cole a nova chave">
-          <label>Modelo de visão (OCR)</label>
-          <select id="ia-modelo-sel-midia" style="display:none"></select>
-          <input id="ia-modelo-midia" placeholder="ex.: gpt-4o">
+          <input type="password" id="ia-key-audio" autocomplete="new-password" placeholder="cole a nova chave">
           <div class="ia-acts">
-            <button class="btn-primary btn-sm" style="margin:0" data-ia-key="midia">Salvar chave</button>
-            <button class="btn-ghost btn-sm" data-ia-modelo="midia">Salvar modelo</button>
+            <button class="btn-primary btn-sm" style="margin:0" data-ia-key="audio">Salvar chave</button>
           </div>
-          <p class="ia-msg" id="ia-msg-midia"></p>
+          <p class="ia-msg" id="ia-msg-audio"></p>
+        </div>
+
+        <div class="ia-bloco">
+          <h3>🖼 Imagem <span class="pill off" id="ia-status-imagem">…</span></h3>
+          <p class="ia-note">Visão / OCR das imagens recebidas. Qualquer provedor com modelo de visão serve.</p>
+          <label>Provedor</label>
+          <select id="ia-prov-imagem"></select>
+          <div id="ia-url-wrap-imagem" style="display:none">
+            <label>Base URL (compatível OpenAI)</label>
+            <input id="ia-url-imagem" placeholder="https://meu-provedor/v1">
+          </div>
+          <label>Chave de API <span style="text-transform:none;font-weight:400">(nunca exibida)</span></label>
+          <input type="password" id="ia-key-imagem" autocomplete="new-password" placeholder="cole a nova chave">
+          <label>Modelo de visão (OCR)</label>
+          <select id="ia-modelo-sel-imagem" style="display:none"></select>
+          <input id="ia-modelo-imagem" placeholder="ex.: gpt-4o">
+          <div class="ia-acts">
+            <button class="btn-primary btn-sm" style="margin:0" data-ia-key="imagem">Salvar chave</button>
+            <button class="btn-ghost btn-sm" data-ia-modelo="imagem">Salvar modelo</button>
+          </div>
+          <p class="ia-msg" id="ia-msg-imagem"></p>
         </div>
       </div>
       </div>
@@ -508,8 +525,9 @@
   /* ---------- Provedores de IA (chaves one-way → n8n) ---------- */
   (function(){
     const PROVEDORES = {{ provedores_ia | tojson }};
-    const ALVOS = ['texto', 'midia'];
-    const provedorSalvo = { texto: null, midia: null };  // o que está no n8n hoje
+    const ALVOS = ['texto', 'audio', 'imagem'];
+    const provedorSalvo = { texto: null, audio: null, imagem: null };  // o que está no n8n hoje
+    const temModelo = (alvo) => !!$('ia-modelo-sel-' + alvo);  // áudio: whisper-1 fixo
 
     const $ = (id) => document.getElementById(id);
 
@@ -556,10 +574,10 @@
             $('ia-prov-' + alvo).value = info.provedor;
             $('ia-url-wrap-' + alvo).style.display = info.provedor === 'custom' ? '' : 'none';
           }
-          if (info.modelo) $('ia-modelo-' + alvo).value = info.modelo;
+          if (info.modelo && temModelo(alvo)) $('ia-modelo-' + alvo).value = info.modelo;
         }
         // Após o estado (sessão n8n aquecida), busca os modelos do provedor.
-        for (const alvo of ALVOS) carregarModelos(alvo, (d[alvo] || {}).modelo);
+        for (const alvo of ALVOS) if (temModelo(alvo)) carregarModelos(alvo, (d[alvo] || {}).modelo);
       } catch(e){
         for (const alvo of ALVOS){
           const pill = $('ia-status-' + alvo);
@@ -572,7 +590,7 @@
     function popularModelos(alvo, modelos, atual){
       const sel = $('ia-modelo-sel-' + alvo);
       const inp = $('ia-modelo-' + alvo);
-      if (!modelos.length) return;
+      if (!sel || !modelos.length) return;
       const atualVal = atual || '';
       if (atualVal && !modelos.includes(atualVal)) modelos.unshift(atualVal);
       sel.innerHTML = '';
@@ -595,12 +613,14 @@
 
     function resetarModelos(alvo){
       const sel = $('ia-modelo-sel-' + alvo);
+      if (!sel) return;
       sel.style.display = 'none'; sel.innerHTML = '';
       $('ia-modelo-' + alvo).style.display = '';
     }
 
     // Lista via n8n — usa a chave JÁ SALVA na credencial (provedor atual).
     async function carregarModelos(alvo, atual){
+      if (!temModelo(alvo)) return;
       try {
         const r = await fetch('/admin/ia/modelos?alvo=' + alvo);
         const d = await r.json();
@@ -612,6 +632,7 @@
 
     // Lista direto no provedor com a chave recém-digitada (antes de salvar).
     async function previewModelos(alvo){
+      if (!temModelo(alvo)) return;   // áudio: nada a listar (whisper-1 fixo)
       const chave = $('ia-key-' + alvo).value.trim();
       if (!chave) return;
       msg(alvo, 'Listando modelos do provedor…', true);
@@ -635,7 +656,8 @@
       }
       resetarModelos(alvo);
       if ($('ia-key-' + alvo).value.trim()) previewModelos(alvo);
-      else msg(alvo, 'Cole a chave do provedor para listar os modelos dele.', true);
+      else if (temModelo(alvo)) msg(alvo, 'Cole a chave do provedor para listar os modelos dele.', true);
+      else msg(alvo, 'Cole a chave do provedor e salve.', true);
     }
 
     function modeloEscolhido(alvo){
