@@ -4,6 +4,8 @@
 
 # MyAutoAtend
 
+<img src="assets/banner_readme.png" alt="Banner do myAutoAtend" width="1600">
+
 ### Agendamento de serviços por IA no WhatsApp
 
 Atendente virtual que conversa, agenda, remarca e cancela — sozinho.
@@ -24,8 +26,6 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 
 <br>
 <br>
-
-<img src="assets/portal_admin.png" alt="Painel admin do myAutoAtend" width="860">
 
 </div>
 
