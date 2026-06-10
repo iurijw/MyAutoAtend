@@ -1,11 +1,12 @@
 """Camada de autorização — o núcleo de segurança.
 
-Regra de ouro: quem é o solicitante NÃO é decidido pelo modelo. O n8n injeta
-o telefone do remetente do webhook na requisição MCP (query `?solicitante=` ou
-header `X-Solicitante-Telefone`); um middleware ASGI grava esse valor no
-contextvar `solicitante_ctx`. As tools até recebem um argumento
-`telefone_solicitante`, mas `requester()` SEMPRE prefere o valor injetado —
-então o modelo não consegue se passar por outro número.
+Regra de ouro: quem é o solicitante NÃO é decidido pelo modelo. O pipeline do
+WhatsApp (app/whatsapp.py) grava o remoteJid do remetente no contextvar
+`solicitante_ctx` antes de rodar o agente; clients MCP externos passam pela
+query `?solicitante=` ou header `X-Solicitante-Telefone` (middleware em
+main.py). As tools até recebem um argumento `telefone_solicitante`, mas
+`requester()` SEMPRE prefere o valor injetado — então o modelo não consegue
+se passar por outro número.
 
 A decisão de "pode ou não pode" acontece aqui, em código, nunca no modelo.
 """
@@ -24,7 +25,7 @@ solicitante_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 
 def requester(telefone_arg: str | None = None) -> str | None:
-    """Telefone efetivo do solicitante: injetado pelo n8n tem prioridade."""
+    """Telefone efetivo do solicitante: o valor injetado tem prioridade."""
     return solicitante_ctx.get() or telefone_arg
 
 

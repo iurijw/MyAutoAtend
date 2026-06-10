@@ -23,25 +23,22 @@ class Settings:
     # Fuso usado nas conversões de data/hora (validação de passado, slots).
     timezone: str = os.getenv("MCP_TZ", "America/Sao_Paulo")
 
-    # Evolution API — pareamento do WhatsApp pelo painel (rede docker interna).
+    # Evolution API — pipeline do agente + pareamento pelo painel (rede docker).
     evolution_api_url: str = os.getenv("EVOLUTION_API_URL", "http://evolution_api:9090")
     evolution_api_key: str = os.getenv("EVOLUTION_API_KEY", "")
-    evolution_instance: str = os.getenv("EVOLUTION_INSTANCE", "evo_n8n")
+    evolution_instance: str = os.getenv("EVOLUTION_INSTANCE", "evo_bot")
 
-    # n8n — API interna (rede docker) p/ atualizar credenciais de IA pelo painel.
-    # Mesmo owner usado pelo init-n8n.sh; a chave dos provedores só ENTRA no n8n,
-    # nunca volta para o painel.
-    n8n_api_url: str = os.getenv("N8N_API_URL", "http://n8n:5678")
-    n8n_owner_email: str = os.getenv("N8N_OWNER_EMAIL", "")
-    n8n_owner_password: str = os.getenv("N8N_OWNER_PASSWORD", "")
+    # URL deste serviço VISTA PELA EVOLUTION (rede docker) — destino do webhook.
+    webhook_url: str = os.getenv(
+        "MCP_WEBHOOK_URL",
+        "http://mcp_agendamentos:8000/webhook/whatsapp/receberMensagem",
+    )
 
-    # System prompt inicial do agente (mesmo valor passado ao n8n). Usado só
-    # como SEED da instrução geral no primeiro acesso ao card do painel —
-    # depois a fonte de verdade é o SQLite (tabela Prompt).
+    # Seed legado da instrução geral (1º acesso ao card do painel). Vazio →
+    # vale o padrão em app/agente.py; depois do 1º save, SQLite (tabela Prompt).
     agent_system_prompt: str = os.getenv("AGENT_SYSTEM_PROMPT", "")
 
-    # URLs externas (acessadas pelo browser do host) p/ atalhos no painel.
-    n8n_external_url: str = os.getenv("N8N_EXTERNAL_URL", "http://localhost:5678")
+    # URL externa (browser do host) p/ atalho no painel.
     evolution_external_url: str = os.getenv(
         "EVOLUTION_EXTERNAL_URL", "http://localhost:9090"
     )

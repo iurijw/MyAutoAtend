@@ -7,3 +7,4 @@ sqlmodel
 phonenumbers
 tzdata
 httpx
+pydantic-ai-slim[openai]>=1.0,<2

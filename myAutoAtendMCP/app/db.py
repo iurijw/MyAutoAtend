@@ -41,14 +41,40 @@ class Prompt(SQLModel, table=True):
     """Partes do system prompt do agente editadas pelo painel.
 
     Chaves usadas: "geral" (instrução principal) e "mcp" (bloco que ensina o
-    agente a usar as ferramentas MCP). Fonte de verdade do painel — o texto
-    combinado é empurrado para o node "Agente IA" do n8n a cada save.
+    agente a usar as ferramentas). Fonte de verdade do painel — o agente lê
+    daqui a cada mensagem (app/agente.py), então salvar aplica na hora.
     Tabela separada da Config: ambientes antigos ganham a tabela nova no
     create_all sem precisar de migração de coluna.
     """
 
     chave: str = Field(primary_key=True)
     texto: str
+
+
+class ProvedorIA(SQLModel, table=True):
+    """Config de provedor de IA por uso (texto / audio / imagem).
+
+    Substitui as credenciais que viviam no n8n. A chave fica no SQLite local
+    (stack 127.0.0.1); nenhuma rota do painel devolve a chave de volta.
+    """
+
+    alvo: str = Field(primary_key=True)  # "texto" | "audio" | "imagem"
+    api_key: str
+    base_url: str
+    modelo: str = ""
+    atualizado_em: str = ""
+
+
+class Conversa(SQLModel, table=True):
+    """Histórico de conversa do agente por contato (remoteJid normalizado).
+
+    `historico` é o JSON serializado das mensagens do pydantic-ai
+    (ModelMessagesTypeAdapter), já aparado na janela — tamanho limitado.
+    """
+
+    telefone: str = Field(primary_key=True)
+    historico: str
+    atualizado_em: str = ""
 
 
 class Servico(SQLModel, table=True):
@@ -144,6 +170,62 @@ def set_prompt(chave: str, texto: str) -> None:
         else:
             p = Prompt(chave=chave, texto=texto)
         s.add(p)
+        s.commit()
+
+
+# ---------------------------------------------------------------------------
+# Provedores de IA (config local — antes vivia nas credenciais do n8n)
+# ---------------------------------------------------------------------------
+
+
+def get_provedor_ia(alvo: str) -> ProvedorIA | None:
+    with _session() as s:
+        return s.get(ProvedorIA, alvo)
+
+
+def set_provedor_ia(
+    alvo: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    modelo: str | None = None,
+) -> ProvedorIA:
+    """Cria/atualiza só os campos passados (None = mantém)."""
+    with _lock, _session() as s:
+        p = s.get(ProvedorIA, alvo)
+        if p is None:
+            p = ProvedorIA(alvo=alvo, api_key="", base_url="")
+        if api_key is not None:
+            p.api_key = api_key
+        if base_url is not None:
+            p.base_url = base_url
+        if modelo is not None:
+            p.modelo = modelo
+        p.atualizado_em = datetime.now().isoformat(timespec="seconds")
+        s.add(p)
+        s.commit()
+        return p
+
+
+# ---------------------------------------------------------------------------
+# Conversas do agente (memória por contato)
+# ---------------------------------------------------------------------------
+
+
+def get_conversa(telefone: str) -> str | None:
+    with _session() as s:
+        c = s.get(Conversa, telefone)
+        return c.historico if c else None
+
+
+def set_conversa(telefone: str, historico: str) -> None:
+    with _lock, _session() as s:
+        c = s.get(Conversa, telefone)
+        if c:
+            c.historico = historico
+        else:
+            c = Conversa(telefone=telefone, historico=historico)
+        c.atualizado_em = datetime.now().isoformat(timespec="seconds")
+        s.add(c)
         s.commit()
 
 
