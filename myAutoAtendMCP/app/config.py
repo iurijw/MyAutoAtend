@@ -35,6 +35,11 @@ class Settings:
     n8n_owner_email: str = os.getenv("N8N_OWNER_EMAIL", "")
     n8n_owner_password: str = os.getenv("N8N_OWNER_PASSWORD", "")
 
+    # System prompt inicial do agente (mesmo valor passado ao n8n). Usado só
+    # como SEED da instrução geral no primeiro acesso ao card do painel —
+    # depois a fonte de verdade é o SQLite (tabela Prompt).
+    agent_system_prompt: str = os.getenv("AGENT_SYSTEM_PROMPT", "")
+
     # URLs externas (acessadas pelo browser do host) p/ atalhos no painel.
     n8n_external_url: str = os.getenv("N8N_EXTERNAL_URL", "http://localhost:5678")
     evolution_external_url: str = os.getenv(

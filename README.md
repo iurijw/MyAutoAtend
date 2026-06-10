@@ -120,7 +120,7 @@ docker logs -f n8n          # ver a inicialização
 - [X] Adicionar shortchuts para abertura dos portais auxiliares (Evolution API e n8n) no portal admin
 - [ ] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin
 - [ ] Poder bloquear/fechar range de datas pelo portal do admin e conversa com o bot no WhatsApp
-- [ ] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT)
+- [X] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT) — card "Instruções do Agente": instrução geral + bloco MCP separado (avançado, com aviso e restauração do padrão)
 - [ ] Adicionar opção de avisar o cliente que foi reagendado/cancelado o serviço dele (a IA avisar a ação do dono/adminsitrador com o aval do mesmo)
 - [ ] Adicionar a opção de ativar (no painel de admin ou pedindo para o bot no whatsapp) o aviso para o Whatsapp do dono/administrador de agendamentos/cancelamentos, etc...
 

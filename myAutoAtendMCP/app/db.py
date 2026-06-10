@@ -38,6 +38,20 @@ class Config(SQLModel, table=True):
     duracao_slot_min: int = 30
 
 
+class Prompt(SQLModel, table=True):
+    """Partes do system prompt do agente editadas pelo painel.
+
+    Chaves usadas: "geral" (instrução principal) e "mcp" (bloco que ensina o
+    agente a usar as ferramentas MCP). Fonte de verdade do painel — o texto
+    combinado é empurrado para o node "Agente IA" do n8n a cada save.
+    Tabela separada da Config: ambientes antigos ganham a tabela nova no
+    create_all sem precisar de migração de coluna.
+    """
+
+    chave: str = Field(primary_key=True)
+    texto: str
+
+
 class Servico(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     nome: str
@@ -110,6 +124,28 @@ def update_config(**campos) -> Config:
         s.add(cfg)
         s.commit()
         return cfg
+
+
+# ---------------------------------------------------------------------------
+# Prompts do agente (system prompt editado pelo painel)
+# ---------------------------------------------------------------------------
+
+
+def get_prompt(chave: str) -> str | None:
+    with _session() as s:
+        p = s.get(Prompt, chave)
+        return p.texto if p else None
+
+
+def set_prompt(chave: str, texto: str) -> None:
+    with _lock, _session() as s:
+        p = s.get(Prompt, chave)
+        if p:
+            p.texto = texto
+        else:
+            p = Prompt(chave=chave, texto=texto)
+        s.add(p)
+        s.commit()
 
 
 # ---------------------------------------------------------------------------

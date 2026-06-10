@@ -73,7 +73,7 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
 - Debounce de mensagens via Redis (aguarda 13s antes de processar)
 - Memória de conversa por contato via Redis Chat Memory
 - Modelo: GPT-5.1 (alterar no node "OpenAI - Modelo LLM")
-- System prompt do agente: vem do `.env` (`AGENT_SYSTEM_PROMPT`), lido no node "Agente IA" via `{{ $env.AGENT_SYSTEM_PROMPT }}`. A data/hora atual é injetada no início pelo próprio node. Alterar a env exige recriar o container n8n (`docker compose up -d n8n`). Valor `.env` em aspas duplas; `\n` viram quebras reais; não usar `"` nem `$` no texto.
+- System prompt do agente: **editável pelo painel `/admin`** (card "Instruções do Agente", duas partes: instrução geral + bloco MCP avançado). O primeiro save substitui a referência `{{ $env.AGENT_SYSTEM_PROMPT }}` no node "Agente IA" por texto literal e republica o workflow — aplica na hora, sem recriar container. Antes do primeiro save, vale o `.env` (`AGENT_SYSTEM_PROMPT`), que também serve de seed do painel (valor em aspas duplas; `\n` viram quebras reais; não usar `"` nem `$` no texto). A data/hora atual é sempre injetada no início pelo node (prefixo fixo, fora do texto editável).
 - Simula digitação proporcional ao tamanho da resposta
 
 ---
@@ -120,6 +120,16 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
   (envs `N8N_API_URL` etc. no compose); cookie cacheado (login tem rate limit 429).
   Rotas: `GET /admin/ia/estado`, `GET /admin/ia/modelos`, `POST /admin/ia/modelos-preview`,
   `POST /admin/ia/credencial`, `POST /admin/ia/modelo`.
+- **Instruções do agente no painel** (`app/n8n.py` + tabela `Prompt` no SQLite): card
+  "Instruções do Agente" edita o system prompt do node "Agente IA" em duas partes —
+  **instrução geral** (livre) e **bloco MCP** (seção avançada retrátil, com aviso
+  "não recomendado" e botão restaurar padrão, `PROMPT_MCP_PADRAO` em `n8n.py` —
+  manter em sincronia com `app/tools.py`). Save: n8n primeiro (PATCH no
+  `systemMessage` + republicação), só então persiste no SQLite (chaves `geral`/`mcp`).
+  Seed pré-primeiro-save: env `AGENT_SYSTEM_PROMPT` (repassada ao container MCP no
+  compose) com a seção `## Ferramentas (MCP Agendamentos)` removida + bloco MCP padrão.
+  Prefixo de data/hora é fixo (`PREFIXO_DATA`); `{{` do usuário vira `{ {` p/ evitar
+  injeção de expressão n8n. Rotas: `GET/POST /admin/agente/prompt`.
 - Após mudar essas envs/código: `docker compose up -d --build mcp-agendamentos`.
 
 ## Comandos Úteis

@@ -183,6 +183,9 @@ services:
       N8N_API_URL: http://n8n:5678
       N8N_OWNER_EMAIL: ${N8N_OWNER_EMAIL}
       N8N_OWNER_PASSWORD: ${N8N_OWNER_PASSWORD}
+      # Seed da instrução geral no card "Instruções do Agente" (primeiro uso;
+      # depois a fonte de verdade é o SQLite do MCP).
+      AGENT_SYSTEM_PROMPT: ${AGENT_SYSTEM_PROMPT}
       # URLs externas (browser do host) p/ atalhos no painel.
       N8N_EXTERNAL_URL: ${N8N_EXTERNAL_URL:-http://localhost:5678}
       EVOLUTION_EXTERNAL_URL: ${EVOLUTION_EXTERNAL_URL:-http://localhost:9090}

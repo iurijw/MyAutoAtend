@@ -40,6 +40,39 @@ NODE_POR_ALVO = {
 # Áudio fica de fora: o node do n8n não expõe o modelo (fixa whisper-1).
 ALVOS_COM_MODELO = ("texto", "imagem")
 
+# Node do agente — dono do system prompt (parameters.options.systemMessage).
+NODE_AGENTE = "Agente IA"
+
+# Prefixo fixo do systemMessage: expressão n8n que injeta a data/hora atual.
+# Mantido fora do texto editável — sem ele o agente erra datas relativas.
+PREFIXO_DATA = (
+    "Data e hora atuais (America/Sao_Paulo): "
+    "{{ $now.setZone('America/Sao_Paulo').toFormat('yyyy-MM-dd HH:mm') }} "
+    "({{ $now.setZone('America/Sao_Paulo').toFormat('cccc') }})."
+)
+
+# Cabeçalho da seção MCP — também usado p/ separá-la do prompt vindo da env.
+_SECAO_MCP = "## Ferramentas (MCP Agendamentos)"
+
+# Bloco que ensina o agente a usar as tools MCP. Editável pelo painel (seção
+# avançada, com aviso), restaurável a este padrão. Deve refletir as tools de
+# app/tools.py — atualizar os dois juntos.
+PROMPT_MCP_PADRAO = f"""{_SECAO_MCP}
+Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
+- listar_servicos: catálogo com nome, descrição, valor e duração.
+- consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD).
+- agendar(servico_id, nome_cliente, inicio): cria agendamento; inicio = YYYY-MM-DDTHH:MM.
+- meus_agendamentos: agendamentos do próprio cliente.
+- reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).
+- instrucoes_gerais: contexto e regras do negócio."""
+
+# Fallback da instrução geral quando a env AGENT_SYSTEM_PROMPT está vazia.
+PROMPT_GERAL_PADRAO = (
+    "Você é o assistente virtual do estabelecimento, atendendo clientes pelo "
+    "WhatsApp. Seja cordial, breve e confirme serviço, data e horário antes "
+    "de agendar, reagendar ou cancelar."
+)
+
 # Provedores com API compatível OpenAI, com capacidade por uso.
 # audio=False: endpoint /audio/transcriptions ausente ou incompatível com o
 # multipart + model=whisper-1 que o node do n8n envia (ex.: OpenRouter aceita
@@ -337,6 +370,58 @@ def atualizar_modelo(alvo: str, modelo: str) -> dict:
 
         _publicar_workflow(c, wf)
         return {"ok": True, "modelo": modelo}
+
+
+# ---------------------------------------------------------------------------
+# System prompt do agente (node "Agente IA")
+# ---------------------------------------------------------------------------
+
+
+def _escapar_expressao(texto: str) -> str:
+    """Neutraliza `{{` no texto do usuário.
+
+    O systemMessage é uma expressão n8n (prefixo `=`): qualquer `{{ ... }}`
+    seria avaliado no servidor — injeção de expressão. `{ {` rende o mesmo
+    visual sem ser avaliado.
+    """
+    return texto.replace("{{", "{ {")
+
+
+def compor_system_message(geral: str, mcp: str) -> str:
+    partes = [PREFIXO_DATA, _escapar_expressao(geral.strip())]
+    if mcp.strip():
+        partes.append(_escapar_expressao(mcp.strip()))
+    return "=" + "\n\n".join(p for p in partes if p)
+
+
+def seed_prompt_geral(prompt_env: str) -> str:
+    """Instrução geral inicial a partir da env AGENT_SYSTEM_PROMPT.
+
+    A env de fábrica traz o prompt completo (geral + seção MCP); aqui a seção
+    MCP é removida para não duplicar — ela passa a viver no campo próprio.
+    """
+    texto = (prompt_env or "").strip()
+    if not texto:
+        return PROMPT_GERAL_PADRAO
+    ini = texto.find(_SECAO_MCP)
+    if ini == -1:
+        return texto
+    fim = texto.find("\n## ", ini + len(_SECAO_MCP))
+    resto = texto[fim + 1 :] if fim != -1 else ""
+    return (texto[:ini].rstrip() + "\n\n" + resto).strip()
+
+
+def atualizar_prompt(geral: str, mcp: str) -> dict:
+    """Grava o system prompt no node do agente e republica o workflow."""
+    with _sessao() as c:
+        wf = _achar_workflow(c)
+        node = next((n for n in wf["nodes"] if n["name"] == NODE_AGENTE), None)
+        if node is None:
+            raise RuntimeError(f'Node "{NODE_AGENTE}" não encontrado no workflow.')
+        opcoes = node.setdefault("parameters", {}).setdefault("options", {})
+        opcoes["systemMessage"] = compor_system_message(geral, mcp)
+        _publicar_workflow(c, wf)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

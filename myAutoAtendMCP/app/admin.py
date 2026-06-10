@@ -190,6 +190,47 @@ def ia_modelo(
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
+# ---------------------------------------------------------------------------
+# Instruções do agente (system prompt no node "Agente IA" do n8n).
+# Fonte de verdade: SQLite (tabela Prompt). Antes do primeiro save, o painel
+# mostra o seed (env AGENT_SYSTEM_PROMPT sem a seção MCP + bloco MCP padrão).
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/agente/prompt")
+def agente_prompt(_: str = Depends(autenticar)):
+    geral = db.get_prompt("geral")
+    mcp = db.get_prompt("mcp")
+    return {
+        "fonte": "painel" if geral is not None else "env",
+        "geral": geral if geral is not None else n8n.seed_prompt_geral(settings.agent_system_prompt),
+        "mcp": mcp if mcp is not None else n8n.PROMPT_MCP_PADRAO,
+        "mcp_padrao": n8n.PROMPT_MCP_PADRAO,
+    }
+
+
+@router.post("/admin/agente/prompt")
+def agente_prompt_salvar(
+    _: str = Depends(autenticar),
+    geral: str = Form(...),
+    mcp: str = Form(...),
+):
+    """Empurra o prompt pro node do n8n e, se publicou, persiste no SQLite.
+
+    Ordem importa: n8n primeiro — se o PATCH/republicação falhar, o banco não
+    muda e o painel continua refletindo o que está de fato no ar.
+    """
+    if not geral.strip():
+        raise HTTPException(status_code=400, detail="A instrução geral não pode ficar vazia.")
+    try:
+        n8n.atualizar_prompt(geral, mcp)
+    except Exception as e:  # noqa: BLE001 — superfície de erro p/ o painel
+        return JSONResponse({"erro": str(e)}, status_code=502)
+    db.set_prompt("geral", geral.strip())
+    db.set_prompt("mcp", mcp.strip())
+    return {"ok": True}
+
+
 @router.post("/admin/config")
 def salvar_config(
     _: str = Depends(autenticar),

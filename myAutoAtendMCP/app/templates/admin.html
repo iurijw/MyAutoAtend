@@ -152,6 +152,20 @@
     #ia-card.collapsed #ia-body{display:none;}
     #ia-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 
+    /* ---------- Instruções do agente ---------- */
+    #prompt-card .card-head{cursor:pointer; user-select:none;}
+    #prompt-card.collapsed .card-head{margin-bottom:0; padding-bottom:0; border-bottom:none;}
+    #prompt-card.collapsed #prompt-body{display:none;}
+    #prompt-card.collapsed .wa-chevron{transform:rotate(-90deg);}
+    #prompt-geral{min-height:220px; font-size:14.5px;}
+    #prompt-mcp{min-height:160px; font-family:"JetBrains Mono",monospace; font-size:13px;}
+    .prompt-avancado{margin-top:18px; border:1px dashed var(--gold-soft); border-radius:12px; padding:0 16px;}
+    .prompt-avancado summary{cursor:pointer; user-select:none; padding:14px 0; font-weight:600; color:var(--ink-soft);}
+    .prompt-avancado[open] summary{border-bottom:1px dashed var(--gold-soft);}
+    .prompt-aviso{background:rgba(184,134,47,.12); border-left:3px solid var(--gold); border-radius:6px;
+      padding:10px 14px; font-size:13.5px; color:var(--ink-soft); margin:14px 0 0;}
+    .prompt-avancado .ia-acts{margin-bottom:16px;}
+
     /* page-load reveal */
     .reveal{opacity:0; transform:translateY(14px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;}
     @keyframes rise{to{opacity:1; transform:none;}}
@@ -283,6 +297,42 @@
           <p class="ia-msg" id="ia-msg-imagem"></p>
         </div>
       </div>
+      </div>
+    </div>
+
+    <!-- ============ INSTRUÇÕES DO AGENTE ============ -->
+    <div class="card collapsed" id="prompt-card">
+      <div class="card-head" id="prompt-head">
+        <h2>Instruções do Agente</h2>
+        <span class="pill off" id="prompt-status">…</span>
+        <span class="wa-chevron" title="Expandir/recolher">▾</span>
+      </div>
+      <div id="prompt-body">
+        <p class="ia-note" style="margin:-8px 0 18px">
+          Personalidade e regras do atendente. Salvar atualiza e <b>republica o workflow na hora</b> —
+          a data/hora atual continua sendo injetada automaticamente no início.
+        </p>
+        <label>Instrução geral</label>
+        <textarea id="prompt-geral" placeholder="Carregando…"></textarea>
+
+        <details class="prompt-avancado" id="prompt-avancado">
+          <summary>⚙ Instruções do MCP (avançado)</summary>
+          <p class="prompt-aviso">
+            <b>Não recomendado alterar.</b> Este bloco ensina o agente a usar as ferramentas de
+            agendamento (MCP). Mudanças aqui podem fazer o agente parar de consultar horários,
+            agendar errado ou inventar dados. Se algo quebrar, use <i>Restaurar padrão</i>.
+          </p>
+          <label>Bloco de ferramentas (MCP)</label>
+          <textarea id="prompt-mcp"></textarea>
+          <div class="ia-acts">
+            <button class="btn-ghost btn-sm" id="prompt-restaurar">Restaurar padrão</button>
+          </div>
+        </details>
+
+        <div class="ia-acts">
+          <button class="btn-primary btn-sm" style="margin:0" id="prompt-salvar">Salvar e republicar</button>
+        </div>
+        <p class="ia-msg" id="prompt-msg"></p>
       </div>
     </div>
 
@@ -721,6 +771,72 @@
       if (!iaCard.classList.contains('collapsed') && !estadoCarregado){
         estadoCarregado = true;
         carregarEstado();
+      }
+    });
+  })();
+
+  /* ---------- Instruções do agente (system prompt → node n8n) ---------- */
+  (function(){
+    const $ = (id) => document.getElementById(id);
+    const card = $('prompt-card');
+    let mcpPadrao = '';
+    let carregado = false;
+
+    function msg(texto, ok){
+      const el = $('prompt-msg');
+      el.textContent = texto;
+      el.className = 'ia-msg ' + (ok ? 'ok' : 'err');
+    }
+
+    async function carregar(){
+      try {
+        const r = await fetch('/admin/agente/prompt');
+        const d = await r.json();
+        if (!r.ok || d.erro) throw new Error(d.erro || ('HTTP ' + r.status));
+        $('prompt-geral').value = d.geral || '';
+        $('prompt-mcp').value = d.mcp || '';
+        mcpPadrao = d.mcp_padrao || '';
+        const pill = $('prompt-status');
+        if (d.fonte === 'painel'){ pill.className = 'pill on'; pill.textContent = 'gerido pelo painel'; }
+        else { pill.className = 'pill off'; pill.textContent = 'padrão (.env)'; }
+      } catch(e){
+        msg('Falha ao carregar as instruções: ' + e.message, false);
+      }
+    }
+
+    async function salvar(btn){
+      const geral = $('prompt-geral').value.trim();
+      if (!geral){ msg('A instrução geral não pode ficar vazia.', false); return; }
+      btn.disabled = true; msg('Atualizando e republicando o workflow…', true);
+      try {
+        const r = await fetch('/admin/agente/prompt', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: new URLSearchParams({ geral, mcp: $('prompt-mcp').value }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || d.erro) throw new Error(d.erro || d.detail || ('HTTP ' + r.status));
+        msg('Instruções publicadas — o agente já responde com o novo prompt.', true);
+        const pill = $('prompt-status');
+        pill.className = 'pill on'; pill.textContent = 'gerido pelo painel';
+      } catch(e){ msg('Falha: ' + e.message, false); }
+      finally { btn.disabled = false; }
+    }
+
+    $('prompt-salvar').addEventListener('click', (ev) => salvar(ev.currentTarget));
+    $('prompt-restaurar').addEventListener('click', () => {
+      if (!mcpPadrao) return;
+      if (!confirm('Restaurar o bloco MCP para o texto padrão? O campo será sobrescrito (salve para publicar).')) return;
+      $('prompt-mcp').value = mcpPadrao;
+      msg('Bloco MCP restaurado ao padrão — clique em Salvar e republicar.', true);
+    });
+
+    // Card começa recolhido; busca o conteúdo só na primeira expansão.
+    $('prompt-head').addEventListener('click', () => {
+      card.classList.toggle('collapsed');
+      if (!card.classList.contains('collapsed') && !carregado){
+        carregado = true;
+        carregar();
       }
     });
   })();
