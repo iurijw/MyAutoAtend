@@ -19,3 +19,6 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# Plano de transicao local (estudo, nao versionar)
+TRANSITION.md
