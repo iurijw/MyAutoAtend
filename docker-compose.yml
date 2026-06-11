@@ -1,21 +1,19 @@
 # =============================================================================
-# Docker Compose — Evolution API + n8n (com criação automática de credenciais)
+# Docker Compose — MyAutoAtend (agente de WhatsApp programático)
 # =============================================================================
 #
 # O QUE ESTE ARQUIVO FAZ:
 #   Sobe um ambiente completo com:
-#   - Evolution API  (gerenciamento de instâncias WhatsApp)
-#   - Redis          (cache da Evolution API)
-#   - PostgreSQL     (banco de dados da Evolution API)
-#   - n8n            (automação de fluxos, com credenciais criadas automaticamente)
-#   - MCP Agendamentos (ferramentas do agente + painel /admin)
+#   - Evolution API    (gerenciamento de instâncias WhatsApp)
+#   - Redis            (cache da Evolution API)
+#   - PostgreSQL       (banco de dados da Evolution API)
+#   - MCP Agendamentos (agente de IA + ferramentas + painel /admin)
 #
 # CONFIGURAÇÃO:
-#   O .env tem só DUAS variáveis — LOGIN (e-mail) e SENHA — usadas em todos
-#   os portais (n8n, painel /admin e apikey da Evolution). Defina ANTES do
-#   primeiro `docker compose up -d`; trocar depois exige resetar os volumes.
-#   Chave de IA, telefone do dono e instruções do agente são configurados
-#   DEPOIS, pelo painel http://localhost:8000/admin.
+#   O .env tem só DUAS variáveis — LOGIN (e-mail) e SENHA — usadas no painel
+#   /admin e como apikey da Evolution. Defina ANTES do primeiro
+#   `docker compose up -d`. Chave de IA, telefone do dono e instruções do
+#   agente são configurados DEPOIS, pelo painel http://localhost:8000/admin.
 #
 # COMO USAR:
 #   1. cp .env.example .env  (e edite LOGIN e SENHA)
@@ -23,36 +21,6 @@
 #   3. Abra http://localhost:8000/admin e siga o README
 #
 # =============================================================================
-
-# System prompt inicial do agente — vale até o primeiro save no card
-# "Instruções do Agente" do painel /admin (depois a fonte de verdade é o
-# SQLite do MCP). Não usar ${...} nem aspas duplas no texto.
-x-agent-prompt: &agent-prompt |-
-  Você é o assistente virtual do estabelecimento, atendendo clientes pelo WhatsApp.
-
-  ## Ferramentas (MCP Agendamentos)
-  Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
-  - listar_servicos: catálogo com nome, descrição, valor e duração.
-  - consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD).
-  - agendar(servico_id, nome_cliente, inicio): cria agendamento; inicio = YYYY-MM-DDTHH:MM.
-  - meus_agendamentos: agendamentos do próprio cliente.
-  - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).
-
-  ## Regras
-  - NÃO peça nem use o telefone do cliente: ele é identificado automaticamente pelo sistema. Ignore o campo telefone_solicitante.
-  - Antes de agendar, reagendar ou cancelar, CONFIRME com o cliente o serviço, a data e o horário.
-  - Converta datas relativas (amanhã, sexta) para YYYY-MM-DD usando a data atual informada no início.
-  - Se faltar o nome do cliente para agendar, pergunte.
-  - Mostre valores em reais e durações em minutos.
-  - Gestão (fechar/abrir data, bloquear horário, criar/editar serviço, ver agenda completa) é restrita ao dono.
-  - Se uma ferramenta retornar erro, explique de forma simples e ofereça alternativa.
-
-  ## Persona
-  - Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações. Emojis com moderação.
-  - Seja breve, como numa conversa real de WhatsApp. Evite listas formais e linguagem corporativa.
-
-  ## Formatação (quebra de linha)
-  - O texto é dividido em bolhas de WhatsApp. Use [quebrar] OU Enter para separar bolhas. Máximo 2-3 bolhas por resposta. No máximo *negrito* do WhatsApp.
 
 services:
   evolution-api:
@@ -102,7 +70,6 @@ services:
       CONFIG_SESSION_PHONE_NAME: Chrome
       QRCODE_LIMIT: "30"
       QRCODE_COLOR: "#175197"
-      N8N_ENABLED: "true"
       # Redis — sem autenticação
       CACHE_REDIS_ENABLED: "true"
       CACHE_REDIS_URI: redis://redis:6379/6
@@ -150,51 +117,14 @@ services:
     expose:
       - "5432"
 
-  n8n:
-    container_name: n8n
-    image: docker.n8n.io/n8nio/n8n:latest
-    restart: unless-stopped
-    ports:
-      - "5678:5678"
-    depends_on:
-      - evolution-api
-    environment:
-      GENERIC_TIMEZONE: America/Sao_Paulo
-      TZ: America/Sao_Paulo
-      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
-      N8N_RUNNERS_ENABLED: "true"
-      # Libera acesso a env vars ($env) dentro dos nodes — workflow lê AGENT_SYSTEM_PROMPT
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      #WEBHOOK_URL: https://<seu-dominio>/
-      #N8N_EDITOR_BASE_URL: https://<seu-dominio>/
-      N8N_HOST: 0.0.0.0
-      # ---------- Credenciais do owner do n8n (LOGIN/SENHA únicos do stack) ----------
-      N8N_OWNER_EMAIL: ${LOGIN:?Defina LOGIN e SENHA no .env (copie de .env.example)}
-      N8N_OWNER_FIRST_NAME: Admin
-      N8N_OWNER_LAST_NAME: User
-      N8N_OWNER_PASSWORD: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
-      # ---------- Dados para criar credenciais ----------
-      EVOLUTION_API_URL: http://evolution_api:9090
-      EVOLUTION_API_KEY: ${SENHA}
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      # Chave de IA NÃO vem mais do .env: o init cria as credenciais com
-      # placeholder e a chave real é colada no painel /admin (Provedores de IA).
-      # Instrução (system prompt) do agente — lido no workflow via {{ $env.AGENT_SYSTEM_PROMPT }}
-      AGENT_SYSTEM_PROMPT: *agent-prompt
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./init-n8n.sh:/init-n8n.sh:ro
-      - ./agente_whatsapp.json:/agente_whatsapp.json:ro
-    networks:
-      - evolution-net
-    entrypoint: ["sh", "/init-n8n.sh"]
-
   mcp-agendamentos:
     container_name: mcp_agendamentos
     build: ./myAutoAtendMCP
     restart: unless-stopped
-    # Painel /admin acessível só localmente. O n8n fala com o container pela rede.
+    depends_on:
+      - evolution-api
+    # Painel /admin acessível só localmente. A Evolution entrega o webhook
+    # pela rede docker (http://mcp_agendamentos:8000).
     ports:
       - "127.0.0.1:8000:8000"
     environment:
@@ -206,20 +136,11 @@ services:
       # Credenciais do painel /admin = LOGIN/SENHA únicos do stack.
       ADMIN_USER: ${LOGIN:?Defina LOGIN e SENHA no .env (copie de .env.example)}
       ADMIN_PASS: ${SENHA:?Defina LOGIN e SENHA no .env (copie de .env.example)}
-      # Evolution API — pareamento do WhatsApp pelo painel (rede docker interna).
+      # Evolution API — pipeline do agente + pareamento pelo painel.
       EVOLUTION_API_URL: http://evolution_api:9090
       EVOLUTION_API_KEY: ${SENHA}
-      EVOLUTION_INSTANCE: evo_n8n
-      # n8n — API interna p/ atualizar credenciais de IA pelo painel (one-way:
-      # a chave só entra no n8n, nunca é lida de volta).
-      N8N_API_URL: http://n8n:5678
-      N8N_OWNER_EMAIL: ${LOGIN}
-      N8N_OWNER_PASSWORD: ${SENHA}
-      # Seed da instrução geral no card "Instruções do Agente" (primeiro uso;
-      # depois a fonte de verdade é o SQLite do MCP).
-      AGENT_SYSTEM_PROMPT: *agent-prompt
-      # URLs externas (browser do host) p/ atalhos no painel.
-      N8N_EXTERNAL_URL: ${N8N_EXTERNAL_URL:-http://localhost:5678}
+      EVOLUTION_INSTANCE: evo_bot
+      # URL externa (browser do host) p/ atalho no painel.
       EVOLUTION_EXTERNAL_URL: ${EVOLUTION_EXTERNAL_URL:-http://localhost:9090}
     volumes:
       - mcp_data:/data
@@ -232,7 +153,6 @@ volumes:
   evolution_instances:
   evolution_redis:
   postgres_data:
-  n8n_data:
   mcp_data:
 
 networks:

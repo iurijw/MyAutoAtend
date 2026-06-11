@@ -1,18 +1,22 @@
-# Gerenciador de Agendamentos — Servidor MCP
+# MCP Agendamentos — agente de WhatsApp + painel + servidor MCP
 
-Servidor MCP para gerenciamento de agendamentos, consumido por um agente de IA
-no **n8n** (WhatsApp via **Evolution API** + **Redis**). Persistência real em
-**SQLite**, autorização por telefone feita em código, painel web de configuração.
+Serviço único (FastAPI) que concentra o produto: o **agente de IA do WhatsApp**
+(pydantic-ai), as **ferramentas de agendamento**, o **painel `/admin`** e um
+endpoint **MCP** opcional para clients externos. Persistência em **SQLite**,
+autorização por telefone feita em código.
 
 ## O que faz
 
-- Servidor MCP (FastMCP, transporte streamable-http) em `/mcp/`
-- 13 tools com 3 níveis de permissão (aberto / dono ou próprio / dono)
+- Pipeline do WhatsApp: webhook da Evolution → mídia (áudio/imagem → texto) →
+  debounce por contato → agente → resposta em bolhas com digitação simulada
+- Agente pydantic-ai com 12 tools (3 níveis de permissão: aberto / dono ou
+  próprio / dono) e memória de conversa por contato (janela de 50 mensagens)
+- Provedores de IA configuráveis por uso (texto/áudio/imagem) pelo painel
+- Servidor MCP (FastMCP, streamable-http) em `/mcp/` p/ clients externos
 - Persistência **SQLite** (SQLModel) — sobrevive a reinício, em volume Docker
-- Concorrência: checagem de conflito + gravação em seção crítica (lock + SQLite)
-- Telefone normalizado para **E.164** com `phonenumbers`
-- Fuso horário aplicado (validação de agendamento no passado, slots passados omitidos)
-- Painel web `/admin` (HTTP Basic) para editar config e serviços
+- Telefone normalizado para **E.164** com `phonenumbers`; fuso aplicado
+- Painel web `/admin` (HTTP Basic): serviços, agenda, pareamento WhatsApp por
+  QR, provedores de IA e instruções do agente
 
 ## Como rodar (local)
 
@@ -20,7 +24,8 @@ no **n8n** (WhatsApp via **Evolution API** + **Redis**). Persistência real em
 uv run --with-requirements requirements.txt uvicorn app.main:app --reload --port 8000
 ```
 
-- Painel: http://localhost:8000/admin  (usuário/senha: `ADMIN_USER`/`ADMIN_PASS`, default `admin`/`admin123`)
+- Painel: http://localhost:8000/admin  (usuário/senha: `ADMIN_USER`/`ADMIN_PASS`)
+- Webhook: http://localhost:8000/webhook/whatsapp/receberMensagem
 - Endpoint MCP: http://localhost:8000/mcp/
 - Health: http://localhost:8000/health
 
@@ -33,8 +38,9 @@ com o resto:
 docker compose up -d --build
 ```
 
-Container: `mcp_agendamentos` na rede `evolution-net`. O n8n alcança em
-`http://mcp_agendamentos:8000`. Banco em volume `mcp_data` (`/data/agendamentos.db`).
+Container: `mcp_agendamentos` na rede `evolution-net`. A Evolution entrega o
+webhook em `http://mcp_agendamentos:8000`. Banco em volume `mcp_data`
+(`/data/agendamentos.db`).
 
 ## Variáveis de ambiente
 
@@ -44,15 +50,21 @@ Container: `mcp_agendamentos` na rede `evolution-net`. O n8n alcança em
 | `OWNER_PHONE` | placeholder no compose | telefone do dono — configurado pelo painel (Configuração geral) |
 | `MCP_TZ` | `America/Sao_Paulo` | fuso das conversões de data/hora |
 | `ADMIN_USER` / `ADMIN_PASS` | `LOGIN` / `SENHA` do `.env` raiz | credenciais do painel |
+| `EVOLUTION_API_URL/KEY/INSTANCE` | via compose | Evolution API (pipeline + painel) |
+| `MCP_WEBHOOK_URL` | `http://mcp_agendamentos:8000/webhook/...` | URL deste serviço vista pela Evolution |
 
 ## Estrutura
 
 ```
 app/
-  main.py      # FastAPI: monta /mcp (atrás do middleware de solicitante) e /admin
-  tools.py     # 13 tools MCP (FastMCP) + validação de fuso/passado
+  main.py      # FastAPI: webhook + /admin + /mcp; startup cria instância Evolution
+  whatsapp.py  # pipeline: webhook → mídia → debounce → agente → bolhas → envio
+  agente.py    # agente pydantic-ai: tools, memória (SQLite), system prompt
+  ia.py        # provedores de IA (SQLite): chaves, modelos, transcrição, visão
+  evolution.py # cliente Evolution: painel (sync), pipeline (async), bootstrap
+  tools.py     # 12 tools de agendamento (FastMCP) + validação de fuso/passado
   auth.py      # autorização (dono / próprio cliente) + contextvar do solicitante
-  db.py        # SQLite via SQLModel (mesmas assinaturas do esqueleto)
+  db.py        # SQLite via SQLModel
   phone.py     # normalização E.164 (phonenumbers)
   admin.py     # rotas do painel web
   config.py    # settings via env
@@ -72,30 +84,23 @@ Apenas dono: `fechar_data`, `abrir_data`, `bloquear_horario`, `criar_servico`,
 
 ## Modelo de segurança (importante)
 
-Quem é o solicitante **não** é decidido pelo modelo. O n8n injeta o telefone do
-remetente do webhook na requisição MCP, via query string no endpoint:
-
-```
-http://mcp_agendamentos:8000/mcp/?solicitante={{ $('Webhook - Receber Mensagem').item.json.body.data.key.remoteJid }}
-```
+Quem é o solicitante **não** é decidido pelo modelo. O pipeline do WhatsApp
+grava o `remoteJid` do remetente do webhook no contextvar do solicitante antes
+de rodar o agente (`app/whatsapp.py`); `auth.requester()` **sempre prefere**
+esse valor ao argumento `telefone_solicitante` que aparece nas tools.
+Resultado: o modelo não consegue se passar por outro número. A decisão de
+autorização acontece em `app/auth.py`, em código.
 
 O `remoteJid` vem com sufixo (ex.: `554599307290@s.whatsapp.net`); o
 `@s.whatsapp.net` é descartado em `phone.normalizar()` antes de comparar.
 
-(ou pelo header `X-Solicitante-Telefone`). Um middleware ASGI lê esse valor e o
-grava em um contextvar; `auth.requester()` **sempre prefere** o valor injetado
-ao argumento `telefone_solicitante` que aparece nas tools. Resultado: o modelo
-não consegue se passar por outro número. A decisão de autorização acontece em
-`app/auth.py`, em código.
-
-No workflow (`agente_whatsapp.json`) já existe o nó **"Agendamentos (MCP)"**
-(`mcpClientTool`, transporte HTTP Streamable) ligado ao **Agente IA** com esse
-endpoint configurado.
+Clients MCP externos (endpoint `/mcp/`) usam o mesmo esquema via query
+`?solicitante=` ou header `X-Solicitante-Telefone` (middleware em `main.py`).
 
 ## Evolução futura (não essencial)
 
 - Painel: trocar HTTP Basic por login de sessão com senha em hash (bcrypt) + cookie.
+- Áudio via OpenRouter (endpoint próprio de transcrição, JSON base64).
 - Migrar SQLite → Postgres se precisar de múltiplas instâncias do servidor
-  (aí a unicidade de horário deve virar constraint/transação no banco, não lock de processo).
+  (aí a unicidade de horário e o debounce em memória devem ir pro banco/Redis).
 - Validações extras: antecedência mínima/máxima, duração mínima, horário comercial por dia da semana.
-```

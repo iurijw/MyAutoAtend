@@ -6,8 +6,8 @@ Agrupadas por nível de permissão:
   - Dono:              gestão e visão completa
 
 `telefone_solicitante` aparece na assinatura, mas o telefone EFETIVO vem do
-n8n (injetado na requisição) via `auth.requester()` — o modelo não escolhe o
-número. Ver app/auth.py e app/main.py.
+pipeline (contextvar via `auth.requester()`) — o modelo não escolhe o número.
+Ver app/auth.py e app/whatsapp.py.
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from mcp.server.transport_security import TransportSecuritySettings
 from . import auth, db
 from .phone import normalizar
 
-# A porta MCP só é exposta em localhost e na rede interna do Docker (o n8n
-# alcança via hostname `mcp_agendamentos:8000`). A proteção anti-DNS-rebinding
+# A porta MCP só é exposta em localhost e na rede interna do Docker (clients
+# alcançam via hostname `mcp_agendamentos:8000`). A proteção anti-DNS-rebinding
 # do SDK validaria o Host header e rejeitaria esse hostname (HTTP 421
 # "Invalid Host header"), então é desligada neste contexto fechado.
 mcp = FastMCP(
@@ -96,7 +96,7 @@ def agendar(
 ) -> dict:
     """Cria um agendamento. `inicio` no formato YYYY-MM-DDTHH:MM.
 
-    O telefone do cliente é o do solicitante (injetado pelo n8n).
+    O telefone do cliente é o do solicitante (injetado pelo pipeline).
     """
     tel = auth.requester(telefone_solicitante)
     if not tel:

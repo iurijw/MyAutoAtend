@@ -17,7 +17,7 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 ![License](https://img.shields.io/badge/license-MIT-b8862f?style=for-the-badge&labelColor=211c16)
 
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white&labelColor=211c16)
-![n8n](https://img.shields.io/badge/n8n-EA4B71?logo=n8n&logoColor=white&labelColor=211c16)
+![PydanticAI](https://img.shields.io/badge/PydanticAI-E92063?logo=pydantic&logoColor=white&labelColor=211c16)
 ![Evolution API](https://img.shields.io/badge/Evolution_API-25D366?logo=whatsapp&logoColor=white&labelColor=211c16)
 ![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white&labelColor=211c16)
 ![FastMCP](https://img.shields.io/badge/FastMCP-8a2a2f?labelColor=211c16)
@@ -81,10 +81,10 @@ docker compose up -d
 A primeira inicialização leva alguns minutos. Acompanhe (se quiser):
 
 ```bash
-docker logs -f n8n
+docker logs -f mcp_agendamentos
 ```
 
-Espere por: `✔ Workflow "Agente Whatsapp" importado e publicado!`
+Espere por: `AÇÃO NECESSÁRIA: conecte o WhatsApp — QR Code no painel /admin.`
 
 ### 4 · Configurar pelo painel
 
@@ -105,7 +105,6 @@ Todo o resto acontece em **http://localhost:8000/admin** (entre com `LOGIN` / `S
 | Painel | Endereço | Para quê |
 |---|---|---|
 | **Admin** (agendamentos) | http://localhost:8000/admin | Serviços, agenda, WhatsApp, IA |
-| **n8n** | http://localhost:5678 | Editar o fluxo do agente |
 | **Evolution API** | http://localhost:9090 | Gerenciar instâncias WhatsApp |
 
 > 🔑 Todos usam o mesmo acesso do `.env`: `LOGIN` / `SENHA` (na Evolution, a apikey é a `SENHA`).
@@ -140,7 +139,7 @@ Todo o resto acontece em **http://localhost:8000/admin** (entre com `LOGIN` / `S
 docker compose up -d        # subir tudo
 docker compose down         # parar (mantém os dados)
 docker compose down -v      # parar e APAGAR todos os dados
-docker logs -f n8n          # ver a inicialização
+docker logs -f mcp_agendamentos   # ver a inicialização e o agente
 ```
 
 <br>
@@ -162,7 +161,7 @@ docker logs -f n8n          # ver a inicialização
 
 <div align="center">
 
-Construído com **Docker · n8n · Evolution API · OpenAI · FastMCP · PostgreSQL · Redis**
+Construído com **Docker · PydanticAI · Evolution API · OpenAI · FastMCP · PostgreSQL · Redis**
 
 <sub>Licença MIT</sub>
 

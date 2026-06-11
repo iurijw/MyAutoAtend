@@ -187,7 +187,6 @@
       <h1>Agenda &amp; <em>Serviços</em></h1>
       <p class="lede">Tudo configurado aqui alimenta as ferramentas do agente de WhatsApp em tempo real.</p>
       <div class="shortcuts">
-        <a class="btn btn-ghost btn-sm" href="{{ n8n_url }}" target="_blank" rel="noopener">⚙ n8n ↗</a>
         <a class="btn btn-ghost btn-sm" href="{{ evolution_url }}" target="_blank" rel="noopener">📡 Evolution API ↗</a>
       </div>
     </header>
@@ -240,8 +239,8 @@
       </div>
       <div id="ia-body">
       <p class="ia-note" style="margin:-8px 0 18px">
-        As chaves vão direto para as credenciais do n8n e <b>nunca são exibidas de volta</b> — nem mascaradas.
-        Trocar o modelo atualiza e republica o workflow na hora.
+        As chaves são gravadas localmente e <b>nunca são exibidas de volta</b> — nem mascaradas.
+        Trocar chave ou modelo aplica na hora.
       </p>
       <div class="ia-grid">
         <div class="ia-bloco">
@@ -267,7 +266,7 @@
 
         <div class="ia-bloco">
           <h3>🎙 Áudio <span class="pill off" id="ia-status-audio">…</span></h3>
-          <p class="ia-note">Transcrição das mensagens de voz. O node do n8n usa <code>whisper-1</code> fixo — por isso só OpenAI ou URL própria compatível.</p>
+          <p class="ia-note">Transcrição das mensagens de voz. Usa <code>whisper-1</code> (formato OpenAI) — por isso só OpenAI ou URL própria compatível.</p>
           <label>Provedor</label>
           <select id="ia-prov-audio"></select>
           <div id="ia-url-wrap-audio" style="display:none">
@@ -315,7 +314,7 @@
       </div>
       <div id="prompt-body">
         <p class="ia-note" style="margin:-8px 0 18px">
-          Personalidade e regras do atendente. Salvar atualiza e <b>republica o workflow na hora</b> —
+          Personalidade e regras do atendente. Salvar <b>aplica na hora</b> —
           a data/hora atual continua sendo injetada automaticamente no início.
         </p>
         <label>Instrução geral</label>
@@ -337,7 +336,7 @@
         </details>
 
         <div class="ia-acts">
-          <button class="btn-primary btn-sm" style="margin:0" id="prompt-salvar">Salvar e republicar</button>
+          <button class="btn-primary btn-sm" style="margin:0" id="prompt-salvar">Salvar</button>
         </div>
         <p class="ia-msg" id="prompt-msg"></p>
       </div>
@@ -582,11 +581,11 @@
     estado();
   })();
 
-  /* ---------- Provedores de IA (chaves one-way → n8n) ---------- */
+  /* ---------- Provedores de IA (chaves one-way, gravadas localmente) ---------- */
   (function(){
     const PROVEDORES = {{ provedores_ia | tojson }};
     const ALVOS = ['texto', 'audio', 'imagem'];
-    const provedorSalvo = { texto: null, audio: null, imagem: null };  // o que está no n8n hoje
+    const provedorSalvo = { texto: null, audio: null, imagem: null };  // o que está salvo hoje
     const temModelo = (alvo) => !!$('ia-modelo-sel-' + alvo);  // áudio: whisper-1 fixo
 
     const $ = (id) => document.getElementById(id);
@@ -636,13 +635,13 @@
           }
           if (info.modelo && temModelo(alvo)) $('ia-modelo-' + alvo).value = info.modelo;
         }
-        // Após o estado (sessão n8n aquecida), busca os modelos do provedor.
+        // Após o estado, busca os modelos do provedor configurado.
         for (const alvo of ALVOS) if (temModelo(alvo)) carregarModelos(alvo, (d[alvo] || {}).modelo);
       } catch(e){
         for (const alvo of ALVOS){
           const pill = $('ia-status-' + alvo);
           pill.className = 'pill off';
-          pill.textContent = 'n8n indisponível';
+          pill.textContent = 'indisponível';
         }
       }
     }
@@ -678,7 +677,7 @@
       $('ia-modelo-' + alvo).style.display = '';
     }
 
-    // Lista via n8n — usa a chave JÁ SALVA na credencial (provedor atual).
+    // Lista com a chave JÁ SALVA (provedor atual).
     async function carregarModelos(alvo, atual){
       if (!temModelo(alvo)) return;
       try {
@@ -709,7 +708,7 @@
 
     function aoTrocarProvedor(alvo){
       if ($('ia-prov-' + alvo).value === provedorSalvo[alvo]){
-        // Voltou ao provedor já salvo no n8n — lista com a chave armazenada.
+        // Voltou ao provedor já salvo — lista com a chave armazenada.
         resetarModelos(alvo);
         carregarModelos(alvo, null);
         return;
@@ -740,7 +739,7 @@
     async function salvarChave(alvo, btn){
       const chave = $('ia-key-' + alvo).value.trim();
       if (!chave){ msg(alvo, 'Cole a chave antes de salvar.', false); return; }
-      btn.disabled = true; msg(alvo, 'Enviando chave para o n8n…', true);
+      btn.disabled = true; msg(alvo, 'Gravando chave…', true);
       try {
         await postar('/admin/ia/credencial', {
           alvo,
@@ -749,7 +748,7 @@
           base_url: $('ia-url-' + alvo).value.trim(),
         });
         $('ia-key-' + alvo).value = '';   // chave some da tela na hora
-        msg(alvo, 'Chave gravada no n8n.', true);
+        msg(alvo, 'Chave gravada.', true);
         carregarEstado();                  // re-lista modelos do provedor novo
       } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
       finally { btn.disabled = false; }
@@ -758,10 +757,10 @@
     async function salvarModelo(alvo, btn){
       const modelo = modeloEscolhido(alvo);
       if (!modelo){ msg(alvo, 'Informe o nome do modelo.', false); return; }
-      btn.disabled = true; msg(alvo, 'Atualizando workflow…', true);
+      btn.disabled = true; msg(alvo, 'Atualizando modelo…', true);
       try {
         await postar('/admin/ia/modelo', { alvo, modelo });
-        msg(alvo, 'Modelo atualizado e workflow republicado.', true);
+        msg(alvo, 'Modelo atualizado.', true);
       } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
       finally { btn.disabled = false; }
     }
@@ -772,8 +771,7 @@
     document.querySelectorAll('[data-ia-modelo]').forEach(b =>
       b.addEventListener('click', () => salvarModelo(b.dataset.iaModelo, b)));
 
-    // Card começa recolhido; estado só é buscado na primeira expansão
-    // (evita login no n8n a cada carregamento da página).
+    // Card começa recolhido; estado só é buscado na primeira expansão.
     const iaCard = document.getElementById('ia-card');
     let estadoCarregado = false;
     document.getElementById('ia-head').addEventListener('click', () => {
@@ -785,7 +783,7 @@
     });
   })();
 
-  /* ---------- Instruções do agente (system prompt → node n8n) ---------- */
+  /* ---------- Instruções do agente (system prompt) ---------- */
   (function(){
     const $ = (id) => document.getElementById(id);
     const card = $('prompt-card');
@@ -808,7 +806,7 @@
         mcpPadrao = d.mcp_padrao || '';
         const pill = $('prompt-status');
         if (d.fonte === 'painel'){ pill.className = 'pill on'; pill.textContent = 'gerido pelo painel'; }
-        else { pill.className = 'pill off'; pill.textContent = 'padrão (.env)'; }
+        else { pill.className = 'pill off'; pill.textContent = 'padrão'; }
       } catch(e){
         msg('Falha ao carregar as instruções: ' + e.message, false);
       }
@@ -817,7 +815,7 @@
     async function salvar(btn){
       const geral = $('prompt-geral').value.trim();
       if (!geral){ msg('A instrução geral não pode ficar vazia.', false); return; }
-      btn.disabled = true; msg('Atualizando e republicando o workflow…', true);
+      btn.disabled = true; msg('Salvando…', true);
       try {
         const r = await fetch('/admin/agente/prompt', {
           method: 'POST',
@@ -838,7 +836,7 @@
       if (!mcpPadrao) return;
       if (!confirm('Restaurar o bloco MCP para o texto padrão? O campo será sobrescrito (salve para publicar).')) return;
       $('prompt-mcp').value = mcpPadrao;
-      msg('Bloco MCP restaurado ao padrão — clique em Salvar e republicar.', true);
+      msg('Bloco MCP restaurado ao padrão — clique em Salvar.', true);
     });
 
     // Card começa recolhido; busca o conteúdo só na primeira expansão.

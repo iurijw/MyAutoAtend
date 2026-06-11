@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import db, evolution, n8n
+from . import agente, db, evolution, ia
 from .config import settings
 
 router = APIRouter()
@@ -52,9 +52,8 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "agendamentos": agendamentos,
             "servico_nome": nome_por_id,
             "n_ativos": sum(1 for s in servicos if s.ativo),
-            "n8n_url": settings.n8n_external_url,
             "evolution_url": settings.evolution_external_url,
-            "provedores_ia": n8n.PROVEDORES,
+            "provedores_ia": ia.PROVEDORES,
         },
     )
 
@@ -98,26 +97,26 @@ def whatsapp_foto(numero: str, _: str = Depends(autenticar)):
 
 
 # ---------------------------------------------------------------------------
-# Provedores de IA (credenciais no n8n) — consumido por JS no painel.
-# Fluxo unidirecional: a chave entra pelo form e vai direto pro n8n via
-# app/n8n.py; nenhuma rota devolve segredo (nem mascarado).
+# Provedores de IA (config local no SQLite) — consumido por JS no painel.
+# Fluxo unidirecional: a chave entra pelo form e é gravada via app/ia.py;
+# nenhuma rota devolve segredo (nem mascarado).
 # ---------------------------------------------------------------------------
 
 
 @router.get("/admin/ia/estado")
 def ia_estado(_: str = Depends(autenticar)):
     try:
-        return n8n.estado()
+        return ia.estado()
     except Exception as e:  # noqa: BLE001 — superfície de erro p/ o painel
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
 @router.get("/admin/ia/modelos")
 def ia_modelos(alvo: str, _: str = Depends(autenticar)):
-    if alvo not in n8n.ALVOS_COM_MODELO:
+    if alvo not in ia.ALVOS_COM_MODELO:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
     try:
-        return {"modelos": n8n.listar_modelos(alvo)}
+        return {"modelos": ia.listar_modelos(alvo)}
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -134,7 +133,7 @@ def ia_modelos_preview(
     A chave é usada numa única chamada ao provedor e descartada — não é
     gravada nem ecoada na resposta.
     """
-    preset = n8n.PROVEDORES.get(provedor)
+    preset = ia.PROVEDORES.get(provedor)
     if not preset:
         raise HTTPException(status_code=400, detail="Provedor desconhecido.")
     url = (preset["base_url"] or base_url).strip().rstrip("/")
@@ -144,7 +143,7 @@ def ia_modelos_preview(
     if not chave:
         raise HTTPException(status_code=400, detail="Informe a chave de API.")
     try:
-        return {"modelos": n8n.listar_modelos_do_provedor(url, chave)}
+        return {"modelos": ia.listar_modelos_do_provedor(url, chave)}
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -157,9 +156,9 @@ def ia_credencial(
     api_key: str = Form(...),
     base_url: str = Form(""),
 ):
-    if alvo not in n8n.CRED_POR_ALVO:
+    if alvo not in ia.CRED_POR_ALVO:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
-    preset = n8n.PROVEDORES.get(provedor)
+    preset = ia.PROVEDORES.get(provedor)
     if not preset:
         raise HTTPException(status_code=400, detail="Provedor desconhecido.")
     if not preset[alvo]:
@@ -175,7 +174,7 @@ def ia_credencial(
     if not chave:
         raise HTTPException(status_code=400, detail="Informe a chave de API.")
     try:
-        return n8n.atualizar_chave(alvo, chave, url)
+        return ia.atualizar_chave(alvo, chave, url)
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -186,7 +185,7 @@ def ia_modelo(
     alvo: str = Form(...),
     modelo: str = Form(...),
 ):
-    if alvo not in n8n.ALVOS_COM_MODELO:
+    if alvo not in ia.ALVOS_COM_MODELO:
         raise HTTPException(
             status_code=400,
             detail="Alvo inválido (áudio tem modelo fixo whisper-1).",
@@ -194,15 +193,15 @@ def ia_modelo(
     if not modelo.strip():
         raise HTTPException(status_code=400, detail="Informe o nome do modelo.")
     try:
-        return n8n.atualizar_modelo(alvo, modelo.strip())
+        return ia.atualizar_modelo(alvo, modelo.strip())
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
 # ---------------------------------------------------------------------------
-# Instruções do agente (system prompt no node "Agente IA" do n8n).
-# Fonte de verdade: SQLite (tabela Prompt). Antes do primeiro save, o painel
-# mostra o seed (env AGENT_SYSTEM_PROMPT sem a seção MCP + bloco MCP padrão).
+# Instruções do agente (system prompt). Fonte de verdade: SQLite (tabela
+# Prompt), lida pelo agente A CADA mensagem — salvar aqui aplica na hora.
+# Antes do primeiro save, o painel mostra os padrões de app/agente.py.
 # ---------------------------------------------------------------------------
 
 
@@ -211,10 +210,10 @@ def agente_prompt(_: str = Depends(autenticar)):
     geral = db.get_prompt("geral")
     mcp = db.get_prompt("mcp")
     return {
-        "fonte": "painel" if geral is not None else "env",
-        "geral": geral if geral is not None else n8n.seed_prompt_geral(settings.agent_system_prompt),
-        "mcp": mcp if mcp is not None else n8n.PROMPT_MCP_PADRAO,
-        "mcp_padrao": n8n.PROMPT_MCP_PADRAO,
+        "fonte": "painel" if geral is not None else "padrao",
+        "geral": geral if geral is not None else agente.seed_prompt_geral(settings.agent_system_prompt),
+        "mcp": mcp if mcp is not None else agente.PROMPT_MCP_PADRAO,
+        "mcp_padrao": agente.PROMPT_MCP_PADRAO,
     }
 
 
@@ -224,17 +223,8 @@ def agente_prompt_salvar(
     geral: str = Form(...),
     mcp: str = Form(...),
 ):
-    """Empurra o prompt pro node do n8n e, se publicou, persiste no SQLite.
-
-    Ordem importa: n8n primeiro — se o PATCH/republicação falhar, o banco não
-    muda e o painel continua refletindo o que está de fato no ar.
-    """
     if not geral.strip():
         raise HTTPException(status_code=400, detail="A instrução geral não pode ficar vazia.")
-    try:
-        n8n.atualizar_prompt(geral, mcp)
-    except Exception as e:  # noqa: BLE001 — superfície de erro p/ o painel
-        return JSONResponse({"erro": str(e)}, status_code=502)
     db.set_prompt("geral", geral.strip())
     db.set_prompt("mcp", mcp.strip())
     return {"ok": True}

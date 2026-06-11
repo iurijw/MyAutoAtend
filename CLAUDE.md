@@ -2,9 +2,12 @@
 
 ## Visão Geral
 
-Stack Docker para automação de WhatsApp com agente de IA. Tudo é provisionado automaticamente no primeiro `docker compose up -d`.
+Stack Docker para automação de WhatsApp com agente de IA **100% programático**
+(sem n8n — removido na branch `feat/sem-n8n`; o caminho da mensagem inteiro
+vive em Python no container MCP). Tudo é provisionado automaticamente no
+primeiro `docker compose up -d`.
 
-**Serviços:** Evolution API · PostgreSQL 15 · Redis · n8n · MCP Agendamentos (`mcp_agendamentos`)
+**Serviços:** Evolution API · PostgreSQL 15 · Redis · MCP Agendamentos (`mcp_agendamentos`)
 
 ---
 
@@ -13,135 +16,88 @@ Stack Docker para automação de WhatsApp com agente de IA. Tudo é provisionado
 | Arquivo | Função |
 |---|---|
 | `docker-compose.yml` | Orquestração de todos os serviços |
-| `.env` | Todas as senhas e chaves (não commitar chaves reais) |
-| `init-n8n.sh` | Script de boot do n8n: instala node, cria credenciais, importa e publica workflow, cria instância Evolution |
-| `agente_whatsapp.json` | Workflow n8n do agente WhatsApp (exportado do n8n) |
-| `myAutoAtendMCP/` | Servidor MCP de agendamentos (FastMCP + SQLite). Tools consumidas pelo nó "Agendamentos (MCP)" no workflow |
+| `.env` | Só `LOGIN` e `SENHA` (ver seção Variáveis de Ambiente) |
+| `myAutoAtendMCP/app/whatsapp.py` | Pipeline do agente: webhook → mídia → debounce → agente → bolhas → envio |
+| `myAutoAtendMCP/app/agente.py` | Agente pydantic-ai: tools, memória (SQLite), system prompt |
+| `myAutoAtendMCP/app/ia.py` | Provedores de IA (config no SQLite), transcrição, visão, listagem de modelos |
+| `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
+| `myAutoAtendMCP/app/tools.py` | 12 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
 
 ---
 
-## O que o init-n8n.sh faz (ordem de execução)
+## Pipeline da mensagem (app/whatsapp.py)
 
-1. Instala `n8n-nodes-evolution-api` via npm
-2. Sobe n8n em background, aguarda `/healthz`
-3. Se banco limpo → cria owner; senão → faz login (cookie de sessão)
-4. Cria credenciais: **Evolution API**, **OpenAI**, **Redis** — captura os IDs reais retornados
-5. Grava marker `/home/node/.n8n/.credentials_initialized` (idempotência)
-6. Lê `agente_whatsapp.json`, substitui IDs hardcoded pelos IDs reais, importa via `POST /rest/workflows` e **publica** via `POST /rest/workflows/{id}/activate` com `{ versionId }`
-7. Aguarda Evolution API, cria instância `evo_n8n` com webhook → `http://n8n:5678/webhook/whatsapp/receberMensagem`
+1. `POST /webhook/whatsapp/receberMensagem` — Evolution entrega `MESSAGES_UPSERT`
+   (webhook configurado no startup pelo `evolution.garantir_instancia`).
+2. Filtra `fromMe`; marca como lida (falha não interrompe).
+3. Mídia → texto: áudio = `POST {base}/audio/transcriptions` (whisper-1,
+   multipart OpenAI); imagem = chat completions com `image_url` (data URL).
+   Base64 vem do próprio webhook (`message.base64`, instância criada com
+   `base64: true`) ou de `getBase64FromMediaMessage`.
+4. **Debounce 6s** por contato: buffer em memória + `asyncio.Task`; mensagem
+   nova cancela o timer e abre outro; o lote é concatenado com `[quebrar]`.
+5. Agente (`agente.responder`): o remoteJid é gravado no contextvar
+   `auth.solicitante_ctx` ANTES do run — `auth.requester()` ignora o que o
+   modelo passar em `telefone_solicitante` (mesma regra de ouro de sempre).
+6. Resposta dividida em bolhas (`[quebrar]`, `[quebra]` e `\n+`); cada bolha
+   enviada via `sendText` com `delay` = digitação proporcional
+   (`min(0.4 + len*0.02, 4) + rand*0.7` s).
 
----
+## Agente (app/agente.py)
 
-## n8n v2.x — API interna (autenticação por cookie)
+- **pydantic-ai** (`pydantic-ai-slim[openai]`): `OpenAIChatModel` +
+  `OpenAIProvider(base_url, api_key)` — qualquer provedor compatível.
+- Tools = funções originais de `app/tools.py` (o decorator FastMCP devolve a
+  função intacta) passadas em `Agent(tools=[...])`.
+- **Memória por contato**: tabela `Conversa` (SQLite), histórico serializado
+  com `ModelMessagesTypeAdapter`, janela de 50 mensagens com corte só em
+  fronteira de turno do usuário (não quebra par tool-call/tool-return).
+- System prompt: prefixo de data/hora (gerado em Python, fuso da Config) +
+  instrução geral + bloco MCP — partes editáveis pelo painel (tabela `Prompt`,
+  chaves `geral`/`mcp`; defaults `PROMPT_GERAL_PADRAO`/`PROMPT_MCP_PADRAO` em
+  `agente.py`). Lido A CADA mensagem → salvar no painel aplica na hora.
 
-| Ação | Endpoint correto |
-|---|---|
-| Login | `POST /rest/login` |
-| Criar credencial | `POST /rest/credentials` |
-| Criar workflow | `POST /rest/workflows` |
-| **Publicar workflow** | `POST /rest/workflows/{id}/activate` com body `{ "versionId": "..." }` |
-| Atualizar workflow | `PATCH /rest/workflows/{id}` |
+## Provedores de IA (app/ia.py)
 
-> **Atenção n8n v2:** `POST .../activate` exige `versionId` no body — sem ele retorna HTTP 400.
-> `PATCH` com `{ active: true }` retorna 200 mas **não ativa** o workflow de fato.
-> O `versionId` vem na resposta da criação do workflow (`body.data.versionId`).
-
----
-
-## Credenciais hardcoded no agente_whatsapp.json (IDs do ambiente de origem)
-
-Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais do novo ambiente:
-
-| Tipo | Credencial | ID original |
-|---|---|---|
-| `evolutionApi` | Evolution API | `oCZwvvYltMxJIzmA` |
-| `openAiApi` | **IA - Texto** (node LLM) | `MU6adeGic3RPMvdM` |
-| `openAiApi` | **IA - Áudio** (Whisper) | `AUDIOcredID00001` |
-| `openAiApi` | **IA - Imagem** (OCR/visão) | `IMAGEcredID00001` |
-| `redis` | Redis | `trFJWRaDpUKn5nf8` |
-
-> As três credenciais de IA são separadas de propósito: o painel `/admin` do MCP
-> permite provedor diferente para cada uso (compatibilidade difere: áudio só
-> OpenAI/custom; imagem aceita OpenRouter, Groq, Gemini etc.).
-
----
-
-## Workflow Agente Whatsapp
-
-- Webhook: `POST /webhook/whatsapp/receberMensagem`
-- Suporta: texto, áudio (Whisper), imagem (GPT-4o OCR)
-- Debounce de mensagens via Redis (aguarda 13s antes de processar)
-- Memória de conversa por contato via Redis Chat Memory
-- Modelo: GPT-5.1 (alterar no node "OpenAI - Modelo LLM")
-- System prompt do agente: **editável pelo painel `/admin`** (card "Instruções do Agente", duas partes: instrução geral + bloco MCP avançado). O primeiro save substitui a referência `{{ $env.AGENT_SYSTEM_PROMPT }}` no node "Agente IA" por texto literal e republica o workflow — aplica na hora, sem recriar container. Antes do primeiro save, vale o default da âncora YAML `x-agent-prompt` do `docker-compose.yml` (vira env `AGENT_SYSTEM_PROMPT` nos containers n8n e MCP; também é o seed do painel; não usar `${...}` nem `"` no texto). A data/hora atual é sempre injetada no início pelo node (prefixo fixo, fora do texto editável).
-- Simula digitação proporcional ao tamanho da resposta
-
----
+- Config por uso (texto/áudio/imagem) na tabela `ProvedorIA` (SQLite):
+  api_key, base_url, modelo. **Fluxo unidirecional**: chave entra pelo painel,
+  nenhuma rota devolve (nem mascarada).
+- Compatibilidade: texto/imagem = qualquer chat completions compatível;
+  áudio = multipart OpenAI com whisper-1 (OpenRouter usa JSON base64 — futuro).
+- Defaults de modelo: texto `gpt-5.1`, imagem `gpt-4o`, áudio `whisper-1`.
+- Sem chave salva → `IANaoConfigurada`; o agente não responde até configurar
+  no painel (card "Provedores de IA").
 
 ## Instância Evolution API
 
-- Nome: `evo_n8n`
-- Criada automaticamente pelo init se não existir
-- Webhook configurado para `MESSAGES_UPSERT` com base64 ativado
-- Após subir: escanear QR Code em `http://localhost:9090`
+- Nome: `evo_bot` (env `EVOLUTION_INSTANCE`).
+- Criada no startup do MCP (`evolution.garantir_instancia`, task no lifespan):
+  espera a Evolution, cria se faltar, e **(re)configura o webhook sempre** →
+  `http://mcp_agendamentos:8000/webhook/whatsapp/receberMensagem`
+  (`MESSAGES_UPSERT`, base64 ativado).
+- Pareamento: QR Code no card "Conexão WhatsApp" do `/admin`.
+
+## Servidor MCP (`myAutoAtendMCP/`)
+
+- FastAPI único: pipeline do WhatsApp + painel `/admin` (HTTP Basic) +
+  endpoint `/mcp/` (streamable-http) mantido p/ clients MCP externos
+  (Claude etc.) — o agente interno NÃO passa por ele (chama as tools direto).
+- Persistência SQLite (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
+  Tabelas: Config, Prompt, ProvedorIA, Conversa, Servico, Bloqueio, Agendamento.
+- Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
+- Clients MCP externos identificam o solicitante via `?solicitante=` ou header
+  `X-Solicitante-Telefone` (middleware em `main.py`).
+- **Pareamento WhatsApp no painel**: `GET /admin/whatsapp/estado`,
+  `GET /admin/whatsapp/qr`, `POST /admin/whatsapp/desconectar`.
+- **Avatar do cliente nos agendamentos**: `GET /admin/whatsapp/foto?numero=...`
+  (`evolution.foto_perfil`, timeout 5s, cache 1h/5min vazio; fallback inicial).
+- **Provedores de IA no painel**: `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
+  `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
+  `POST /admin/ia/modelo`.
+- **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
+- Após mudar código: `docker compose up -d --build mcp-agendamentos`.
 
 ---
-
-## Servidor MCP de Agendamentos (`myAutoAtendMCP/`)
-
-- FastMCP (streamable-http) em `/mcp/` + painel `/admin` (HTTP Basic) no mesmo processo.
-- Persistência **SQLite** (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
-- Telefone normalizado para E.164 (`phonenumbers`); fuso aplicado; bloqueia agendar no passado.
-- **Segurança:** o solicitante NÃO vem do modelo. O n8n injeta o remetente do webhook na URL
-  do endpoint (`?solicitante=<remoteJid>`); middleware ASGI grava em contextvar e `auth.requester()`
-  sempre prefere esse valor. Autorização (dono/próprio) decidida em `app/auth.py`, em código.
-- No workflow: nó **"Agendamentos (MCP)"** (`mcpClientTool`, HTTP Streamable) → `Agente IA` (ai_tool).
-- Auth do painel: `ADMIN_USER`/`ADMIN_PASS` = `LOGIN`/`SENHA` do `.env` (via compose).
-  Telefone do dono: placeholder no compose, configurado pelo painel.
-- **Pareamento WhatsApp no painel** (`app/evolution.py`): o `/admin` fala direto com a
-  Evolution API pela rede docker (`EVOLUTION_API_URL`/`EVOLUTION_API_KEY`/`EVOLUTION_INSTANCE`)
-  e mostra o QR Code dentro do próprio painel. Rotas: `GET /admin/whatsapp/estado`,
-  `GET /admin/whatsapp/qr`, `POST /admin/whatsapp/desconectar`.
-- **Avatar do cliente nos agendamentos**: tabela do painel mostra foto de perfil do
-  WhatsApp + número. JS busca `GET /admin/whatsapp/foto?numero=...` (uma vez por
-  número único); backend usa `POST /chat/fetchProfilePictureUrl/{instance}` da
-  Evolution (`evolution.foto_perfil`, timeout 5s, cache em memória: 1h com foto,
-  5min vazio). Sem foto/privada/instância desconectada → fallback de inicial do nome.
-- **Atalhos** no header do painel p/ n8n e Evolution manager (`N8N_EXTERNAL_URL`,
-  `EVOLUTION_EXTERNAL_URL` — URLs do host, abrem em nova aba).
-- **Provedores de IA no painel** (`app/n8n.py`): card "Provedores de IA" com 3 blocos
-  (texto/áudio/imagem) atualiza chave/base URL das credenciais **IA - Texto**,
-  **IA - Áudio** e **IA - Imagem** no n8n e troca o modelo dos nodes ("OpenAI -
-  Modelo LLM" / "OpenAI - Descrever Imagem"), republicando o workflow. Áudio não tem
-  modelo configurável (node fixa `whisper-1`) → só OpenAI/custom; imagem aceita
-  OpenRouter/Groq/Gemini etc. (visão via chat completions). **Fluxo unidirecional**:
-  a chave só ENTRA no n8n (PATCH `/rest/credentials/{id}`); nenhuma rota devolve
-  segredo — o n8n redige `apiKey` na leitura, e o painel só lê a `url`
-  (via `?includeData=true`) p/ deduzir o provedor atual. **Migração automática**:
-  ambiente antigo (1 ou 2 credenciais) → ao salvar a chave de um alvo sem credencial
-  própria, ela é criada e o node religado (`_religar_node`). Listagem de modelos sem
-  expor chave: via n8n (`/rest/dynamic-node-parameters/resource-locator-results`,
-  `modelSearch`) p/ chave salva, ou `GET {base_url}/models` transiente no preview
-  (chave recém-digitada). Login no n8n com `N8N_OWNER_EMAIL`/`N8N_OWNER_PASSWORD`
-  (envs `N8N_API_URL` etc. no compose); cookie cacheado (login tem rate limit 429).
-  Rotas: `GET /admin/ia/estado`, `GET /admin/ia/modelos`, `POST /admin/ia/modelos-preview`,
-  `POST /admin/ia/credencial`, `POST /admin/ia/modelo`.
-- **Instruções do agente no painel** (`app/n8n.py` + tabela `Prompt` no SQLite): card
-  "Instruções do Agente" edita o system prompt do node "Agente IA" em duas partes —
-  **instrução geral** (livre) e **bloco MCP** (seção avançada retrátil, com aviso
-  "não recomendado" e botão restaurar padrão). O bloco MCP (`PROMPT_MCP_PADRAO` em
-  `n8n.py` — manter em sincronia com `app/tools.py`) inclui também a seção
-  `## Formatação` (divisão em bolhas/[quebrar], amarrada ao node "Code - Dividir
-  Resposta"). Save: n8n primeiro (PATCH no `systemMessage` + republicação), só então
-  persiste no SQLite (chaves `geral`/`mcp`). Seed pré-primeiro-save: env
-  `AGENT_SYSTEM_PROMPT` (âncora `x-agent-prompt` do compose, repassada ao container MCP) com as seções
-  `## Ferramentas (MCP Agendamentos)` e `## Formatação` removidas + bloco MCP padrão.
-  Prefixo de data/hora é fixo (`PREFIXO_DATA`); `{{` do usuário vira `{ {` p/ evitar
-  injeção de expressão n8n. Rotas: `GET/POST /admin/agente/prompt`.
-  (A antiga textarea "Instruções gerais" da Configuração geral e a tool MCP
-  `instrucoes_gerais` foram removidas — coluna `instrucoes_gerais` fica órfã em
-  bancos antigos, sem migração.)
-- Após mudar essas envs/código: `docker compose up -d --build mcp-agendamentos`.
 
 ## Comandos Úteis
 
@@ -149,48 +105,45 @@ Esses IDs são substituídos automaticamente pelo `init-n8n.sh` pelos IDs reais 
 # Subir tudo
 docker compose up -d
 
-# Resetar SOMENTE o n8n (mantém Evolution, Postgres, Redis)
-docker compose stop n8n && docker compose rm -f n8n && docker volume rm fast-n8n-evolutionapi-redis_n8n_data && docker compose up -d n8n
+# Rebuild só do MCP (código novo)
+docker compose up -d --build mcp-agendamentos
 
-# Reforçar re-inicialização sem apagar dados
-docker exec n8n rm -f /home/node/.n8n/.credentials_initialized && docker compose restart n8n
+# Logs do agente (init, pipeline, erros)
+docker logs -f mcp_agendamentos
 
-# Acompanhar logs de init
-docker logs -f n8n
-
-# Conferir estado de um workflow via API
-curl -s -c /tmp/n8n_cookies.txt -X POST http://localhost:5678/rest/login \
+# Simular mensagem recebida (teste sem WhatsApp pareado)
+# ATENÇÃO: body precisa ser UTF-8 (PowerShell 5.1 manda Latin-1 por padrão)
+curl -s -X POST http://localhost:8000/webhook/whatsapp/receberMensagem \
   -H "Content-Type: application/json" \
-  -d '{"emailOrLdapLoginId":"EMAIL","password":"SENHA"}' > /dev/null
-curl -s -b /tmp/n8n_cookies.txt http://localhost:5678/rest/workflows/WORKFLOW_ID | \
-  node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const w=(JSON.parse(d).data||JSON.parse(d));console.log('active:',w.active,'activeVersionId:',w.activeVersionId);})"
+  -d '{"instance":"evo_bot","data":{"key":{"remoteJid":"5599999999999@s.whatsapp.net","fromMe":false,"id":"TEST1"},"pushName":"Teste","messageType":"conversation","message":{"conversation":"Oi"}}}'
+
+# Reset de fábrica (apaga tudo, inclusive pareamento)
+docker compose down -v && docker compose up -d
 ```
 
 ---
 
 ## Variáveis de Ambiente (.env)
 
-O `.env` tem SÓ duas variáveis, compartilhadas por todos os portais:
+O `.env` tem SÓ duas variáveis:
 
 ```env
-LOGIN=   # e-mail: owner do n8n + usuário do painel /admin
-SENHA=   # senha do n8n e do /admin + apikey da Evolution (AUTHENTICATION_API_KEY)
+LOGIN=   # e-mail: usuário do painel /admin
+SENHA=   # senha do /admin + apikey da Evolution (AUTHENTICATION_API_KEY)
 ```
 
-> **Regras:** senha na política do n8n (8+ chars, 1 maiúscula, 1 número — o init
-> valida e loga erro claro). Definir ANTES do primeiro `up`; trocar depois exige
-> resetar volumes (senha fica gravada no banco do n8n). Guards `${VAR:?}` no
-> compose fazem o `up` falhar com mensagem se o `.env` faltar.
+> Guards `${VAR:?}` no compose fazem o `up` falhar com mensagem se o `.env`
+> faltar. Trocar a SENHA depois: basta `docker compose up -d` de novo
+> (Evolution e painel leem do env a cada boot — sem n8n não há senha gravada
+> em banco).
 
-O que saiu do `.env` e virou config pós-boot (pelo painel `/admin`):
-- **Chave de IA** (`OPENAI_API_KEY`) → init cria credenciais com placeholder
-  (`sk-cole-sua-chave-no-painel-admin`); usuário cola a chave no card
-  "Provedores de IA". Agente não responde até isso.
-- **Telefone do dono** (`MCP_OWNER_PHONE`) → placeholder no compose
-  (`5500000000000`); configurar em "Configuração geral".
-- **System prompt** (`AGENT_SYSTEM_PROMPT`) → default vive no
-  `docker-compose.yml` como âncora YAML `x-agent-prompt` (passada aos
-  containers n8n e MCP); editável no card "Instruções do Agente".
+O que é config pós-boot (pelo painel `/admin`):
+- **Chave de IA** → card "Provedores de IA". Agente não responde até isso.
+- **Telefone do dono** → "Configuração geral" (placeholder `5500000000000`
+  no compose até lá).
+- **System prompt** → card "Instruções do Agente" (defaults em `app/agente.py`;
+  env `AGENT_SYSTEM_PROMPT` ainda é aceita como seed legado, mas não vem no
+  compose).
 
 Postgres é interno (sem porta no host): credenciais constantes hardcoded no
 compose (`evolution` / `evolution_db_interno` / `evolution_api_db`) — inclusive
