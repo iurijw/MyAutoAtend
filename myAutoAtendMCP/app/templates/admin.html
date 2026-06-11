@@ -185,6 +185,42 @@
     .drag-grip:active{cursor:grabbing;}
     .drag-sec.dragging{opacity:.45; outline:2px dashed var(--gold-soft); outline-offset:4px;}
 
+    /* ---------- ocultar cards + engrenagem ---------- */
+    .sec-oculta{display:none !important;}
+    .card-hide{flex:none; align-self:center; margin-left:6px; padding:2px 7px; border:none; background:transparent;
+      color:var(--ink-soft); font-size:13px; line-height:1; border-radius:6px; opacity:.45; cursor:pointer;
+      transition:opacity .15s, background .15s, color .15s;}
+    .card-hide:hover{opacity:1; background:var(--paper-2); color:var(--oxblood);}
+
+    .gear-fab{position:fixed; right:22px; bottom:22px; z-index:50; width:52px; height:52px; border-radius:50%;
+      border:1px solid var(--oxblood-d); background:linear-gradient(160deg,var(--oxblood),var(--oxblood-d));
+      color:#f6ead2; font-size:22px; display:flex; align-items:center; justify-content:center; padding:0;
+      box-shadow:0 14px 30px -12px rgba(33,28,22,.45);
+      transition:transform .25s cubic-bezier(.2,.7,.2,1), filter .15s;}
+    .gear-fab:hover{filter:brightness(1.1); transform:rotate(40deg);}
+    .gear-badge{position:absolute; top:-5px; right:-5px; min-width:20px; height:20px; padding:0 5px; border-radius:999px;
+      background:var(--gold); color:#fbf7ef; font:700 11px/20px "Hanken Grotesk",sans-serif; text-align:center;}
+
+    .gear-panel{position:fixed; right:22px; bottom:86px; z-index:50; width:min(300px, calc(100vw - 44px));
+      background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 18px 10px;
+      box-shadow:0 24px 50px -24px rgba(33,28,22,.4);
+      opacity:0; transform:translateY(10px) scale(.97); transform-origin:bottom right; pointer-events:none;
+      transition:opacity .2s, transform .25s cubic-bezier(.2,.7,.2,1);}
+    .gear-panel.open{opacity:1; transform:none; pointer-events:auto;}
+    .gear-panel h3{font-family:"DM Serif Display",serif; font-weight:400; font-size:19px; margin:0 0 4px;}
+    .gear-sub{color:var(--ink-soft); font-size:12.5px; margin:0 0 10px;}
+    .gear-row{display:flex; align-items:center; gap:10px; padding:9px 2px; border-top:1px solid var(--paper-2);
+      cursor:pointer; user-select:none;}
+    .gear-row:first-child{border-top:none;}
+    .gear-nome{font-size:14px; font-weight:600; transition:color .15s;}
+    .gear-row:hover .gear-nome{color:var(--oxblood);}
+    .gear-row .sw{margin-left:auto; flex:none; width:34px; height:19px; border-radius:999px; background:var(--line);
+      position:relative; transition:background .2s;}
+    .gear-row .sw::after{content:""; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%;
+      background:var(--card); box-shadow:0 1px 3px rgba(33,28,22,.3); transition:left .2s;}
+    .gear-row.on .sw{background:var(--green);}
+    .gear-row.on .sw::after{left:17px;}
+
     /* page-load reveal */
     .reveal{opacity:0; transform:translateY(14px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;}
     @keyframes rise{to{opacity:1; transform:none;}}
@@ -492,6 +528,14 @@
         <button class="btn-primary">Salvar configuração</button>
       </form>
     </div>
+  </div>
+
+  <!-- ============ ENGRENAGEM: gerenciar cards ============ -->
+  <button type="button" class="gear-fab" id="gear-fab" title="Gerenciar cards do painel" aria-label="Gerenciar cards do painel">⚙︎<span class="gear-badge" id="gear-badge" style="display:none">0</span></button>
+  <div class="gear-panel" id="gear-panel" role="dialog" aria-label="Cards do painel">
+    <h3>Cards do painel</h3>
+    <p class="gear-sub">Desligue para esconder um card da página; ligue para trazê-lo de volta.</p>
+    <div id="gear-lista"></div>
   </div>
 
   <script>
@@ -925,6 +969,69 @@
       localStorage.setItem(KEY, JSON.stringify(secoes().map(s => s.dataset.sec)));
       arrastando = null;
     });
+  })();
+
+  /* ============ ocultar/exibir cards (engrenagem, estado no localStorage) ============ */
+  (() => {
+    const KEY = 'admin-cards-ocultos';
+    const NOMES = {
+      wa: 'Conexão WhatsApp', ia: 'Provedores de IA', prompt: 'Instruções do Agente',
+      agendamentos: 'Agendamentos ativos', catalogo: 'Serviços & Bloqueios', config: 'Configuração geral',
+    };
+    const wrap  = document.querySelector('.wrap');
+    const fab   = document.getElementById('gear-fab');
+    const badge = document.getElementById('gear-badge');
+    const panel = document.getElementById('gear-panel');
+    const lista = document.getElementById('gear-lista');
+    const secs  = [...wrap.querySelectorAll(':scope > .drag-sec')];
+
+    let ocultos;
+    try { ocultos = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch(_){ ocultos = []; }
+    if (!Array.isArray(ocultos)) ocultos = [];
+
+    function render(){
+      secs.forEach(s => s.classList.toggle('sec-oculta', ocultos.includes(s.dataset.sec)));
+      badge.textContent = ocultos.length;
+      badge.style.display = ocultos.length ? '' : 'none';
+      lista.querySelectorAll('.gear-row').forEach(r => r.classList.toggle('on', !ocultos.includes(r.dataset.sec)));
+    }
+
+    function alternar(chave){
+      ocultos = ocultos.includes(chave) ? ocultos.filter(c => c !== chave) : ocultos.concat(chave);
+      localStorage.setItem(KEY, JSON.stringify(ocultos));
+      render();
+    }
+
+    // Uma linha por seção no painel da engrenagem.
+    secs.forEach(s => {
+      const chave = s.dataset.sec;
+      const row = document.createElement('div');
+      row.className = 'gear-row';
+      row.dataset.sec = chave;
+      row.innerHTML = '<span class="gear-nome"></span><span class="sw"></span>';
+      row.querySelector('.gear-nome').textContent = NOMES[chave] || chave;
+      row.addEventListener('click', () => alternar(chave));
+      lista.appendChild(row);
+    });
+
+    // Botão "ocultar" em cada card-head (a seção inteira some).
+    wrap.querySelectorAll('.drag-sec .card-head').forEach(head => {
+      const sec = head.closest('.drag-sec');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'card-hide';
+      b.textContent = '✕';
+      b.title = 'Ocultar este card (reative na engrenagem ⚙)';
+      b.setAttribute('aria-label', 'Ocultar card');
+      b.addEventListener('click', e => { e.stopPropagation(); alternar(sec.dataset.sec); });
+      head.appendChild(b);
+    });
+
+    fab.addEventListener('click', e => { e.stopPropagation(); panel.classList.toggle('open'); });
+    panel.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => panel.classList.remove('open'));
+
+    render();
   })();
 
   /* ============ avatares do WhatsApp (agendamentos) ============ */
