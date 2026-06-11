@@ -47,7 +47,7 @@ Serve qualquer negócio com hora marcada: **clínicas · petshops · salões · 
 
 ## ⚙ Configuração
 
-> **Pré-requisitos:** [Docker](https://docs.docker.com/get-docker/) + Docker Compose v2 · uma chave da [OpenAI](https://platform.openai.com/api-keys) · portas `5678`, `8000` e `9090` livres.
+> **Pré-requisitos:** [Docker](https://docs.docker.com/get-docker/) + Docker Compose v2 · uma chave de algum provedor de IA (OpenAI, Anthropic, OpenRouter, etc.) · portas `8000` e `9090` livres.
 
 ### 1 · Clonar
 
@@ -69,8 +69,7 @@ LOGIN=voce@exemplo.com
 SENHA=TroqueEsta123
 ```
 
-> A senha precisa ter 8+ caracteres, 1 letra maiúscula e 1 número.
-> Defina antes do primeiro `up` — trocar depois exige resetar os volumes.
+> Para trocar a senha depois, edite o `.env` e rode `docker compose up -d` de novo.
 
 ### 3 · Subir
 
@@ -88,13 +87,12 @@ Espere por: `AÇÃO NECESSÁRIA: conecte o WhatsApp — QR Code no painel /admin
 
 ### 4 · Configurar pelo painel
 
-Todo o resto acontece em **http://localhost:8000/admin** (entre com `LOGIN` / `SENHA`):
+Em **http://localhost:8000/admin** (`LOGIN` / `SENHA`):
 
-1. **📲 Conectar o WhatsApp** — no card *Conexão WhatsApp*, escaneie o QR Code com o celular do número que vai atender.
-2. **🧠 Chave de IA** — no card *Provedores de IA*, cole sua chave (OpenAI ou outro provedor) e escolha os modelos de texto, áudio e imagem. *Sem isso o atendente não responde.*
-3. **📞 Seu número** — em *Configuração geral*, informe o telefone do dono (autoriza comandos de gestão pelo WhatsApp).
-4. **🛠 Serviços** — cadastre os serviços com preço e duração.
-5. **✍️ Instruções do agente** *(opcional)* — ajuste a personalidade e as regras do atendente no card *Instruções do Agente*; já vem um padrão pronto.
+1. **📲 WhatsApp** — escaneie o QR Code.
+2. **🧠 Chave de IA** — cole a chave e escolha os modelos. *Sem isso o atendente não responde.*
+3. **📞 Telefone do dono** — em *Configuração geral*.
+4. **🛠 Serviços** — cadastre com preço e duração.
 
 **Pronto** — o atendente já responde no WhatsApp.
 
