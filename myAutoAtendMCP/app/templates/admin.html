@@ -172,6 +172,12 @@
       padding:10px 14px; font-size:13.5px; color:var(--ink-soft); margin:14px 0 0;}
     .prompt-avancado .ia-acts{margin-bottom:16px;}
 
+    /* ---------- Configuração geral ---------- */
+    #config-card .card-head{cursor:pointer; user-select:none;}
+    #config-card.collapsed .card-head{margin-bottom:0; padding-bottom:0; border-bottom:none;}
+    #config-card.collapsed #config-body{display:none;}
+    #config-card.collapsed .wa-chevron{transform:rotate(-90deg);}
+
     /* ---------- reordenação dos cards (drag & drop) ---------- */
     .drag-grip{cursor:grab; color:var(--ink-soft); font-size:15px; user-select:none;
       padding:2px 6px; border-radius:6px; opacity:.5; flex:none; align-self:center;}
@@ -471,9 +477,9 @@
     </div>
 
     <!-- ============ CONFIGURAÇÃO ============ -->
-    <div class="card drag-sec" data-sec="config">
-      <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Funcionamento</span></div>
-      <form method="post" action="/admin/config">
+    <div class="card collapsed drag-sec" id="config-card" data-sec="config">
+      <div class="card-head" id="config-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Funcionamento</span><span class="wa-chevron" title="Expandir/recolher">▾</span></div>
+      <form method="post" action="/admin/config" id="config-body">
         <div class="row">
           <div><label>Telefone do dono <span style="text-transform:none;font-weight:400">(autoriza ações restritas)</span></label><input name="telefone_dono" value="{{ config.telefone_dono }}"></div>
           <div><label>Fuso horário</label><input name="fuso" value="{{ config.fuso }}"></div>
@@ -857,6 +863,12 @@
         carregar();
       }
     });
+  })();
+
+  /* ---------- Configuração geral (retrátil) ---------- */
+  (() => {
+    const card = document.getElementById('config-card');
+    document.getElementById('config-head').addEventListener('click', () => card.classList.toggle('collapsed'));
   })();
 
   /* ============ reordenação dos cards (drag & drop, ordem no localStorage) ============ */
