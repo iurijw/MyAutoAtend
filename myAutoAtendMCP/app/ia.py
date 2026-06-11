@@ -10,7 +10,9 @@ provedor (deduzido da base URL) e modelo.
 
 Compatibilidade por uso:
   - texto/imagem: qualquer API compatível com chat completions (OpenAI,
-    OpenRouter, Groq, Gemini, Mistral...).
+    Anthropic, OpenRouter, Groq, Gemini, Mistral...). A Anthropic atende pela
+    camada compatível em /v1/chat/completions (Bearer); só o GET /models
+    exige headers nativos (x-api-key + anthropic-version).
   - áudio: exige `POST /audio/transcriptions` multipart estilo OpenAI com
     `model=whisper-1` → só OpenAI ou proxy compatível (OpenRouter usa outro
     formato, JSON base64 — fica p/ depois).
@@ -36,6 +38,7 @@ ALVOS_COM_MODELO = ("texto", "imagem")
 # Provedores com API compatível OpenAI, com capacidade por uso.
 PROVEDORES: dict[str, dict[str, Any]] = {
     "openai": {"nome": "OpenAI", "base_url": "https://api.openai.com/v1", "texto": True, "audio": True, "imagem": True},
+    "anthropic": {"nome": "Anthropic (Claude)", "base_url": "https://api.anthropic.com/v1", "texto": True, "audio": False, "imagem": True},
     "groq": {"nome": "Groq", "base_url": "https://api.groq.com/openai/v1", "texto": True, "audio": False, "imagem": True},
     "openrouter": {"nome": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "texto": True, "audio": False, "imagem": True},
     "mistral": {"nome": "Mistral", "base_url": "https://api.mistral.ai/v1", "texto": True, "audio": False, "imagem": True},
@@ -110,9 +113,17 @@ def atualizar_modelo(alvo: str, modelo: str) -> dict:
 
 def listar_modelos_do_provedor(base_url: str, api_key: str) -> list[dict]:
     """GET /models no provedor. Também usada no preview (chave transiente)."""
+    if "api.anthropic.com" in base_url:
+        # GET /models da Anthropic não aceita Bearer — só x-api-key + versão.
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+        params: dict[str, Any] | None = {"limit": 100}
+    else:
+        headers = {"Authorization": f"Bearer {api_key}"}
+        params = None
     r = httpx.get(
         base_url.rstrip("/") + "/models",
-        headers={"Authorization": f"Bearer {api_key}"},
+        headers=headers,
+        params=params,
         timeout=20.0,
     )
     if r.status_code != 200:

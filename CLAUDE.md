@@ -64,6 +64,8 @@ primeiro `docker compose up -d`.
   nenhuma rota devolve (nem mascarada).
 - Compatibilidade: texto/imagem = qualquer chat completions compatível;
   áudio = multipart OpenAI com whisper-1 (OpenRouter usa JSON base64 — futuro).
+- Anthropic entra pela camada OpenAI-compatível (`https://api.anthropic.com/v1`);
+  só o `GET /models` usa headers nativos (`x-api-key` + `anthropic-version`).
 - Defaults de modelo: texto `gpt-5.1`, imagem `gpt-4o`, áudio `whisper-1`.
 - Sem chave salva → `IANaoConfigurada`; o agente não responde até configurar
   no painel (card "Provedores de IA").
