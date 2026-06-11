@@ -13,7 +13,7 @@ Ver app/auth.py e app/whatsapp.py.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from mcp.server.fastmcp import FastMCP
@@ -192,23 +192,54 @@ def cancelar(agendamento_id: int, telefone_solicitante: str | None = None) -> di
 # ---------------------------------------------------------------------------
 
 
+def _validar_periodo(data: str, data_fim: str | None) -> dict | None:
+    """None se ok; dict de erro se datas inválidas ou fim antes do início."""
+    try:
+        ini = date.fromisoformat(data)
+        fim = date.fromisoformat(data_fim) if data_fim else ini
+    except ValueError:
+        return {"erro": "Data inválida. Use o formato YYYY-MM-DD."}
+    if fim < ini:
+        return {"erro": "A data final é anterior à inicial."}
+    return None
+
+
 @mcp.tool()
 def fechar_data(
-    data: str, motivo: str = "", telefone_solicitante: str | None = None
+    data: str,
+    data_fim: str | None = None,
+    motivo: str = "",
+    telefone_solicitante: str | None = None,
 ) -> dict:
-    """[DONO] Fecha um dia inteiro (data YYYY-MM-DD)."""
+    """[DONO] Fecha um dia inteiro ou um período de dias (datas YYYY-MM-DD).
+
+    Sem `data_fim` fecha só o dia `data`; com `data_fim` fecha todos os dias
+    de `data` até `data_fim` (inclusive) — ex.: férias, reforma.
+    """
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
-    b = db.criar_bloqueio(data=data, inicio=None, fim=None, motivo=motivo)
+    if erro := _validar_periodo(data, data_fim):
+        return erro
+    b = db.criar_bloqueio(
+        data=data, inicio=None, fim=None, motivo=motivo, data_fim=data_fim
+    )
     return {"ok": True, "bloqueio": db.como_dict(b)}
 
 
 @mcp.tool()
-def abrir_data(data: str, telefone_solicitante: str | None = None) -> dict:
-    """[DONO] Reabre um dia previamente fechado (remove bloqueios da data)."""
+def abrir_data(
+    data: str, data_fim: str | None = None, telefone_solicitante: str | None = None
+) -> dict:
+    """[DONO] Reabre dia ou período fechado (remove bloqueios que toquem o intervalo).
+
+    Atenção: um bloqueio de período é removido por inteiro — reabrir um dia no
+    meio de férias reabre as férias todas. Avise o dono quando for o caso.
+    """
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
-    removidos = db.remover_bloqueio_por_data(data)
+    if erro := _validar_periodo(data, data_fim):
+        return erro
+    removidos = db.remover_bloqueio_por_data(data, data_fim)
     return {"ok": True, "removidos": removidos}
 
 
@@ -218,12 +249,21 @@ def bloquear_horario(
     inicio: str,
     fim: str,
     motivo: str = "",
+    data_fim: str | None = None,
     telefone_solicitante: str | None = None,
 ) -> dict:
-    """[DONO] Bloqueia um intervalo específico. inicio/fim no formato HH:MM."""
+    """[DONO] Bloqueia um intervalo de horas. inicio/fim no formato HH:MM.
+
+    Com `data_fim`, a janela vale para CADA dia de `data` até `data_fim`
+    (ex.: almoço bloqueado a semana inteira).
+    """
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
-    b = db.criar_bloqueio(data=data, inicio=inicio, fim=fim, motivo=motivo)
+    if erro := _validar_periodo(data, data_fim):
+        return erro
+    b = db.criar_bloqueio(
+        data=data, inicio=inicio, fim=fim, motivo=motivo, data_fim=data_fim
+    )
     return {"ok": True, "bloqueio": db.como_dict(b)}
 
 

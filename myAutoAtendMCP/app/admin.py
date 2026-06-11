@@ -322,15 +322,19 @@ def reagendar_agendamento(
 def novo_bloqueio(
     _: str = Depends(autenticar),
     data: str = Form(...),
+    data_fim: str = Form(""),
     inicio: str = Form(""),
     fim: str = Form(""),
     motivo: str = Form(""),
 ):
+    if data_fim and data_fim < data:
+        raise HTTPException(status_code=400, detail="Data final anterior à inicial.")
     db.criar_bloqueio(
         data=data,
         inicio=inicio or None,
         fim=fim or None,
         motivo=motivo,
+        data_fim=data_fim or None,
     )
     return RedirectResponse("/admin", status_code=303)
 

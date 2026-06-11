@@ -89,6 +89,7 @@ class Servico(SQLModel, table=True):
 class Bloqueio(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     data: str  # "YYYY-MM-DD"
+    data_fim: Optional[str] = None  # "YYYY-MM-DD" ou None p/ um dia só
     inicio: Optional[str] = None  # "HH:MM" ou None para o dia inteiro
     fim: Optional[str] = None
     motivo: str = ""
@@ -124,10 +125,21 @@ def _session() -> Session:
 
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
+    _migrar()
     with _session() as s:
         if s.get(Config, 1) is None:
             s.add(Config(id=1))
             s.commit()
+
+
+def _migrar() -> None:
+    """Bancos criados antes do bloqueio por período não têm `data_fim` —
+    o create_all não altera tabela existente, então o ALTER é manual."""
+    with engine.connect() as conn:
+        cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(bloqueio)")}
+        if cols and "data_fim" not in cols:
+            conn.exec_driver_sql("ALTER TABLE bloqueio ADD COLUMN data_fim VARCHAR")
+            conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -290,9 +302,18 @@ def listar_bloqueios() -> list[Bloqueio]:
         return list(s.exec(select(Bloqueio)).all())
 
 
-def criar_bloqueio(data: str, inicio: str | None, fim: str | None, motivo: str = "") -> Bloqueio:
+def criar_bloqueio(
+    data: str,
+    inicio: str | None,
+    fim: str | None,
+    motivo: str = "",
+    data_fim: str | None = None,
+) -> Bloqueio:
+    """`data_fim` (exclusivo p/ período) cobre todos os dias de data até data_fim."""
     with _lock, _session() as s:
-        b = Bloqueio(data=data, inicio=inicio, fim=fim, motivo=motivo)
+        if data_fim == data:
+            data_fim = None
+        b = Bloqueio(data=data, data_fim=data_fim, inicio=inicio, fim=fim, motivo=motivo)
         s.add(b)
         s.commit()
         return b
@@ -308,9 +329,19 @@ def remover_bloqueio(bloqueio_id: int) -> bool:
     return True
 
 
-def remover_bloqueio_por_data(data: str) -> int:
+def remover_bloqueio_por_data(data: str, data_fim: str | None = None) -> int:
+    """Remove bloqueios que intersectam o período [data, data_fim].
+
+    Um bloqueio de período é removido por inteiro (sem split): reabrir um dia
+    no meio de férias reabre as férias todas — o chamador deve avisar isso.
+    """
+    ate = data_fim or data
     with _lock, _session() as s:
-        achados = s.exec(select(Bloqueio).where(Bloqueio.data == data)).all()
+        achados = [
+            b
+            for b in s.exec(select(Bloqueio).where(Bloqueio.data <= ate)).all()
+            if (b.data_fim or b.data) >= data
+        ]
         for b in achados:
             s.delete(b)
         s.commit()
@@ -347,11 +378,14 @@ def _conflita(s: Session, inicio: str, fim: str, ignorar_id: int | None = None) 
     f = datetime.fromisoformat(fim)
     dia = ini.date().isoformat()
 
-    for b in s.exec(select(Bloqueio).where(Bloqueio.data == dia)).all():
-        if b.inicio is None:  # dia inteiro fechado
+    for b in s.exec(select(Bloqueio).where(Bloqueio.data <= dia)).all():
+        if (b.data_fim or b.data) < dia:  # período não alcança o dia
+            continue
+        if b.inicio is None:  # dia(s) inteiro(s) fechado(s)
             return True
-        b_ini = datetime.fromisoformat(f"{b.data}T{b.inicio}")
-        b_fim = datetime.fromisoformat(f"{b.data}T{b.fim}")
+        # janela de horário vale para cada dia do período
+        b_ini = datetime.fromisoformat(f"{dia}T{b.inicio}")
+        b_fim = datetime.fromisoformat(f"{dia}T{b.fim}")
         if ini < b_fim and f > b_ini:
             return True
 
