@@ -152,6 +152,15 @@ docker logs -f mcp_agendamentos   # ver a inicialização e o agente
 - [X] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT) — card "Instruções do Agente": instrução geral + bloco MCP separado (avançado, com aviso e restauração do padrão)
 - [ ] Adicionar opção de avisar o cliente que foi reagendado/cancelado o serviço dele (a IA avisar a ação do dono/adminsitrador com o aval do mesmo)
 - [ ] Adicionar a opção de ativar (no painel de admin ou pedindo para o bot no whatsapp) o aviso para o Whatsapp do dono/administrador de agendamentos/cancelamentos, etc...
+- [] Opção de abrir conversa (abre um modal) no portal de admin, para visualizar as mensagens do whatsapp, com possibilidade de enviar mensagens manualmente pelo bot. Deste modo, como dependencia, deve-se criar uma aba nova de conversas (além de colocar um botão para abrir a conversa na listagem de agendamentos).
+- [] Botão no painel admin e comando via whatsapp para o bot parar de responder uma pessoa/numero de whatsapp especifico.
+- [] Opção de esconder menus do painel do admin (por exemplo, conexão do whatsapp)... Os menus podem ser anexado novamente na pagina clicando em uma engrenagem no canto da página.
+- [] Adicionar opção de outros provedores de whisper (speech to test)
+- [] Adicionar opção de geração de audio pelo bot (para pessoas que não sabem ler e escrever)
+- [] Adicionar instrução no readme de como atualizar o programa sem perder os dados
+- [] Adicionar parte no painel de admin para baixar os dados (backup geral) e opção de importar novamente os dados.
+- [] Adicionar dark mode no painel de admin
+- [] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possivel criar contas bancárias... Nesse contexto, criar botão para marcar o agendamento como conluído e forma e valor recebido (valor auto preenchido, mas ajustavel, de acordo com o valor do serviço cadastrado).
 
 <br>
 
