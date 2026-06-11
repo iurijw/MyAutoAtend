@@ -172,6 +172,13 @@
       padding:10px 14px; font-size:13.5px; color:var(--ink-soft); margin:14px 0 0;}
     .prompt-avancado .ia-acts{margin-bottom:16px;}
 
+    /* ---------- reordenação dos cards (drag & drop) ---------- */
+    .drag-grip{cursor:grab; color:var(--ink-soft); font-size:15px; user-select:none;
+      padding:2px 6px; border-radius:6px; opacity:.5; flex:none; align-self:center;}
+    .drag-grip:hover{opacity:1; background:var(--paper-2);}
+    .drag-grip:active{cursor:grabbing;}
+    .drag-sec.dragging{opacity:.45; outline:2px dashed var(--gold-soft); outline-offset:4px;}
+
     /* page-load reveal */
     .reveal{opacity:0; transform:translateY(14px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;}
     @keyframes rise{to{opacity:1; transform:none;}}
@@ -209,8 +216,9 @@
     </section>
 
     <!-- ============ WHATSAPP ============ -->
-    <div class="card" id="wa-card">
+    <div class="card drag-sec" id="wa-card" data-sec="wa">
       <div class="card-head" id="wa-head">
+        <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
         <h2>Conexão WhatsApp</h2>
         <span class="pill off" id="wa-status">verificando…</span>
         <span class="wa-chevron" id="wa-chevron" title="Expandir/recolher">▾</span>
@@ -232,8 +240,9 @@
     </div>
 
     <!-- ============ PROVEDORES DE IA ============ -->
-    <div class="card collapsed" id="ia-card">
+    <div class="card collapsed drag-sec" id="ia-card" data-sec="ia">
       <div class="card-head" id="ia-head">
+        <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
         <h2>Provedores de IA</h2>
         <span class="wa-chevron" style="margin-left:auto" title="Expandir/recolher">▾</span>
       </div>
@@ -306,8 +315,9 @@
     </div>
 
     <!-- ============ INSTRUÇÕES DO AGENTE ============ -->
-    <div class="card collapsed" id="prompt-card">
+    <div class="card collapsed drag-sec" id="prompt-card" data-sec="prompt">
       <div class="card-head" id="prompt-head">
+        <span class="drag-grip" title="Arrastar para reordenar">⠿</span>
         <h2>Instruções do Agente</h2>
         <span class="pill off" id="prompt-status">…</span>
         <span class="wa-chevron" title="Expandir/recolher">▾</span>
@@ -343,8 +353,8 @@
     </div>
 
     <!-- ============ AGENDAMENTOS ============ -->
-    <div class="card">
-      <div class="card-head"><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
+    <div class="card drag-sec" data-sec="agendamentos">
+      <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
       <table class="tbl">
         <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Quando</th><th></th></tr></thead>
         <tbody>
@@ -382,10 +392,10 @@
       </table>
     </div>
 
-    <div class="grid2">
+    <div class="grid2 drag-sec" data-sec="catalogo">
       <!-- ============ SERVIÇOS ============ -->
       <div class="card">
-        <div class="card-head"><h2>Serviços</h2><span class="tag">{{ servicos|length }} no catálogo</span></div>
+        <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Serviços</h2><span class="tag">{{ servicos|length }} no catálogo</span></div>
         <table class="tbl">
           <thead><tr><th>Serviço</th><th>Valor</th><th>Dur.</th><th>Status</th><th></th></tr></thead>
           <tbody>
@@ -425,7 +435,7 @@
 
       <!-- ============ BLOQUEIOS ============ -->
       <div class="card">
-        <div class="card-head"><h2>Bloqueios</h2><span class="tag">{{ bloqueios|length }}</span></div>
+        <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Bloqueios</h2><span class="tag">{{ bloqueios|length }}</span></div>
         <table class="tbl">
           <thead><tr><th>Data</th><th>Janela</th><th>Motivo</th><th></th></tr></thead>
           <tbody>
@@ -461,8 +471,8 @@
     </div>
 
     <!-- ============ CONFIGURAÇÃO ============ -->
-    <div class="card">
-      <div class="card-head"><h2>Configuração geral</h2><span class="tag">Funcionamento</span></div>
+    <div class="card drag-sec" data-sec="config">
+      <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Funcionamento</span></div>
       <form method="post" action="/admin/config">
         <div class="row">
           <div><label>Telefone do dono <span style="text-transform:none;font-weight:400">(autoriza ações restritas)</span></label><input name="telefone_dono" value="{{ config.telefone_dono }}"></div>
@@ -846,6 +856,62 @@
         carregado = true;
         carregar();
       }
+    });
+  })();
+
+  /* ============ reordenação dos cards (drag & drop, ordem no localStorage) ============ */
+  (() => {
+    const wrap = document.querySelector('.wrap');
+    const KEY = 'admin-ordem-cards';
+    const secoes = () => [...wrap.querySelectorAll(':scope > .drag-sec')];
+
+    // Restaura a ordem salva; seções que não estiverem na lista (cards novos) vão para o fim.
+    try {
+      const salva = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (Array.isArray(salva)){
+        const porChave = {};
+        secoes().forEach(s => porChave[s.dataset.sec] = s);
+        salva.forEach(ch => { if (porChave[ch]){ wrap.appendChild(porChave[ch]); delete porChave[ch]; } });
+        Object.values(porChave).forEach(s => wrap.appendChild(s));
+      }
+    } catch(_){ /* ordem corrompida → fica a ordem padrão */ }
+
+    let arrastando = null;
+
+    // O card só vira "draggable" enquanto o mouse segura o grip — assim não
+    // atrapalha seleção de texto nem o clique de recolher do card-head.
+    wrap.querySelectorAll('.drag-grip').forEach(g => {
+      const sec = g.closest('.drag-sec');
+      g.addEventListener('click', e => e.stopPropagation());
+      g.addEventListener('mousedown', () => sec.setAttribute('draggable', 'true'));
+      g.addEventListener('mouseup', () => sec.removeAttribute('draggable'));
+    });
+
+    wrap.addEventListener('dragstart', e => {
+      const sec = e.target.closest ? e.target.closest('.drag-sec') : null;
+      if (!sec || sec.getAttribute('draggable') !== 'true'){ return; }
+      arrastando = sec;
+      sec.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', sec.dataset.sec);  // Firefox exige setData
+    });
+
+    wrap.addEventListener('dragover', e => {
+      if (!arrastando) return;
+      e.preventDefault();
+      const alvo = e.target.closest ? e.target.closest('.drag-sec') : null;
+      if (!alvo || alvo === arrastando) return;
+      const r = alvo.getBoundingClientRect();
+      const antes = e.clientY < r.top + r.height / 2;
+      wrap.insertBefore(arrastando, antes ? alvo : alvo.nextSibling);
+    });
+
+    wrap.addEventListener('dragend', () => {
+      if (!arrastando) return;
+      arrastando.classList.remove('dragging');
+      arrastando.removeAttribute('draggable');
+      localStorage.setItem(KEY, JSON.stringify(secoes().map(s => s.dataset.sec)));
+      arrastando = null;
     });
   })();
 
