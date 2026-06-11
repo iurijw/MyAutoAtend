@@ -22,6 +22,9 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/ia.py` | Provedores de IA (config no SQLite), transcrição, visão, listagem de modelos |
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
 | `myAutoAtendMCP/app/tools.py` | 12 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
+| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head, header, stats, includes dos partials, ponte `window.__ADMIN__` |
+| `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `catalogo` · `config` |
+| `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
 

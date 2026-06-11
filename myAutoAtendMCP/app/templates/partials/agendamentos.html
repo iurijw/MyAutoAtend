@@ -1,0 +1,39 @@
+<!-- ============ AGENDAMENTOS ============ -->
+<div class="card drag-sec" data-sec="agendamentos">
+  <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
+  <table class="tbl">
+    <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Quando</th><th></th></tr></thead>
+    <tbody>
+    {% for a in agendamentos %}
+      <tr>
+        <td class="id">{{ a.id }}</td>
+        <td>
+          <div class="cli">
+            <div class="ava" data-num="{{ a.telefone_cliente }}">{{ (a.nome_cliente or '?')[:1]|upper }}</div>
+            <div><div class="who">{{ a.nome_cliente }}</div><div class="meta">{{ a.telefone_cliente }}</div></div>
+          </div>
+        </td>
+        <td>{{ servico_nome.get(a.servico_id, '—') }}</td>
+        <td class="when-cell">
+          <span class="d">{{ a.inicio.split('T')[0] }}</span>
+          <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
+          <form class="reagenda" id="rg{{ a.id }}" method="post" action="/admin/agendamento/{{ a.id }}/reagendar">
+            <input type="datetime-local" name="novo_inicio" value="{{ a.inicio }}" required>
+            <button class="btn-sm btn-primary" style="margin:0">Confirmar</button>
+          </form>
+        </td>
+        <td>
+          <div class="acts">
+            <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
+            <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar" onsubmit="return confirm('Cancelar o agendamento de {{ a.nome_cliente }}?')">
+              <button class="btn-sm btn-danger">Cancelar</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="empty">Nenhum agendamento ativo no momento.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>

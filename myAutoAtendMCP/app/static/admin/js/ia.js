@@ -1,0 +1,201 @@
+/* Card "Provedores de IA": chaves one-way (gravadas localmente, nunca
+   exibidas de volta), escolha de provedor/modelo por alvo (texto/áudio/imagem). */
+
+const PROVEDORES = window.__ADMIN__.provedores;
+const ALVOS = ['texto', 'audio', 'imagem'];
+const provedorSalvo = { texto: null, audio: null, imagem: null };  // o que está salvo hoje
+const temModelo = (alvo) => !!$('ia-modelo-sel-' + alvo);  // áudio: whisper-1 fixo
+
+const $ = (id) => document.getElementById(id);
+
+function msg(alvo, texto, ok){
+  const el = $('ia-msg-' + alvo);
+  el.textContent = texto;
+  el.className = 'ia-msg ' + (ok ? 'ok' : 'err');
+}
+
+function montarSelect(alvo){
+  const sel = $('ia-prov-' + alvo);
+  for (const [chave, p] of Object.entries(PROVEDORES)){
+    if (!p[alvo]) continue;
+    const opt = document.createElement('option');
+    opt.value = chave;
+    opt.textContent = p.nome;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    $('ia-url-wrap-' + alvo).style.display = sel.value === 'custom' ? '' : 'none';
+    aoTrocarProvedor(alvo);
+  });
+  // Chave colada/alterada → tenta listar modelos do provedor escolhido.
+  $('ia-key-' + alvo).addEventListener('change', () => previewModelos(alvo));
+}
+
+async function carregarEstado(){
+  try {
+    const r = await fetch('/admin/ia/estado');
+    const d = await r.json();
+    if (d.erro) throw new Error(d.erro);
+    for (const alvo of ALVOS){
+      const info = d[alvo] || {};
+      const pill = $('ia-status-' + alvo);
+      if (info.atualizado_em){
+        pill.className = 'pill on';
+        pill.textContent = 'chave de ' + new Date(info.atualizado_em).toLocaleDateString('pt-BR');
+      } else {
+        pill.className = 'pill off';
+        pill.textContent = 'sem registro';
+      }
+      provedorSalvo[alvo] = info.provedor || null;
+      if (info.provedor && $('ia-prov-' + alvo).querySelector('option[value="' + info.provedor + '"]')){
+        $('ia-prov-' + alvo).value = info.provedor;
+        $('ia-url-wrap-' + alvo).style.display = info.provedor === 'custom' ? '' : 'none';
+      }
+      if (info.modelo && temModelo(alvo)) $('ia-modelo-' + alvo).value = info.modelo;
+    }
+    // Após o estado, busca os modelos do provedor configurado.
+    for (const alvo of ALVOS) if (temModelo(alvo)) carregarModelos(alvo, (d[alvo] || {}).modelo);
+  } catch(e){
+    for (const alvo of ALVOS){
+      const pill = $('ia-status-' + alvo);
+      pill.className = 'pill off';
+      pill.textContent = 'indisponível';
+    }
+  }
+}
+
+function popularModelos(alvo, modelos, atual){
+  const sel = $('ia-modelo-sel-' + alvo);
+  const inp = $('ia-modelo-' + alvo);
+  if (!sel || !modelos.length) return;
+  const atualVal = atual || '';
+  if (atualVal && !modelos.includes(atualVal)) modelos.unshift(atualVal);
+  sel.innerHTML = '';
+  for (const m of modelos){
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+  }
+  const outro = document.createElement('option');
+  outro.value = '__outro'; outro.textContent = 'Outro (digitar)…';
+  sel.appendChild(outro);
+  if (atualVal) sel.value = atualVal;
+  sel.style.display = '';
+  inp.style.display = 'none';
+  sel.onchange = () => {
+    inp.style.display = sel.value === '__outro' ? '' : 'none';
+    if (sel.value === '__outro') inp.focus();
+  };
+}
+
+function resetarModelos(alvo){
+  const sel = $('ia-modelo-sel-' + alvo);
+  if (!sel) return;
+  sel.style.display = 'none'; sel.innerHTML = '';
+  $('ia-modelo-' + alvo).style.display = '';
+}
+
+// Lista com a chave JÁ SALVA (provedor atual).
+async function carregarModelos(alvo, atual){
+  if (!temModelo(alvo)) return;
+  try {
+    const r = await fetch('/admin/ia/modelos?alvo=' + alvo);
+    const d = await r.json();
+    if (!r.ok || d.erro) throw new Error(d.erro || ('HTTP ' + r.status));
+    popularModelos(alvo, (d.modelos || []).map(m => m.valor),
+                   atual || $('ia-modelo-' + alvo).value.trim());
+  } catch(e){ /* sem lista — segue com campo de texto livre */ }
+}
+
+// Lista direto no provedor com a chave recém-digitada (antes de salvar).
+async function previewModelos(alvo){
+  if (!temModelo(alvo)) return;   // áudio: nada a listar (whisper-1 fixo)
+  const chave = $('ia-key-' + alvo).value.trim();
+  if (!chave) return;
+  msg(alvo, 'Listando modelos do provedor…', true);
+  try {
+    const d = await postar('/admin/ia/modelos-preview', {
+      provedor: $('ia-prov-' + alvo).value,
+      api_key: chave,
+      base_url: $('ia-url-' + alvo).value.trim(),
+    });
+    popularModelos(alvo, (d.modelos || []).map(m => m.valor), null);
+    msg(alvo, 'Modelos carregados — escolha um e salve a chave.', true);
+  } catch(e){ msg(alvo, 'Falha ao listar modelos: ' + e.message, false); }
+}
+
+function aoTrocarProvedor(alvo){
+  if ($('ia-prov-' + alvo).value === provedorSalvo[alvo]){
+    // Voltou ao provedor já salvo — lista com a chave armazenada.
+    resetarModelos(alvo);
+    carregarModelos(alvo, null);
+    return;
+  }
+  resetarModelos(alvo);
+  if ($('ia-key-' + alvo).value.trim()) previewModelos(alvo);
+  else if (temModelo(alvo)) msg(alvo, 'Cole a chave do provedor para listar os modelos dele.', true);
+  else msg(alvo, 'Cole a chave do provedor e salve.', true);
+}
+
+function modeloEscolhido(alvo){
+  const sel = $('ia-modelo-sel-' + alvo);
+  if (sel.style.display !== 'none' && sel.value && sel.value !== '__outro') return sel.value;
+  return $('ia-modelo-' + alvo).value.trim();
+}
+
+async function postar(url, dados){
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: new URLSearchParams(dados),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erro || d.detail || ('HTTP ' + r.status));
+  return d;
+}
+
+async function salvarChave(alvo, btn){
+  const chave = $('ia-key-' + alvo).value.trim();
+  if (!chave){ msg(alvo, 'Cole a chave antes de salvar.', false); return; }
+  btn.disabled = true; msg(alvo, 'Gravando chave…', true);
+  try {
+    await postar('/admin/ia/credencial', {
+      alvo,
+      provedor: $('ia-prov-' + alvo).value,
+      api_key: chave,
+      base_url: $('ia-url-' + alvo).value.trim(),
+    });
+    $('ia-key-' + alvo).value = '';   // chave some da tela na hora
+    msg(alvo, 'Chave gravada.', true);
+    carregarEstado();                  // re-lista modelos do provedor novo
+  } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
+  finally { btn.disabled = false; }
+}
+
+async function salvarModelo(alvo, btn){
+  const modelo = modeloEscolhido(alvo);
+  if (!modelo){ msg(alvo, 'Informe o nome do modelo.', false); return; }
+  btn.disabled = true; msg(alvo, 'Atualizando modelo…', true);
+  try {
+    await postar('/admin/ia/modelo', { alvo, modelo });
+    msg(alvo, 'Modelo atualizado.', true);
+  } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
+  finally { btn.disabled = false; }
+}
+
+for (const alvo of ALVOS) montarSelect(alvo);
+document.querySelectorAll('[data-ia-key]').forEach(b =>
+  b.addEventListener('click', () => salvarChave(b.dataset.iaKey, b)));
+document.querySelectorAll('[data-ia-modelo]').forEach(b =>
+  b.addEventListener('click', () => salvarModelo(b.dataset.iaModelo, b)));
+
+// Card começa recolhido; estado só é buscado na primeira expansão.
+const iaCard = document.getElementById('ia-card');
+let estadoCarregado = false;
+document.getElementById('ia-head').addEventListener('click', () => {
+  iaCard.classList.toggle('collapsed');
+  if (!iaCard.classList.contains('collapsed') && !estadoCarregado){
+    estadoCarregado = true;
+    carregarEstado();
+  }
+});

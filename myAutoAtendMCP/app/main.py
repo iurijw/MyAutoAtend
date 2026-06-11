@@ -23,6 +23,7 @@ from urllib.parse import parse_qs
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import auth, evolution
 from .admin import router as admin_router
@@ -80,6 +81,7 @@ app = FastAPI(title="Gerenciador de Agendamentos", lifespan=lifespan)
 app.include_router(admin_router)
 app.include_router(whatsapp_router)
 app.mount("/mcp", SolicitanteMiddleware(mcp_app))
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.get("/")
