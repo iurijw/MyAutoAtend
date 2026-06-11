@@ -46,7 +46,7 @@ Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, p
 - agendar(servico_id, nome_cliente, inicio): cria agendamento; inicio = YYYY-MM-DDTHH:MM.
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).
-- NÃO peça nem use o telefone do cliente: ele é identificado automaticamente pelo sistema. Ignore o campo telefone_solicitante.
+- NÃO peça nem use telefone: cliente E dono são identificados automaticamente pelo número do WhatsApp. NUNCA peça telefone para confirmar identidade. Não preencha o campo telefone_solicitante.
 
 {_SECAO_FORMATACAO} (quebra de linha)
 - O texto é dividido em bolhas de WhatsApp. Use [quebrar] OU Enter para separar bolhas. Máximo 2-3 bolhas por resposta. No máximo *negrito* do WhatsApp."""

@@ -5,8 +5,9 @@ Agrupadas por nível de permissão:
   - Dono ou próprio:   remarcar / cancelar
   - Dono:              gestão e visão completa
 
-`telefone_solicitante` aparece na assinatura, mas o telefone EFETIVO vem do
-pipeline (contextvar via `auth.requester()`) — o modelo não escolhe o número.
+`telefone_solicitante` aparece na assinatura (opcional, último parâmetro),
+mas o telefone EFETIVO vem do pipeline (contextvar via `auth.requester()`) —
+o modelo não escolhe o número e não precisa preencher o campo.
 Ver app/auth.py e app/whatsapp.py.
 """
 
@@ -89,10 +90,10 @@ def consultar_horarios_disponiveis(data: str, servico_id: int) -> dict:
 
 @mcp.tool()
 def agendar(
-    telefone_solicitante: str,
     servico_id: int,
     nome_cliente: str,
     inicio: str,
+    telefone_solicitante: str | None = None,
 ) -> dict:
     """Cria um agendamento. `inicio` no formato YYYY-MM-DDTHH:MM.
 
@@ -131,7 +132,7 @@ def agendar(
 
 
 @mcp.tool()
-def meus_agendamentos(telefone_solicitante: str) -> list[dict]:
+def meus_agendamentos(telefone_solicitante: str | None = None) -> list[dict]:
     """Lista os agendamentos ativos do próprio solicitante."""
     tel = auth.requester(telefone_solicitante)
     if not tel:
@@ -146,7 +147,7 @@ def meus_agendamentos(telefone_solicitante: str) -> list[dict]:
 
 @mcp.tool()
 def reagendar(
-    telefone_solicitante: str, agendamento_id: int, novo_inicio: str
+    agendamento_id: int, novo_inicio: str, telefone_solicitante: str | None = None
 ) -> dict:
     """Remarca um agendamento. Cliente só remarca o próprio; dono remarca qualquer um."""
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
@@ -177,7 +178,7 @@ def reagendar(
 
 
 @mcp.tool()
-def cancelar(telefone_solicitante: str, agendamento_id: int) -> dict:
+def cancelar(agendamento_id: int, telefone_solicitante: str | None = None) -> dict:
     """Cancela um agendamento. Cliente só cancela o próprio; dono cancela qualquer um."""
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
         return auth.NEGADO_PROPRIO
@@ -192,7 +193,9 @@ def cancelar(telefone_solicitante: str, agendamento_id: int) -> dict:
 
 
 @mcp.tool()
-def fechar_data(telefone_solicitante: str, data: str, motivo: str = "") -> dict:
+def fechar_data(
+    data: str, motivo: str = "", telefone_solicitante: str | None = None
+) -> dict:
     """[DONO] Fecha um dia inteiro (data YYYY-MM-DD)."""
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
@@ -201,7 +204,7 @@ def fechar_data(telefone_solicitante: str, data: str, motivo: str = "") -> dict:
 
 
 @mcp.tool()
-def abrir_data(telefone_solicitante: str, data: str) -> dict:
+def abrir_data(data: str, telefone_solicitante: str | None = None) -> dict:
     """[DONO] Reabre um dia previamente fechado (remove bloqueios da data)."""
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
@@ -211,7 +214,11 @@ def abrir_data(telefone_solicitante: str, data: str) -> dict:
 
 @mcp.tool()
 def bloquear_horario(
-    telefone_solicitante: str, data: str, inicio: str, fim: str, motivo: str = ""
+    data: str,
+    inicio: str,
+    fim: str,
+    motivo: str = "",
+    telefone_solicitante: str | None = None,
 ) -> dict:
     """[DONO] Bloqueia um intervalo específico. inicio/fim no formato HH:MM."""
     if not auth.eh_dono(telefone_solicitante):
@@ -222,11 +229,11 @@ def bloquear_horario(
 
 @mcp.tool()
 def criar_servico(
-    telefone_solicitante: str,
     nome: str,
     descricao: str,
     valor: float,
     duracao_min: int,
+    telefone_solicitante: str | None = None,
 ) -> dict:
     """[DONO] Cria um novo serviço no catálogo."""
     if not auth.eh_dono(telefone_solicitante):
@@ -237,13 +244,13 @@ def criar_servico(
 
 @mcp.tool()
 def editar_servico(
-    telefone_solicitante: str,
     servico_id: int,
     nome: str | None = None,
     descricao: str | None = None,
     valor: float | None = None,
     duracao_min: int | None = None,
     ativo: bool | None = None,
+    telefone_solicitante: str | None = None,
 ) -> dict:
     """[DONO] Edita um serviço existente."""
     if not auth.eh_dono(telefone_solicitante):
@@ -262,7 +269,7 @@ def editar_servico(
 
 
 @mcp.tool()
-def ver_agenda_completa(telefone_solicitante: str) -> dict:
+def ver_agenda_completa(telefone_solicitante: str | None = None) -> dict:
     """[DONO] Retorna todos os agendamentos ativos e bloqueios."""
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
