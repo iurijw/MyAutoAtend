@@ -243,8 +243,9 @@ def salvar_config(
     _: str = Depends(autenticar),
     telefone_dono: str = Form(...),
     fuso: str = Form(...),
+    avisar_dono: bool = Form(False),  # checkbox desmarcado não envia o campo
 ):
-    db.update_config(telefone_dono=telefone_dono, fuso=fuso)
+    db.update_config(telefone_dono=telefone_dono, fuso=fuso, avisar_dono=avisar_dono)
     return RedirectResponse("/admin", status_code=303)
 
 

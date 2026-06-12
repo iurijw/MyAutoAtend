@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from . import auth, db
+from . import auth, db, notificacoes
 from .phone import normalizar
 
 # A porta MCP só é exposta em localhost e na rede interna do Docker (clients
@@ -148,6 +148,7 @@ def agendar(
     )
     if not ag:
         return {"erro": "Horário indisponível. Escolha outro."}
+    notificacoes.notificar_dono("agendado", ag, tel)
     return {"ok": True, "agendamento": db.como_dict(ag)}
 
 
@@ -198,7 +199,11 @@ def reagendar(
         agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim
     ):
         return {"erro": "Novo horário indisponível."}
-    return {"ok": True, "agendamento": db.como_dict(db.get_agendamento(agendamento_id))}
+    atualizado = db.get_agendamento(agendamento_id)
+    notificacoes.notificar_dono(
+        "reagendado", atualizado, auth.requester(telefone_solicitante)
+    )
+    return {"ok": True, "agendamento": db.como_dict(atualizado)}
 
 
 @mcp.tool()
@@ -206,8 +211,10 @@ def cancelar(agendamento_id: int, telefone_solicitante: str | None = None) -> di
     """Cancela um agendamento. Cliente só cancela o próprio; dono cancela qualquer um."""
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
         return auth.NEGADO_PROPRIO
+    ag = db.get_agendamento(agendamento_id)  # dados p/ o aviso, antes de cancelar
     if not db.cancelar_agendamento(agendamento_id):
         return {"erro": "Agendamento não encontrado ou já cancelado."}
+    notificacoes.notificar_dono("cancelado", ag, auth.requester(telefone_solicitante))
     return {"ok": True}
 
 

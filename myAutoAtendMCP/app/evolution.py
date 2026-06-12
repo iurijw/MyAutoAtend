@@ -137,6 +137,19 @@ async def marcar_como_lida(remote_jid: str, from_me: bool, message_id: str) -> N
         log.warning("markMessageAsRead falhou: %s", e)
 
 
+def enviar_texto_sync(numero: str, texto: str) -> None:
+    """Versão síncrona de `enviar_texto` para chamadas fora do event loop
+    (ex.: aviso ao dono disparado de dentro de uma tool). Timeout curto:
+    quem chama não pode ficar preso atrás de instância desconectada."""
+    with _client() as c:
+        r = c.post(
+            f"/message/sendText/{settings.evolution_instance}",
+            json={"number": numero, "text": texto},
+            timeout=5.0,
+        )
+        r.raise_for_status()
+
+
 async def enviar_texto(numero: str, texto: str, digitando_ms: int = 0) -> None:
     """Envia texto; `digitando_ms` > 0 mostra "digitando..." antes (delay)."""
     corpo: dict = {"number": numero, "text": texto}

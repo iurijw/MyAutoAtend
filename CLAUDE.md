@@ -105,6 +105,11 @@ primeiro `docker compose up -d`.
   `POST /admin/agendamento` (telefone normalizado E.164; ignora horário de
   funcionamento de propósito — override do dono, como o reagendar do painel;
   conflito com agendamento/bloqueio → 409).
+- **Aviso ao dono** (`app/notificacoes.py`): WhatsApp do dono recebe template
+  fixo (sem IA) quando o BOT agenda/reagenda/cancela. Liga/desliga só pelo
+  painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em
+  `_migrar`). Suprimido se ação é do próprio dono, telefone placeholder ou
+  flag off; falha de envio nunca quebra a tool (`enviar_texto_sync`, 5s).
 - **Horários de funcionamento**: card próprio no painel; grade semanal na
   tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
   linha = fechado). `POST /admin/horarios` (replace-all da grade),

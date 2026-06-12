@@ -33,6 +33,7 @@ class Config(SQLModel, table=True):
     id: int = Field(default=1, primary_key=True)
     telefone_dono: str = settings.owner_phone
     fuso: str = settings.timezone
+    avisar_dono: bool = True  # aviso no WhatsApp do dono a cada ação do bot
 
 
 class HorarioFuncionamento(SQLModel, table=True):
@@ -168,6 +169,12 @@ def _migrar() -> None:
         if cols and "observacoes" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE agendamento ADD COLUMN observacoes VARCHAR NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+        cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(config)")}
+        if cols and "avisar_dono" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE config ADD COLUMN avisar_dono BOOLEAN NOT NULL DEFAULT 1"
             )
             conn.commit()
 
