@@ -93,10 +93,14 @@ def agendar(
     servico_id: int,
     nome_cliente: str,
     inicio: str,
+    observacoes: str = "",
     telefone_solicitante: str | None = None,
 ) -> dict:
     """Cria um agendamento. `inicio` no formato YYYY-MM-DDTHH:MM.
 
+    `observacoes` é OPCIONAL: preferências ou detalhes que o cliente mencionar
+    (ex.: "portão azul", "alergia a perfume"). Não pergunte por observações;
+    preencha só se o cliente comentar algo relevante.
     O telefone do cliente é o do solicitante (injetado pelo pipeline).
     """
     tel = auth.requester(telefone_solicitante)
@@ -125,6 +129,7 @@ def agendar(
         nome_cliente=nome_cliente,
         inicio=dt_inicio.isoformat(timespec="minutes"),
         fim=fim,
+        observacoes=observacoes,
     )
     if not ag:
         return {"erro": "Horário indisponível. Escolha outro."}

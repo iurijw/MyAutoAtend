@@ -103,6 +103,7 @@ class Agendamento(SQLModel, table=True):
     inicio: str  # ISO "YYYY-MM-DDTHH:MM"
     fim: str
     status: str = "ativo"  # ativo | cancelado
+    observacoes: str = ""  # campo livre, opcional
 
 
 # ---------------------------------------------------------------------------
@@ -133,12 +134,19 @@ def init_db() -> None:
 
 
 def _migrar() -> None:
-    """Bancos criados antes do bloqueio por período não têm `data_fim` —
-    o create_all não altera tabela existente, então o ALTER é manual."""
+    """Colunas adicionadas após a criação da tabela — o create_all não altera
+    tabela existente, então o ALTER é manual (bloqueio.data_fim e
+    agendamento.observacoes)."""
     with engine.connect() as conn:
         cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(bloqueio)")}
         if cols and "data_fim" not in cols:
             conn.exec_driver_sql("ALTER TABLE bloqueio ADD COLUMN data_fim VARCHAR")
+            conn.commit()
+        cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(agendamento)")}
+        if cols and "observacoes" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE agendamento ADD COLUMN observacoes VARCHAR NOT NULL DEFAULT ''"
+            )
             conn.commit()
 
 
@@ -405,7 +413,12 @@ def horario_disponivel(inicio: str, fim: str, ignorar_id: int | None = None) -> 
 
 
 def criar_agendamento(
-    servico_id: int, telefone_cliente: str, nome_cliente: str, inicio: str, fim: str
+    servico_id: int,
+    telefone_cliente: str,
+    nome_cliente: str,
+    inicio: str,
+    fim: str,
+    observacoes: str = "",
 ) -> Agendamento | None:
     """Checa conflito e grava em uma única seção crítica (lock + SQLite serial)."""
     with _lock, _session() as s:
@@ -417,6 +430,7 @@ def criar_agendamento(
             nome_cliente=nome_cliente,
             inicio=inicio,
             fim=fim,
+            observacoes=observacoes.strip(),
         )
         s.add(a)
         s.commit()

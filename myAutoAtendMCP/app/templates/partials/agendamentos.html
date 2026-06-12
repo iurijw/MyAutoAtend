@@ -13,7 +13,10 @@
             <div><div class="who">{{ a.nome_cliente }}</div><div class="meta">{{ a.telefone_cliente }}</div></div>
           </div>
         </td>
-        <td>{{ servico_nome.get(a.servico_id, '—') }}</td>
+        <td>
+          {{ servico_nome.get(a.servico_id, '—') }}
+          {% if a.observacoes %}<div class="meta" title="Observações">📝 {{ a.observacoes }}</div>{% endif %}
+        </td>
         <td class="when-cell">
           <span class="d">{{ a.inicio.split('T')[0] }}</span>
           <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
