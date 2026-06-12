@@ -158,7 +158,6 @@ docker compose up -d --build
 
 ## Todo
 
-- [ ] Adicionar opção de cadastro manual de agendamentos no admin UI.
 - [ ] Adicionar a opção de ativar (no painel admin ou pedindo ao bot pelo WhatsApp) o aviso no WhatsApp do dono/administrador sobre agendamentos, cancelamentos etc.
 - [ ] Adicionar opção de avisar o cliente quando o serviço dele for reagendado/cancelado (a IA avisa a ação do dono/administrador com o aval dele).
 - [ ] Botão no painel admin e comando via WhatsApp para o bot parar de responder a uma pessoa/número de WhatsApp específico.

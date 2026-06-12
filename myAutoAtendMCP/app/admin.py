@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import agente, db, evolution, ia
 from .config import settings
+from .phone import normalizar
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -338,6 +339,50 @@ def excluir_servico(servico_id: int, _: str = Depends(autenticar)):
 # ---------------------------------------------------------------------------
 # Agendamentos
 # ---------------------------------------------------------------------------
+
+
+@router.post("/admin/agendamento")
+def novo_agendamento(
+    _: str = Depends(autenticar),
+    servico_id: int = Form(...),
+    nome_cliente: str = Form(...),
+    telefone_cliente: str = Form(...),
+    inicio: str = Form(...),
+    observacoes: str = Form(""),
+):
+    """Cadastro manual pelo painel. O dono pode marcar fora do horário de
+    funcionamento (override consciente, como no reagendar do painel) — só
+    conflito com agendamento/bloqueio é recusado."""
+    servico = db.get_servico(servico_id)
+    if not servico:
+        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+    nome = nome_cliente.strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Informe o nome do cliente.")
+    tel = telefone_cliente.strip()
+    if not tel:
+        raise HTTPException(status_code=400, detail="Informe o telefone do cliente.")
+    try:
+        dt_inicio = datetime.fromisoformat(inicio)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Horário inválido.")
+    fim = (dt_inicio + timedelta(minutes=servico.duracao_min)).isoformat(
+        timespec="minutes"
+    )
+    ag = db.criar_agendamento(
+        servico_id=servico_id,
+        telefone_cliente=normalizar(tel) or tel,
+        nome_cliente=nome,
+        inicio=dt_inicio.isoformat(timespec="minutes"),
+        fim=fim,
+        observacoes=observacoes.strip(),
+    )
+    if not ag:
+        raise HTTPException(
+            status_code=409,
+            detail="Horário indisponível (conflita com agendamento ou bloqueio).",
+        )
+    return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/admin/agendamento/{agendamento_id}/cancelar")

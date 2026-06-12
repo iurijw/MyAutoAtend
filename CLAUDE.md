@@ -101,6 +101,10 @@ primeiro `docker compose up -d`.
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.
 - **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
+- **Cadastro manual de agendamento**: form no card "Agendamentos ativos" →
+  `POST /admin/agendamento` (telefone normalizado E.164; ignora horário de
+  funcionamento de propósito — override do dono, como o reagendar do painel;
+  conflito com agendamento/bloqueio → 409).
 - **Horários de funcionamento**: card próprio no painel; grade semanal na
   tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
   linha = fechado). `POST /admin/horarios` (replace-all da grade),
