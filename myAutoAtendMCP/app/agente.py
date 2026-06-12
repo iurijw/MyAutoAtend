@@ -17,7 +17,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelMessagesTypeAdapter, ModelRequest, UserPromptPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    SystemPromptPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -139,6 +145,11 @@ def _system_prompt() -> str:
     return "\n\n".join(p for p in partes if p)
 
 
+# Registrado como system prompt DINÂMICO: o pydantic-ai reavalia o part pelo
+# dynamic_ref (= __qualname__) a cada run, mesmo com message_history.
+_REF_PROMPT_DINAMICO = _system_prompt.__qualname__
+
+
 # ---------------------------------------------------------------------------
 # Memória (janela sem quebrar pares tool-call/return)
 # ---------------------------------------------------------------------------
@@ -152,6 +163,30 @@ def _carregar_memoria(telefone: str) -> list[ModelMessage]:
         return ModelMessagesTypeAdapter.validate_json(bruto)
     except Exception:
         return []  # histórico de versão incompatível → recomeça
+
+
+def _renovar_system_prompt(msgs: list[ModelMessage]) -> list[ModelMessage]:
+    """Garante um único SystemPromptPart dinâmico no primeiro request.
+
+    Sem isso o system prompt congela: com message_history o pydantic-ai NÃO
+    injeta o prompt de novo — reusa o part gravado na 1ª mensagem da conversa
+    (data/hora e edições do painel ficam presas no primeiro contato), e o
+    corte da janela (_aparar) pode descartar o part por inteiro. Aqui os parts
+    antigos saem e entra um placeholder com dynamic_ref, que o pydantic-ai
+    substitui pelo _system_prompt() atual a cada run.
+    """
+    if not msgs:
+        return msgs
+    for m in msgs:
+        if isinstance(m, ModelRequest):
+            m.parts = [p for p in m.parts if not isinstance(p, SystemPromptPart)]
+    primeiro = msgs[0]
+    if isinstance(primeiro, ModelRequest):
+        primeiro.parts = [
+            SystemPromptPart(content="", dynamic_ref=_REF_PROMPT_DINAMICO),
+            *primeiro.parts,
+        ]
+    return msgs
 
 
 def _aparar(msgs: list[ModelMessage]) -> list[ModelMessage]:
@@ -187,9 +222,10 @@ async def responder(telefone: str, mensagem: str) -> str:
         cfg.modelo or ia.MODELO_PADRAO["texto"],
         provider=OpenAIProvider(base_url=cfg.base_url, api_key=cfg.api_key),
     )
-    agent = Agent(model, system_prompt=_system_prompt(), tools=_TOOLS, retries=2)
+    agent = Agent(model, tools=_TOOLS, retries=2)
+    agent.system_prompt(dynamic=True)(_system_prompt)
 
-    historico = _carregar_memoria(telefone)
+    historico = _renovar_system_prompt(_carregar_memoria(telefone))
     result = await agent.run(mensagem, message_history=historico)
 
     msgs = _aparar(list(result.all_messages()))
