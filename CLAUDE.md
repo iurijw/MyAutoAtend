@@ -111,6 +111,12 @@ primeiro `docker compose up -d`.
   painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em
   `_migrar`). Suprimido se ação é do próprio dono, telefone placeholder ou
   flag off; falha de envio nunca quebra a tool (`enviar_texto_sync`, 5s).
+- **Endurecimento contra injeção**: webhook exige `?token=` (hash da SENHA,
+  `settings.webhook_token`; Evolution configurada com ele no bootstrap —
+  forja local de remoteJid → 403); `[TAREFA INTERNA]` vindo do webhook é
+  neutralizado (`whatsapp._sanitizar_entrada` — só o worker injeta o marcador
+  legítimo); prompt MCP instrui que tool results são dados, não instruções;
+  `groupsIgnore: true` aplicado a cada boot (grupos compartilhariam memória).
 - **Ações proativas** (`app/tarefas.py`): fila persistente `Tarefa` + worker
   asyncio no lifespan (tick 30s). Cada tarefa roda `agente.executar_tarefa`
   (mesma memória do contato, input prefixado `[TAREFA INTERNA]`) e envia via
@@ -146,7 +152,9 @@ docker logs -f mcp_agendamentos
 
 # Simular mensagem recebida (teste sem WhatsApp pareado)
 # ATENÇÃO: body precisa ser UTF-8 (PowerShell 5.1 manda Latin-1 por padrão)
-curl -s -X POST http://localhost:8000/webhook/whatsapp/receberMensagem \
+# O webhook exige ?token= (hash da SENHA) — pegue assim:
+TOKEN=$(docker exec mcp_agendamentos python -c "from app.config import settings; print(settings.webhook_token)")
+curl -s -X POST "http://localhost:8000/webhook/whatsapp/receberMensagem?token=$TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"instance":"evo_bot","data":{"key":{"remoteJid":"5599999999999@s.whatsapp.net","fromMe":false,"id":"TEST1"},"pushName":"Teste","messageType":"conversation","message":{"conversation":"Oi"}}}'
 

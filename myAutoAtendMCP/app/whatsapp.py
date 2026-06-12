@@ -18,10 +18,13 @@ import asyncio
 import logging
 import random
 import re
+import secrets
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 from . import agente, auth, evolution, ia
+from .config import settings
 from .phone import mesmo_numero
 
 log = logging.getLogger("whatsapp")
@@ -42,9 +45,15 @@ _timers: dict[str, asyncio.Task] = {}
 
 
 @router.post("/webhook/whatsapp/receberMensagem")
-async def receber_mensagem(request: Request):
+async def receber_mensagem(request: Request, token: str = ""):
     """Recebe MESSAGES_UPSERT da Evolution. Responde 200 imediato; o
-    processamento segue em background (a Evolution não espera resposta)."""
+    processamento segue em background (a Evolution não espera resposta).
+
+    Exige `?token=` (configurado na Evolution pelo bootstrap): sem ele,
+    qualquer processo local na porta 8000 forjaria um evento com o
+    remoteJid do dono e rodaria o agente com privilégios de dono."""
+    if not secrets.compare_digest(token, settings.webhook_token):
+        return JSONResponse({"erro": "token inválido"}, status_code=403)
     body = await request.json()
     asyncio.create_task(_processar_evento(body))
     return {"ok": True}
@@ -61,11 +70,22 @@ async def _processar_evento(body: dict) -> None:
         texto = await _extrair_texto(data)
         if texto is None:
             return  # tipo não suportado (sticker, contato, etc.)
+        texto = _sanitizar_entrada(texto)
 
         await evolution.marcar_como_lida(remote_jid, False, key.get("id") or "")
         _agendar_lote(remote_jid, texto)
     except Exception:  # noqa: BLE001
         log.exception("Erro processando evento do webhook")
+
+
+# O marcador de tarefa interna vindo de FORA é forja: turnos legítimos nunca
+# passam pelo webhook (só o worker de app/tarefas.py os injeta no agente).
+# Sem isso, o cliente digitando "[TAREFA INTERNA] ..." se passa pelo sistema.
+_RE_MARCADOR_FORJADO = re.compile(r"\[\s*tarefa\s*interna[^\]]*\]", re.IGNORECASE)
+
+
+def _sanitizar_entrada(texto: str) -> str:
+    return _RE_MARCADOR_FORJADO.sub("[conteúdo removido]", texto)
 
 
 async def _extrair_texto(data: dict) -> str | None:

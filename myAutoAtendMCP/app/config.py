@@ -6,6 +6,7 @@ telefone do dono, fuso) vem daqui. No Docker são injetadas pelo compose.
 
 from __future__ import annotations
 
+import hashlib
 import os
 
 
@@ -33,6 +34,13 @@ class Settings:
         "MCP_WEBHOOK_URL",
         "http://mcp_agendamentos:8000/webhook/whatsapp/receberMensagem",
     )
+
+    # Token do webhook: impede forja local de eventos (remoteJid do dono).
+    # Derivado da SENHA por hash — URLs vazam em logs; o hash não devolve a
+    # senha. A Evolution entrega com ?token=...; o endpoint exige igualdade.
+    webhook_token: str = hashlib.sha256(
+        f"webhook:{admin_pass}".encode()
+    ).hexdigest()[:32]
 
     # Seed legado da instrução geral (1º acesso ao card do painel). Vazio →
     # vale o padrão em app/agente.py; depois do 1º save, SQLite (tabela Prompt).

@@ -199,18 +199,23 @@ async def garantir_instancia(webhook_url: str) -> None:
             if cr.status_code not in (200, 201):
                 log.error("Falha ao criar instância: %s", cr.text[:300])
                 return
-            await c.post(
-                f"/settings/set/{nome}",
-                json={
-                    "rejectCall": False,
-                    "msgCall": "",
-                    "groupsIgnore": False,
-                    "alwaysOnline": False,
-                    "readMessages": False,
-                    "readStatus": False,
-                    "syncFullHistory": False,
-                },
-            )
+
+        # Settings aplicadas em TODO boot (idempotente, como o webhook):
+        # instância antiga ganha mudanças sem reset. groupsIgnore: grupos
+        # compartilham memória por jid — participantes injetariam contexto
+        # uns contra os outros, e o bot responderia no grupo.
+        await c.post(
+            f"/settings/set/{nome}",
+            json={
+                "rejectCall": False,
+                "msgCall": "",
+                "groupsIgnore": True,
+                "alwaysOnline": False,
+                "readMessages": False,
+                "readStatus": False,
+                "syncFullHistory": False,
+            },
+        )
 
         wh = await c.post(
             f"/webhook/set/{nome}",

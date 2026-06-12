@@ -69,7 +69,9 @@ class SolicitanteMiddleware:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     bootstrap = asyncio.create_task(
-        evolution.garantir_instancia(settings.webhook_url)
+        evolution.garantir_instancia(
+            f"{settings.webhook_url}?token={settings.webhook_token}"
+        )
     )
     worker = asyncio.create_task(tarefas.worker())  # ações proativas do bot
     async with mcp.session_manager.run():
