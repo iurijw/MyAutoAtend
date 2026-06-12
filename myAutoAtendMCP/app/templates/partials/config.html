@@ -1,15 +1,10 @@
 <!-- ============ CONFIGURAÇÃO ============ -->
 <div class="card collapsed drag-sec" id="config-card" data-sec="config">
-  <div class="card-head" id="config-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Funcionamento</span><span class="wa-chevron" title="Expandir/recolher">▾</span></div>
+  <div class="card-head" id="config-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Geral</span><span class="wa-chevron" title="Expandir/recolher">▾</span></div>
   <form method="post" action="/admin/config" id="config-body">
     <div class="row">
       <div><label>Telefone do dono <span style="text-transform:none;font-weight:400">(autoriza ações restritas)</span></label><input name="telefone_dono" value="{{ config.telefone_dono }}"></div>
       <div><label>Fuso horário</label><input name="fuso" value="{{ config.fuso }}"></div>
-    </div>
-    <div class="row3">
-      <div><label>Abertura</label><input name="abertura" type="time" value="{{ config.abertura }}"></div>
-      <div><label>Fechamento</label><input name="fechamento" type="time" value="{{ config.fechamento }}"></div>
-      <div><label>Slot (min)</label><input name="duracao_slot_min" type="number" min="5" step="5" value="{{ config.duracao_slot_min }}"></div>
     </div>
     <button class="btn-primary">Salvar configuração</button>
   </form>

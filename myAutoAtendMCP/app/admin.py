@@ -9,7 +9,7 @@ PARA EVOLUÇÃO FUTURA: trocar Basic por login de sessão com senha em hash
 """
 
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -42,6 +42,11 @@ def painel(request: Request, _: str = Depends(autenticar)):
     nome_por_id = {s.id: s.nome for s in servicos}
     agendamentos = sorted(db.listar_agendamentos(), key=lambda a: a.inicio)
     bloqueios = sorted(db.listar_bloqueios(), key=lambda b: (b.data, b.inicio or ""))
+    horarios = db.listar_horarios()
+    horarios_por_dia: dict[int, list] = {d: [] for d in range(7)}
+    for h in horarios:
+        if 0 <= h.dia_semana <= 6:
+            horarios_por_dia[h.dia_semana].append(h)
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -52,6 +57,8 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "agendamentos": agendamentos,
             "servico_nome": nome_por_id,
             "n_ativos": sum(1 for s in servicos if s.ativo),
+            "horarios_por_dia": horarios_por_dia,
+            "n_horarios": len(horarios),
             "evolution_url": settings.evolution_external_url,
             "provedores_ia": ia.PROVEDORES,
         },
@@ -235,17 +242,70 @@ def salvar_config(
     _: str = Depends(autenticar),
     telefone_dono: str = Form(...),
     fuso: str = Form(...),
-    abertura: str = Form(...),
-    fechamento: str = Form(...),
-    duracao_slot_min: int = Form(...),
 ):
-    db.update_config(
-        telefone_dono=telefone_dono,
-        fuso=fuso,
-        abertura=abertura,
-        fechamento=fechamento,
-        duracao_slot_min=duracao_slot_min,
-    )
+    db.update_config(telefone_dono=telefone_dono, fuso=fuso)
+    return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Horários de funcionamento (grade semanal). O form do card envia a grade
+# inteira como listas paralelas (dia / inicio / fim, uma trinca por intervalo)
+# e a gravação é um replace-all — o que está na tela vira a verdade.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/horarios")
+def salvar_horarios(
+    _: str = Depends(autenticar),
+    dia: list[int] = Form([]),
+    inicio: list[str] = Form([]),
+    fim: list[str] = Form([]),
+):
+    if not (len(dia) == len(inicio) == len(fim)):
+        raise HTTPException(status_code=400, detail="Linhas de horário inconsistentes.")
+
+    intervalos: list[tuple[int, str, str]] = []
+    for d, ini, f in zip(dia, inicio, fim):
+        if not 0 <= d <= 6:
+            raise HTTPException(status_code=400, detail="Dia da semana inválido.")
+        try:
+            time.fromisoformat(ini), time.fromisoformat(f)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Horário inválido (use HH:MM).")
+        if f <= ini:  # "HH:MM" zero-padded → comparação lexicográfica vale
+            raise HTTPException(
+                status_code=400,
+                detail=f"Intervalo termina antes de começar ({ini}–{f}).",
+            )
+        intervalos.append((d, ini, f))
+
+    por_dia: dict[int, list[tuple[str, str]]] = {}
+    for d, ini, f in intervalos:
+        por_dia.setdefault(d, []).append((ini, f))
+    for faixas in por_dia.values():
+        faixas.sort()
+        for (_i1, f1), (i2, _f2) in zip(faixas, faixas[1:]):
+            if i2 < f1:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Intervalos sobrepostos no mesmo dia ({f1} × {i2}).",
+                )
+
+    db.substituir_horarios(intervalos)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/horarios/restaurar")
+def restaurar_horarios(_: str = Depends(autenticar)):
+    """Volta ao padrão: segunda a sexta, 08:00–12:00 e 13:30–18:00."""
+    db.restaurar_horarios_padrao()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/horarios/limpar")
+def limpar_horarios(_: str = Depends(autenticar)):
+    """Apaga a grade inteira — todos os dias ficam sem expediente."""
+    db.limpar_horarios()
     return RedirectResponse("/admin", status_code=303)
 
 

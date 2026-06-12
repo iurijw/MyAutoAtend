@@ -26,15 +26,28 @@ from .phone import mesmo_numero
 
 
 class Config(SQLModel, table=True):
-    # Nota de migração: bancos antigos têm a coluna `instrucoes_gerais` órfã
-    # (o contexto da IA passou a viver no system prompt, card "Instruções do
-    # Agente"). SQLite ignora colunas fora do modelo — sem migração.
+    # Nota de migração: bancos antigos têm colunas órfãs (`instrucoes_gerais`,
+    # `abertura`, `fechamento`, `duracao_slot_min` — funcionamento migrou para
+    # a tabela HorarioFuncionamento; slot nunca foi lido). SQLite ignora
+    # colunas fora do modelo — sem migração.
     id: int = Field(default=1, primary_key=True)
     telefone_dono: str = settings.owner_phone
     fuso: str = settings.timezone
-    abertura: str = "09:00"
-    fechamento: str = "18:00"
-    duracao_slot_min: int = 30
+
+
+class HorarioFuncionamento(SQLModel, table=True):
+    """Intervalo de atendimento de um dia da semana (0=segunda … 6=domingo).
+
+    Várias linhas por dia = vários intervalos (ex.: manhã e tarde).
+    Dia sem linha nenhuma = fechado. Tabela vazia = tudo fechado (estado
+    legítimo via "Apagar tudo" no painel — por isso o seed do padrão só
+    acontece quando a tabela é criada, nunca quando está vazia).
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    dia_semana: int  # 0=segunda … 6=domingo (convenção do datetime.weekday())
+    inicio: str  # "HH:MM"
+    fim: str  # "HH:MM"
 
 
 class Prompt(SQLModel, table=True):
@@ -125,12 +138,21 @@ def _session() -> Session:
 
 
 def init_db() -> None:
+    # Seed do funcionamento: só quando a tabela ainda não existe (primeiro
+    # boot ou upgrade). Tabela vazia ≠ tabela nova — "Apagar tudo" no painel
+    # esvazia de propósito e não pode ser revertido por um restart.
+    with engine.connect() as conn:
+        tinha_horarios = bool(
+            conn.exec_driver_sql("PRAGMA table_info(horariofuncionamento)").fetchall()
+        )
     SQLModel.metadata.create_all(engine)
     _migrar()
     with _session() as s:
         if s.get(Config, 1) is None:
             s.add(Config(id=1))
             s.commit()
+    if not tinha_horarios:
+        restaurar_horarios_padrao()
 
 
 def _migrar() -> None:
@@ -169,6 +191,65 @@ def update_config(**campos) -> Config:
         s.add(cfg)
         s.commit()
         return cfg
+
+
+# ---------------------------------------------------------------------------
+# Horários de funcionamento (grade semanal de atendimento)
+# ---------------------------------------------------------------------------
+
+# Padrão: segunda a sexta, 08:00–12:00 e 13:30–18:00.
+HORARIOS_PADRAO: list[tuple[int, str, str]] = [
+    (dia, inicio, fim)
+    for dia in range(5)
+    for inicio, fim in (("08:00", "12:00"), ("13:30", "18:00"))
+]
+
+
+def listar_horarios() -> list[HorarioFuncionamento]:
+    with _session() as s:
+        stmt = select(HorarioFuncionamento).order_by(
+            HorarioFuncionamento.dia_semana, HorarioFuncionamento.inicio
+        )
+        return list(s.exec(stmt).all())
+
+
+def horarios_do_dia(dia_semana: int) -> list[HorarioFuncionamento]:
+    with _session() as s:
+        stmt = (
+            select(HorarioFuncionamento)
+            .where(HorarioFuncionamento.dia_semana == dia_semana)
+            .order_by(HorarioFuncionamento.inicio)
+        )
+        return list(s.exec(stmt).all())
+
+
+def substituir_horarios(intervalos: list[tuple[int, str, str]]) -> None:
+    """Troca a grade inteira (apaga tudo + grava) numa única transação."""
+    with _lock, _session() as s:
+        for h in s.exec(select(HorarioFuncionamento)).all():
+            s.delete(h)
+        for dia, inicio, fim in intervalos:
+            s.add(HorarioFuncionamento(dia_semana=dia, inicio=inicio, fim=fim))
+        s.commit()
+
+
+def restaurar_horarios_padrao() -> None:
+    substituir_horarios(HORARIOS_PADRAO)
+
+
+def limpar_horarios() -> None:
+    substituir_horarios([])
+
+
+def dentro_do_funcionamento(inicio: datetime, fim: datetime) -> bool:
+    """True se [inicio, fim] cabe inteiro num intervalo de funcionamento do dia."""
+    dia = inicio.date()
+    for h in horarios_do_dia(dia.weekday()):
+        h_ini = datetime.fromisoformat(f"{dia}T{h.inicio}")
+        h_fim = datetime.fromisoformat(f"{dia}T{h.fim}")
+        if inicio >= h_ini and fim <= h_fim:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------

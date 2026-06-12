@@ -4,6 +4,7 @@
 import './whatsapp.js';
 import './ia.js';
 import './prompt.js';
+import './horarios.js';
 import './config.js';
 import './drag.js';
 import './gear.js';

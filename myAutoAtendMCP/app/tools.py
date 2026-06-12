@@ -60,30 +60,41 @@ def listar_servicos() -> list[dict]:
 def consultar_horarios_disponiveis(data: str, servico_id: int) -> dict:
     """Lista horários livres em uma data (formato YYYY-MM-DD) para um serviço.
 
-    Gera slots entre abertura e fechamento usando a duração do serviço.
-    Horários que já passaram (no fuso configurado) são omitidos.
+    Gera slots dentro dos intervalos de funcionamento do dia da semana
+    (grade configurada no painel) usando a duração do serviço. Dias sem
+    expediente retornam lista vazia com aviso. Horários que já passaram
+    (no fuso configurado) são omitidos.
     """
     servico = db.get_servico(servico_id)
     if not servico:
         return {"erro": "Serviço não encontrado."}
 
-    cfg = db.get_config()
     try:
-        abertura = datetime.fromisoformat(f"{data}T{cfg.abertura}")
-        fechamento = datetime.fromisoformat(f"{data}T{cfg.fechamento}")
+        dia = date.fromisoformat(data)
     except ValueError:
         return {"erro": "Data inválida. Use o formato YYYY-MM-DD."}
 
+    intervalos = db.horarios_do_dia(dia.weekday())
+    if not intervalos:
+        return {
+            "data": data,
+            "servico": servico.nome,
+            "horarios": [],
+            "aviso": "Sem expediente neste dia (fechado).",
+        }
+
     agora = _agora_local()
     livres: list[str] = []
-    atual = abertura
     passo = timedelta(minutes=servico.duracao_min)
-    while atual + passo <= fechamento:
-        ini = atual.isoformat(timespec="minutes")
-        fim = (atual + passo).isoformat(timespec="minutes")
-        if atual >= agora and db.horario_disponivel(ini, fim):
-            livres.append(atual.strftime("%H:%M"))
-        atual += passo
+    for janela in intervalos:
+        atual = datetime.fromisoformat(f"{data}T{janela.inicio}")
+        limite = datetime.fromisoformat(f"{data}T{janela.fim}")
+        while atual + passo <= limite:
+            ini = atual.isoformat(timespec="minutes")
+            fim = (atual + passo).isoformat(timespec="minutes")
+            if atual >= agora and db.horario_disponivel(ini, fim):
+                livres.append(atual.strftime("%H:%M"))
+            atual += passo
 
     return {"data": data, "servico": servico.nome, "horarios": livres}
 
@@ -119,9 +130,13 @@ def agendar(
     if dt_inicio < _agora_local():
         return {"erro": "Não é possível agendar em um horário no passado."}
 
-    fim = (dt_inicio + timedelta(minutes=servico.duracao_min)).isoformat(
-        timespec="minutes"
-    )
+    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min)
+    if not db.dentro_do_funcionamento(dt_inicio, dt_fim):
+        return {
+            "erro": "Fora do horário de funcionamento. "
+            "Consulte os horários disponíveis da data."
+        }
+    fim = dt_fim.isoformat(timespec="minutes")
 
     ag = db.criar_agendamento(
         servico_id=servico_id,
@@ -171,9 +186,13 @@ def reagendar(
     if dt_inicio < _agora_local():
         return {"erro": "Não é possível remarcar para um horário no passado."}
 
-    novo_fim = (dt_inicio + timedelta(minutes=servico.duracao_min)).isoformat(
-        timespec="minutes"
-    )
+    dt_fim = dt_inicio + timedelta(minutes=servico.duracao_min)
+    if not db.dentro_do_funcionamento(dt_inicio, dt_fim):
+        return {
+            "erro": "Fora do horário de funcionamento. "
+            "Consulte os horários disponíveis da data."
+        }
+    novo_fim = dt_fim.isoformat(timespec="minutes")
 
     if not db.reagendar_agendamento(
         agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim

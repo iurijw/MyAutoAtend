@@ -48,7 +48,7 @@ _SECAO_FORMATACAO = "## Formatação"
 PROMPT_MCP_PADRAO = f"""{_SECAO_MCP}
 Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
 - listar_servicos: catálogo com nome, descrição, valor e duração.
-- consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD).
+- consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD). Respeita o horário de funcionamento por dia da semana; dia fechado volta vazio com aviso — ofereça outra data.
 - agendar(servico_id, nome_cliente, inicio, observacoes): cria agendamento; inicio = YYYY-MM-DDTHH:MM; observacoes é opcional (detalhes que o cliente mencionar — não pergunte por elas).
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).

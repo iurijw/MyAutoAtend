@@ -4,7 +4,8 @@
 const KEY = 'admin-cards-ocultos';
 const NOMES = {
   wa: 'Conexão WhatsApp', ia: 'Provedores de IA', prompt: 'Instruções do Agente',
-  agendamentos: 'Agendamentos ativos', catalogo: 'Serviços & Bloqueios', config: 'Configuração geral',
+  agendamentos: 'Agendamentos ativos', catalogo: 'Serviços & Bloqueios',
+  horarios: 'Horários de Funcionamento', config: 'Configuração geral',
 };
 const wrap  = document.querySelector('.wrap');
 const fab   = document.getElementById('gear-fab');

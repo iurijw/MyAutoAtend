@@ -23,7 +23,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
 | `myAutoAtendMCP/app/tools.py` | 12 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head, header, stats, includes dos partials, ponte `window.__ADMIN__` |
-| `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `catalogo` · `config` |
+| `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `catalogo` · `horarios` · `config` |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
@@ -88,7 +88,8 @@ primeiro `docker compose up -d`.
   endpoint `/mcp/` (streamable-http) mantido p/ clients MCP externos
   (Claude etc.) — o agente interno NÃO passa por ele (chama as tools direto).
 - Persistência SQLite (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
-  Tabelas: Config, Prompt, ProvedorIA, Conversa, Servico, Bloqueio, Agendamento.
+  Tabelas: Config, Prompt, ProvedorIA, Conversa, Servico, Bloqueio, Agendamento,
+  HorarioFuncionamento.
 - Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
 - Clients MCP externos identificam o solicitante via `?solicitante=` ou header
   `X-Solicitante-Telefone` (middleware em `main.py`).
@@ -100,6 +101,13 @@ primeiro `docker compose up -d`.
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.
 - **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
+- **Horários de funcionamento**: card próprio no painel; grade semanal na
+  tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
+  linha = fechado). `POST /admin/horarios` (replace-all da grade),
+  `/admin/horarios/restaurar` (padrão seg–sex 08:00–12:00 + 13:30–18:00),
+  `/admin/horarios/limpar`. Seed do padrão SÓ na criação da tabela (vazia ≠
+  nova). Tools `consultar_horarios_disponiveis`/`agendar`/`reagendar`
+  respeitam a grade; `Config.abertura/fechamento` viraram colunas órfãs.
 - Após mudar código: `docker compose up -d --build mcp-agendamentos`.
 
 ---

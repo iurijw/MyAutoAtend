@@ -172,6 +172,25 @@ button:active,.btn:active{transform:translateY(1px);}
 #config-card.collapsed #config-body{display:none;}
 #config-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 
+/* ---------- Horários de funcionamento ---------- */
+#horarios-card .card-head{cursor:pointer; user-select:none;}
+#horarios-card.collapsed .card-head{margin-bottom:0; padding-bottom:0; border-bottom:none;}
+#horarios-card.collapsed #horarios-body{display:none;}
+#horarios-card.collapsed .wa-chevron{transform:rotate(-90deg);}
+.hf-sub{margin:0 0 18px; font-size:13.5px; color:var(--ink-soft);}
+.hf-dia{padding:12px 0; border-bottom:1px solid var(--line);}
+.hf-dia:last-of-type{border-bottom:none;}
+.hf-dia-head{display:flex; align-items:center; gap:12px;}
+.hf-dia-nome{font-weight:600; flex:none; min-width:130px;}
+.hf-fechado{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--ink-soft); font-style:italic;}
+.hf-dia-head .hf-add{margin-left:auto;}
+.hf-intervalos{display:flex; flex-direction:column; gap:8px;}
+.hf-int{display:flex; align-items:center; gap:10px; margin-top:8px;}
+.hf-int input[type="time"]{width:auto; flex:none;}
+.hf-ate{font-size:13px; color:var(--ink-soft);}
+.hf-rm{flex:none; padding:7px 10px;}
+.hf-acoes{display:flex; gap:10px; justify-content:flex-end; margin-top:18px; border-top:2px solid var(--paper-2); padding-top:16px;}
+
 /* ---------- reordenação dos cards (drag & drop) ---------- */
 .drag-grip{cursor:grab; color:var(--ink-soft); font-size:15px; user-select:none;
   padding:2px 6px; border-radius:6px; opacity:.5; flex:none; align-self:center;}

@@ -159,7 +159,6 @@ docker compose up -d --build
 ## Todo
 
 - [ ] Adicionar opção de cadastro manual de agendamentos no admin UI.
-- [ ] Tirar o horário de funcionamento das Configurações Gerais e criar uma nova aba de "Horários de Funcionamento", sendo possível incluir o dia da semana e diversos intervalos de horários por dia — por exemplo: Segunda-feira | 13:00 às 15:00; Terça-feira | 08:00 às 09:00, 10:00 às 11:00. O padrão deverá ser de segunda a sexta, das 8:00 às 12:00 e das 13:30 às 18:00. Deve ter opção de restaurar o padrão e de apagar tudo.
 - [ ] Adicionar a opção de ativar (no painel admin ou pedindo ao bot pelo WhatsApp) o aviso no WhatsApp do dono/administrador sobre agendamentos, cancelamentos etc.
 - [ ] Adicionar opção de avisar o cliente quando o serviço dele for reagendado/cancelado (a IA avisa a ação do dono/administrador com o aval dele).
 - [ ] Botão no painel admin e comando via WhatsApp para o bot parar de responder a uma pessoa/número de WhatsApp específico.
