@@ -25,7 +25,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, evolution
+from . import auth, evolution, tarefas
 from .admin import router as admin_router
 from .config import settings
 from .tools import mcp
@@ -71,8 +71,10 @@ async def lifespan(_: FastAPI):
     bootstrap = asyncio.create_task(
         evolution.garantir_instancia(settings.webhook_url)
     )
+    worker = asyncio.create_task(tarefas.worker())  # ações proativas do bot
     async with mcp.session_manager.run():
         yield
+    worker.cancel()
     bootstrap.cancel()
 
 

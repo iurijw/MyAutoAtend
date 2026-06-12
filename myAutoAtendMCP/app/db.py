@@ -11,6 +11,7 @@ conflito e o INSERT dentro do mesmo processo (instância única).
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from threading import Lock
 from typing import Optional
@@ -107,6 +108,26 @@ class Bloqueio(SQLModel, table=True):
     inicio: Optional[str] = None  # "HH:MM" ou None para o dia inteiro
     fim: Optional[str] = None
     motivo: str = ""
+
+
+class Tarefa(SQLModel, table=True):
+    """Fila persistente de ações proativas do bot (worker em app/tarefas.py).
+
+    Qualquer feature que precise do bot iniciando conversa agenda uma linha
+    aqui; o worker do lifespan consome respeitando janela de cortesia, rate
+    limit e debounce ativo do contato. `telefone_alvo` em formato livre
+    (E.164 ou jid) — o worker resolve a chave de memória do contato.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tipo: str  # "contatar_cliente" (remanejamento de dia) — outros no futuro
+    telefone_alvo: str
+    payload: str = "{}"  # JSON com os dados do tipo
+    status: str = "pendente"  # pendente | executando | concluida | falhou
+    agendado_para: str  # ISO local "YYYY-MM-DDTHH:MM" (fuso da Config)
+    tentativas: int = 0
+    criado_em: str = ""
+    resultado: str = ""  # última resposta enviada ou erro
 
 
 class Agendamento(SQLModel, table=True):
@@ -312,6 +333,69 @@ def set_provedor_ia(
         s.add(p)
         s.commit()
         return p
+
+
+# ---------------------------------------------------------------------------
+# Tarefas (fila de ações proativas — consumida pelo worker de app/tarefas.py)
+# ---------------------------------------------------------------------------
+
+
+def criar_tarefa(
+    tipo: str, telefone_alvo: str, payload: dict, agendado_para: str
+) -> Tarefa:
+    with _lock, _session() as s:
+        t = Tarefa(
+            tipo=tipo,
+            telefone_alvo=telefone_alvo,
+            payload=json.dumps(payload, ensure_ascii=False),
+            agendado_para=agendado_para,
+            criado_em=datetime.now().isoformat(timespec="seconds"),
+        )
+        s.add(t)
+        s.commit()
+        return t
+
+
+def tarefas_vencidas(agora: str) -> list[Tarefa]:
+    """Pendentes com hora de disparo alcançada, na ordem de criação."""
+    with _session() as s:
+        stmt = (
+            select(Tarefa)
+            .where(Tarefa.status == "pendente", Tarefa.agendado_para <= agora)
+            .order_by(Tarefa.id)
+        )
+        return list(s.exec(stmt).all())
+
+
+def atualizar_tarefa(tarefa_id: int, **campos) -> None:
+    with _lock, _session() as s:
+        t = s.get(Tarefa, tarefa_id)
+        if not t:
+            return
+        for k, v in campos.items():
+            if hasattr(t, k):
+                setattr(t, k, v)
+        s.add(t)
+        s.commit()
+
+
+def resetar_tarefas_executando() -> int:
+    """Volta `executando` → `pendente` (retomada após crash/restart).
+    Pode causar um reenvio — aceitável, tentativas são limitadas."""
+    with _lock, _session() as s:
+        presas = s.exec(select(Tarefa).where(Tarefa.status == "executando")).all()
+        for t in presas:
+            t.status = "pendente"
+            s.add(t)
+        s.commit()
+        return len(presas)
+
+
+def chaves_conversas() -> list[str]:
+    """Chaves (remoteJid) com memória existente — p/ o worker reusar a chave
+    do contato em vez de inventar outra (nono dígito muda o jid)."""
+    with _session() as s:
+        return [c.telefone for c in s.exec(select(Conversa)).all()]
 
 
 # ---------------------------------------------------------------------------

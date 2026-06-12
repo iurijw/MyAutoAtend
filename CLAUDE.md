@@ -21,7 +21,8 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/agente.py` | Agente pydantic-ai: tools, memória (SQLite), system prompt |
 | `myAutoAtendMCP/app/ia.py` | Provedores de IA (config no SQLite), transcrição, visão, listagem de modelos |
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
-| `myAutoAtendMCP/app/tools.py` | 12 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
+| `myAutoAtendMCP/app/tools.py` | 13 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
+| `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head, header, stats, includes dos partials, ponte `window.__ADMIN__` |
 | `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `catalogo` · `horarios` · `config` |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
@@ -89,7 +90,7 @@ primeiro `docker compose up -d`.
   (Claude etc.) — o agente interno NÃO passa por ele (chama as tools direto).
 - Persistência SQLite (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
   Tabelas: Config, Prompt, ProvedorIA, Conversa, Servico, Bloqueio, Agendamento,
-  HorarioFuncionamento.
+  HorarioFuncionamento, Tarefa.
 - Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
 - Clients MCP externos identificam o solicitante via `?solicitante=` ou header
   `X-Solicitante-Telefone` (middleware em `main.py`).
@@ -110,6 +111,16 @@ primeiro `docker compose up -d`.
   painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em
   `_migrar`). Suprimido se ação é do próprio dono, telefone placeholder ou
   flag off; falha de envio nunca quebra a tool (`enviar_texto_sync`, 5s).
+- **Ações proativas** (`app/tarefas.py`): fila persistente `Tarefa` + worker
+  asyncio no lifespan (tick 30s). Cada tarefa roda `agente.executar_tarefa`
+  (mesma memória do contato, input prefixado `[TAREFA INTERNA]`) e envia via
+  `whatsapp.enviar_bolhas` — a resposta do cliente segue no pipeline reativo.
+  Guard-rails: janela de cortesia 08–20h (fuso da Config), adia se o contato
+  está no debounce, rate limit com jitter, máx. 3 tentativas, `executando`
+  órfã volta a pendente no boot, `IANaoConfigurada` não queima tentativa.
+  Caso âncora: tool `remanejar_dia(data, acao, motivo)` [DONO] — fecha o dia,
+  (se acao="cancelar") cancela os agendamentos, e cria uma tarefa
+  `contatar_cliente` por cliente afetado.
 - **Horários de funcionamento**: card próprio no painel; grade semanal na
   tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
   linha = fechado). `POST /admin/horarios` (replace-all da grade),

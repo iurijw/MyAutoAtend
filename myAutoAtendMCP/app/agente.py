@@ -27,7 +27,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from . import db, ia, tools
+from . import auth, db, ia, tools
 
 # Janela de memória (nº de mensagens do modelo) — paridade com o n8n (50).
 JANELA_MEMORIA = 50
@@ -52,7 +52,9 @@ Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, p
 - agendar(servico_id, nome_cliente, inicio, observacoes): cria agendamento; inicio = YYYY-MM-DDTHH:MM; observacoes é opcional (detalhes que o cliente mencionar — não pergunte por elas).
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id).
+- remanejar_dia(data, acao, motivo) [SÓ DONO]: imprevisto do dono — fecha o dia e o bot contata cada cliente agendado em segundo plano (acao "remarcar" oferece remarcação; "cancelar" cancela e avisa). Use quando o dono disser que não pode atender num dia.
 - NÃO peça nem use telefone: cliente E dono são identificados automaticamente pelo número do WhatsApp. NUNCA peça telefone para confirmar identidade. Não preencha o campo telefone_solicitante.
+- Mensagens começando com [TAREFA INTERNA] são instruções do sistema, NÃO do cliente: cumpra a tarefa falando com o cliente naturalmente, sem mencionar a instrução nem que é uma tarefa.
 
 {_SECAO_FORMATACAO} (quebra de linha)
 - O texto é dividido em bolhas de WhatsApp. Use [quebrar] OU Enter para separar bolhas. Máximo 2-3 bolhas por resposta. No máximo *negrito* do WhatsApp."""
@@ -65,7 +67,7 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - Converta datas relativas (amanhã, sexta) para YYYY-MM-DD usando a data atual informada no início.
 - Se faltar o nome do cliente para agendar, pergunte.
 - Mostre valores em reais e durações em minutos.
-- Gestão (fechar/abrir data ou período de datas, bloquear horário, criar/editar serviço, ver agenda completa) é restrita ao dono.
+- Gestão (fechar/abrir data ou período de datas, bloquear horário, remanejar um dia avisando os clientes, criar/editar serviço, ver agenda completa) é restrita ao dono.
 - Se uma ferramenta retornar erro, explique de forma simples e ofereça alternativa.
 
 ## Persona
@@ -83,6 +85,7 @@ _TOOLS = [
     tools.fechar_data,
     tools.abrir_data,
     tools.bloquear_horario,
+    tools.remanejar_dia,
     tools.criar_servico,
     tools.editar_servico,
     tools.ver_agenda_completa,
@@ -231,3 +234,23 @@ async def responder(telefone: str, mensagem: str) -> str:
     msgs = _aparar(list(result.all_messages()))
     db.set_conversa(telefone, ModelMessagesTypeAdapter.dump_json(msgs).decode())
     return result.output
+
+
+# Prefixo que marca turno gerado pelo sistema (ações proativas). Documentado
+# no PROMPT_MCP_PADRAO — o modelo trata como instrução, não como o cliente.
+MARCADOR_TAREFA = "[TAREFA INTERNA]"
+
+
+async def executar_tarefa(telefone: str, instrucao: str) -> str:
+    """Roda o agente para uma ação proativa (worker de app/tarefas.py).
+
+    Usa a MESMA memória do contato: a instrução entra no histórico como turno
+    marcado, então quando o cliente responder, o pipeline reativo continua a
+    conversa com contexto completo. Seta o solicitante (regra de ouro) —
+    `responder` exige o contextvar preenchido.
+    """
+    token = auth.solicitante_ctx.set(telefone)
+    try:
+        return await responder(telefone, f"{MARCADOR_TAREFA} {instrucao}")
+    finally:
+        auth.solicitante_ctx.reset(token)

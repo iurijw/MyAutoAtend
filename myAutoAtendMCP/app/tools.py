@@ -20,7 +20,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from . import auth, db, notificacoes
-from .phone import normalizar
+from .phone import mesmo_numero, normalizar
 
 # A porta MCP só é exposta em localhost e na rede interna do Docker (clients
 # alcançam via hostname `mcp_agendamentos:8000`). A proteção anti-DNS-rebinding
@@ -296,6 +296,60 @@ def bloquear_horario(
         data=data, inicio=inicio, fim=fim, motivo=motivo, data_fim=data_fim
     )
     return {"ok": True, "bloqueio": db.como_dict(b)}
+
+
+@mcp.tool()
+def remanejar_dia(
+    data: str,
+    acao: str = "remarcar",
+    motivo: str = "",
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """[DONO] Imprevisto do dono: fecha o dia (YYYY-MM-DD) e aciona o bot para
+    contatar cada cliente agendado, um a um, em segundo plano.
+
+    `acao` = "remarcar": agendamentos seguem ativos e o bot oferece remarcação
+    para outra data. `acao` = "cancelar": agendamentos são cancelados na hora
+    e o bot avisa cada cliente. O contato respeita janela de cortesia e fila —
+    pode levar alguns minutos.
+    """
+    if not auth.eh_dono(telefone_solicitante):
+        return auth.NEGADO_DONO
+    if acao not in ("remarcar", "cancelar"):
+        return {"erro": 'Ação inválida: use "remarcar" ou "cancelar".'}
+    if erro := _validar_periodo(data, None):
+        return erro
+
+    db.criar_bloqueio(
+        data=data, inicio=None, fim=None,
+        motivo=motivo or "imprevisto do dono", data_fim=None,
+    )
+
+    dono = db.get_config().telefone_dono
+    afetados = [a for a in db.listar_agendamentos() if a.inicio.startswith(data)]
+    agora = _agora_local().isoformat(timespec="minutes")
+    contatados = 0
+    for a in afetados:
+        if acao == "cancelar":
+            db.cancelar_agendamento(a.id)
+        if mesmo_numero(a.telefone_cliente, dono):
+            continue  # horário do próprio dono — não faz sentido contatá-lo
+        db.criar_tarefa(
+            tipo="contatar_cliente",
+            telefone_alvo=a.telefone_cliente,
+            payload={"agendamento_id": a.id, "acao": acao, "motivo": motivo},
+            agendado_para=agora,
+        )
+        contatados += 1
+
+    return {
+        "ok": True,
+        "data": data,
+        "acao": acao,
+        "dia_fechado": True,
+        "agendamentos_afetados": len(afetados),
+        "clientes_a_contatar": contatados,
+    }
 
 
 @mcp.tool()

@@ -22,6 +22,7 @@ import re
 from fastapi import APIRouter, Request
 
 from . import agente, auth, evolution, ia
+from .phone import mesmo_numero
 
 log = logging.getLogger("whatsapp")
 
@@ -147,11 +148,23 @@ async def _responder_contato(remote_jid: str, mensagem: str) -> None:
     finally:
         auth.solicitante_ctx.reset(token)
 
-    numero = remote_jid.split("@")[0]
+    await enviar_bolhas(remote_jid.split("@")[0], resposta)
+
+
+async def enviar_bolhas(numero: str, resposta: str) -> None:
+    """Divide em bolhas e envia com digitação proporcional — usado pelo
+    pipeline reativo E pelas ações proativas (app/tarefas.py)."""
     for bolha in dividir_bolhas(resposta):
         # Digitação proporcional (fórmula do workflow): min(0.4+len*0.02, 4)+rand*0.7
         segundos = min(0.4 + len(bolha) * 0.02, 4.0) + random.random() * 0.7
         await evolution.enviar_texto(numero, bolha, digitando_ms=int(segundos * 1000))
+
+
+def contato_ocupado(telefone: str) -> bool:
+    """True se o contato está no meio do debounce (mensagem dele em
+    processamento) — tarefa proativa adia para não atropelar a conversa."""
+    pendentes = set(_buffers) | set(_timers)
+    return any(mesmo_numero(telefone, jid) for jid in pendentes)
 
 
 # ---------------------------------------------------------------------------
