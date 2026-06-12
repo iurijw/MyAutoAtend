@@ -142,9 +142,22 @@ docker logs -f mcp_agendamentos   # ver a inicialização e o agente
 
 <br>
 
+## ⟳ Atualizar sem perder os dados
+
+Todos os dados (agendamentos, serviços, conversas, chaves de IA e pareamento do WhatsApp) ficam em **volumes Docker** — atualizar o código não os apaga:
+
+```bash
+git pull
+docker compose pull
+docker compose up -d --build
+```
+
+> ⚠️ **Nunca** use `docker compose down -v` para atualizar: o `-v` apaga os volumes (todos os dados, inclusive o pareamento do WhatsApp). Se precisar parar antes, use `docker compose down` sem `-v`.
+
+<br>
+
 ## Todo
 
-- [ ] Adicionar instrução no README de como atualizar o programa sem perder os dados.
 - [ ] Adicionar campo de observações no agendamento, sendo um campo opcional (informar ao agente que o campo existe).
 - [ ] Adicionar opção de cadastro manual de agendamentos no admin UI.
 - [ ] Tirar o horário de funcionamento das Configurações Gerais e criar uma nova aba de "Horários de Funcionamento", sendo possível incluir o dia da semana e diversos intervalos de horários por dia — por exemplo: Segunda-feira | 13:00 às 15:00; Terça-feira | 08:00 às 09:00, 10:00 às 11:00. O padrão deverá ser de segunda a sexta, das 8:00 às 12:00 e das 13:30 às 18:00. Deve ter opção de restaurar o padrão e de apagar tudo.
