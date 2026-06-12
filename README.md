@@ -144,23 +144,22 @@ docker logs -f mcp_agendamentos   # ver a inicialização e o agente
 
 ## Todo
 
-- [X] Adicionar novas opções de provedores de IA (chave/modelo atualizados no n8n pelo portal admin; fluxo unidirecional — a chave nunca é exibida de volta)
-- [X] Transferir lógica de pareamento do Whatsapp para o portal admin
-- [X] Adicionar shortchuts para abertura dos portais auxiliares (Evolution API e n8n) no portal admin
-- [X] Visualizacao de agendamentos com foto e número do Whatsapp no portal do admin
-- [X] Poder bloquear/fechar range de datas pelo portal do admin e conversa com o bot no WhatsApp — coluna `data_fim` no Bloqueio: `fechar_data`/`abrir_data`/`bloquear_horario` aceitam período, e o form do painel ganhou "Data final"
-- [X] Adicionar alguma forme de controlar o contexto do agente no nodo do n8n pelo portal do admin, atualmente definido na inicialização via .env (AGENT_SYSTEM_PROMPT) — card "Instruções do Agente": instrução geral + bloco MCP separado (avançado, com aviso e restauração do padrão)
-- [ ] Adicionar opção de avisar o cliente que foi reagendado/cancelado o serviço dele (a IA avisar a ação do dono/adminsitrador com o aval do mesmo)
-- [ ] Adicionar a opção de ativar (no painel de admin ou pedindo para o bot no whatsapp) o aviso para o Whatsapp do dono/administrador de agendamentos/cancelamentos, etc...
-- [ ] Opção de abrir conversa (abre um modal) no portal de admin, para visualizar as mensagens do whatsapp, com possibilidade de enviar mensagens manualmente pelo bot. Deste modo, como dependencia, deve-se criar uma aba nova de conversas (além de colocar um botão para abrir a conversa na listagem de agendamentos).
-- [ ] Botão no painel admin e comando via whatsapp para o bot parar de responder uma pessoa/numero de whatsapp especifico.
-- [X] Opção de esconder menus do painel do admin (por exemplo, conexão do whatsapp)... Os menus podem ser anexado novamente na pagina clicando em uma engrenagem no canto da página.
-- [ ] Adicionar opção de outros provedores de whisper (speech to test)
-- [ ] Adicionar opção de geração de audio pelo bot (para pessoas que não sabem ler e escrever)
-- [ ] Adicionar instrução no readme de como atualizar o programa sem perder os dados
-- [ ] Adicionar parte no painel de admin para baixar os dados (backup geral) e opção de importar novamente os dados.
-- [ ] Adicionar dark mode no painel de admin
-- [ ] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possivel criar contas bancárias... Nesse contexto, criar botão para marcar o agendamento como conluído e forma e valor recebido (valor auto preenchido, mas ajustavel, de acordo com o valor do serviço cadastrado).
+- [ ] Adicionar instrução no README de como atualizar o programa sem perder os dados.
+- [ ] Adicionar campo de observações no agendamento, sendo um campo opcional (informar ao agente que o campo existe).
+- [ ] Adicionar opção de cadastro manual de agendamentos no admin UI.
+- [ ] Tirar o horário de funcionamento das Configurações Gerais e criar uma nova aba de "Horários de Funcionamento", sendo possível incluir o dia da semana e diversos intervalos de horários por dia — por exemplo: Segunda-feira | 13:00 às 15:00; Terça-feira | 08:00 às 09:00, 10:00 às 11:00. O padrão deverá ser de segunda a sexta, das 8:00 às 12:00 e das 13:30 às 18:00. Deve ter opção de restaurar o padrão e de apagar tudo.
+- [ ] Adicionar a opção de ativar (no painel admin ou pedindo ao bot pelo WhatsApp) o aviso no WhatsApp do dono/administrador sobre agendamentos, cancelamentos etc.
+- [ ] Adicionar opção de avisar o cliente quando o serviço dele for reagendado/cancelado (a IA avisa a ação do dono/administrador com o aval dele).
+- [ ] Botão no painel admin e comando via WhatsApp para o bot parar de responder a uma pessoa/número de WhatsApp específico.
+- [ ] Opção de abrir conversa (em um modal) no painel admin para visualizar as mensagens do WhatsApp, com possibilidade de enviar mensagens manualmente pelo bot. Como dependência, deve-se criar uma nova aba de conversas (além de um botão para abrir a conversa na listagem de agendamentos).
+- [ ] Mesmo com as conversas pausadas, mensagens recebidas do cliente e enviadas manualmente pelo dono/administrador devem ser colocadas na memória do agente (depende de outros to-dos).
+- [ ] Adicionar ficha de cadastro do cliente, como feature opcional, em uma nova aba na UI. Os campos do cliente devem ser customizáveis, com tipos de dados próprios (str, int, data etc.). O cadastro e os campos poderão ser preenchidos pelo agente durante a conversa com o cliente (conforme instrução dada a ele). A ficha de cadastro deve ter o botão de abrir conversa (depende de outros to-dos).
+- [ ] Adicionar uma pequena memória para cada cliente, com o objetivo de manter informações cruciais (nome, opções de acessibilidade etc.). Feature opcional, ativada no admin UI.
+- [ ] Adicionar opção de outros provedores de speech-to-text (Whisper).
+- [ ] Adicionar opção de geração de áudio pelo bot (para pessoas que não sabem ler e escrever).
+- [ ] Adicionar dark mode no painel admin.
+- [ ] Adicionar parte no painel admin para baixar os dados (backup geral) e opção de importá-los novamente.
+- [ ] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possível criar contas bancárias. Nesse contexto, criar botão para marcar o agendamento como concluído, com forma de pagamento e valor recebido (valor autopreenchido, mas ajustável, de acordo com o valor do serviço cadastrado).
 
 <br>
 
