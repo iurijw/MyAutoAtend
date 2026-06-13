@@ -136,11 +136,30 @@ button:active,.btn:active{transform:translateY(1px);}
 #wa-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 
 /* ---------- Provedores de IA ---------- */
-.ia-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
-@media(max-width:1000px){ .ia-grid{grid-template-columns:1fr;} }
-.ia-bloco{background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px 18px 20px;}
-.ia-bloco h3{font-family:"DM Serif Display",serif; font-weight:400; font-size:19px; margin:0; display:flex; align-items:center; gap:10px;}
-.ia-bloco h3 .pill{margin-left:auto;}
+.ia-tabs{display:flex; gap:6px; border-bottom:2px solid var(--paper-2); margin:0 0 16px;}
+.ia-tab{background:transparent; border:none; border-bottom:3px solid transparent; border-radius:10px 10px 0 0;
+  padding:10px 14px; font-weight:600; color:var(--ink-soft); display:flex; align-items:center; gap:8px;
+  margin-bottom:-2px;}
+.ia-tab:hover{color:var(--ink); background:rgba(216,205,185,.18);}
+.ia-tab.active{color:var(--oxblood); border-bottom-color:var(--oxblood);}
+.ia-tab .dot{width:8px; height:8px; border-radius:50%; background:var(--line); flex:none;}
+.ia-tab .dot.on{background:var(--green);}
+.ia-pane{display:none;}
+.ia-pane.active{display:block;}
+.ia-subtabs{display:flex; gap:8px; margin:0 0 14px;}
+.ia-subtab{background:var(--paper); border:1px solid var(--line); color:var(--ink-soft);
+  border-radius:999px; padding:6px 14px; font-size:13px; font-weight:600;}
+.ia-subtab.active{background:var(--oxblood); border-color:var(--oxblood); color:#f6ead2;}
+.ia-subtab[disabled]{cursor:not-allowed; opacity:.55;}
+.ia-subtab .soon{font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--gold); margin-left:6px;}
+.ia-resumo{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:var(--paper); border:1px solid var(--line); border-radius:12px;
+  padding:12px 14px; margin:12px 0 4px;}
+.ia-prov-atual{font-family:"JetBrains Mono",monospace; font-size:13px; color:var(--ink);}
+.ia-resumo button{margin-left:auto;}
+.ia-chave{border:1px dashed var(--gold-soft); border-radius:12px; padding:2px 16px 16px; margin:12px 0 4px;}
+.ia-busca{margin-bottom:8px;}
 .ia-note{color:var(--ink-soft); font-size:13.5px; margin:6px 0 0;}
 .ia-msg{font-family:"JetBrains Mono",monospace; font-size:12.5px; margin:12px 0 0; min-height:1em;}
 .ia-msg.ok{color:var(--green);}

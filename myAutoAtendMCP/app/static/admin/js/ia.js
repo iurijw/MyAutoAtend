@@ -1,9 +1,11 @@
-/* Card "Provedores de IA": chaves one-way (gravadas localmente, nunca
-   exibidas de volta), escolha de provedor/modelo por alvo (texto/áudio/imagem). */
+/* Card "Provedores de IA": abas por uso (texto/áudio/imagem), chaves one-way
+   (gravadas localmente, nunca exibidas de volta). O form da chave fica oculto
+   atrás de "Atualizar chave"; o resumo mostra status + provedor atual. */
 
 const PROVEDORES = window.__ADMIN__.provedores;
 const ALVOS = ['texto', 'audio', 'imagem'];
 const provedorSalvo = { texto: null, audio: null, imagem: null };  // o que está salvo hoje
+const modelosCache = { texto: [], imagem: [] };                    // lista completa p/ busca
 const temModelo = (alvo) => !!$('ia-modelo-sel-' + alvo);  // áudio: whisper-1 fixo
 
 const $ = (id) => document.getElementById(id);
@@ -13,6 +15,42 @@ function msg(alvo, texto, ok){
   el.textContent = texto;
   el.className = 'ia-msg ' + (ok ? 'ok' : 'err');
 }
+
+/* ---------- abas ---------- */
+
+document.querySelectorAll('[data-ia-tab]').forEach(btn =>
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-ia-tab]').forEach(b => b.classList.toggle('active', b === btn));
+    for (const alvo of ALVOS)
+      $('ia-pane-' + alvo).classList.toggle('active', alvo === btn.dataset.iaTab);
+  }));
+
+/* ---------- form da chave (oculto por padrão) ---------- */
+
+function abrirChave(alvo){
+  $('ia-chave-' + alvo).hidden = false;
+  $('ia-key-' + alvo).focus();
+}
+
+function fecharChave(alvo){
+  $('ia-chave-' + alvo).hidden = true;
+  $('ia-key-' + alvo).value = '';
+  // Volta o select ao provedor salvo (descarta troca não confirmada).
+  const sel = $('ia-prov-' + alvo);
+  if (provedorSalvo[alvo] && sel.querySelector('option[value="' + provedorSalvo[alvo] + '"]'))
+    sel.value = provedorSalvo[alvo];
+  $('ia-url-wrap-' + alvo).style.display = sel.value === 'custom' ? '' : 'none';
+}
+
+document.querySelectorAll('[data-ia-editar]').forEach(b =>
+  b.addEventListener('click', () => {
+    const alvo = b.dataset.iaEditar;
+    $('ia-chave-' + alvo).hidden ? abrirChave(alvo) : fecharChave(alvo);
+  }));
+document.querySelectorAll('[data-ia-cancelar]').forEach(b =>
+  b.addEventListener('click', () => fecharChave(b.dataset.iaCancelar)));
+
+/* ---------- provedores ---------- */
 
 function montarSelect(alvo){
   const sel = $('ia-prov-' + alvo);
@@ -31,6 +69,27 @@ function montarSelect(alvo){
   $('ia-key-' + alvo).addEventListener('change', () => previewModelos(alvo));
 }
 
+function atualizarResumo(alvo, info){
+  const pill = $('ia-status-' + alvo);
+  const atual = $('ia-atual-' + alvo);
+  const dot = $('ia-dot-' + alvo);
+  if (info && info.provedor){
+    pill.className = 'pill on';
+    pill.textContent = info.atualizado_em
+      ? 'chave de ' + new Date(info.atualizado_em).toLocaleDateString('pt-BR')
+      : 'configurado';
+    const nome = (PROVEDORES[info.provedor] || {}).nome || info.provedor;
+    atual.textContent = nome + (info.modelo ? ' · ' + info.modelo : (alvo === 'audio' ? ' · whisper-1' : ''));
+    dot.className = 'dot on';
+  } else {
+    pill.className = 'pill off';
+    pill.textContent = 'sem chave';
+    atual.textContent = 'nenhum provedor configurado';
+    dot.className = 'dot';
+    abrirChave(alvo);  // sem chave não há o que resumir — já abre o form
+  }
+}
+
 async function carregarEstado(){
   try {
     const r = await fetch('/admin/ia/estado');
@@ -38,20 +97,13 @@ async function carregarEstado(){
     if (d.erro) throw new Error(d.erro);
     for (const alvo of ALVOS){
       const info = d[alvo] || {};
-      const pill = $('ia-status-' + alvo);
-      if (info.atualizado_em){
-        pill.className = 'pill on';
-        pill.textContent = 'chave de ' + new Date(info.atualizado_em).toLocaleDateString('pt-BR');
-      } else {
-        pill.className = 'pill off';
-        pill.textContent = 'sem registro';
-      }
       provedorSalvo[alvo] = info.provedor || null;
       if (info.provedor && $('ia-prov-' + alvo).querySelector('option[value="' + info.provedor + '"]')){
         $('ia-prov-' + alvo).value = info.provedor;
         $('ia-url-wrap-' + alvo).style.display = info.provedor === 'custom' ? '' : 'none';
       }
       if (info.modelo && temModelo(alvo)) $('ia-modelo-' + alvo).value = info.modelo;
+      atualizarResumo(alvo, info);
     }
     // Após o estado, busca os modelos do provedor configurado.
     for (const alvo of ALVOS) if (temModelo(alvo)) carregarModelos(alvo, (d[alvo] || {}).modelo);
@@ -60,8 +112,29 @@ async function carregarEstado(){
       const pill = $('ia-status-' + alvo);
       pill.className = 'pill off';
       pill.textContent = 'indisponível';
+      $('ia-atual-' + alvo).textContent = 'estado indisponível';
     }
   }
+}
+
+/* ---------- modelos (lista + busca) ---------- */
+
+function renderOpcoes(alvo, filtro){
+  const sel = $('ia-modelo-sel-' + alvo);
+  const f = (filtro || '').trim().toLowerCase();
+  const anterior = sel.value;
+  sel.innerHTML = '';
+  for (const m of modelosCache[alvo]){
+    if (f && !m.toLowerCase().includes(f)) continue;
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    sel.appendChild(o);
+  }
+  const outro = document.createElement('option');
+  outro.value = '__outro'; outro.textContent = 'Outro (digitar)…';
+  sel.appendChild(outro);
+  if (anterior && sel.querySelector('option[value="' + CSS.escape(anterior) + '"]'))
+    sel.value = anterior;
 }
 
 function popularModelos(alvo, modelos, atual){
@@ -70,17 +143,12 @@ function popularModelos(alvo, modelos, atual){
   if (!sel || !modelos.length) return;
   const atualVal = atual || '';
   if (atualVal && !modelos.includes(atualVal)) modelos.unshift(atualVal);
-  sel.innerHTML = '';
-  for (const m of modelos){
-    const o = document.createElement('option');
-    o.value = m; o.textContent = m;
-    sel.appendChild(o);
-  }
-  const outro = document.createElement('option');
-  outro.value = '__outro'; outro.textContent = 'Outro (digitar)…';
-  sel.appendChild(outro);
+  modelosCache[alvo] = modelos;
+  $('ia-busca-' + alvo).value = '';
+  renderOpcoes(alvo, '');
   if (atualVal) sel.value = atualVal;
   sel.style.display = '';
+  $('ia-busca-' + alvo).style.display = '';
   inp.style.display = 'none';
   sel.onchange = () => {
     inp.style.display = sel.value === '__outro' ? '' : 'none';
@@ -91,7 +159,10 @@ function popularModelos(alvo, modelos, atual){
 function resetarModelos(alvo){
   const sel = $('ia-modelo-sel-' + alvo);
   if (!sel) return;
+  modelosCache[alvo] = [];
   sel.style.display = 'none'; sel.innerHTML = '';
+  $('ia-busca-' + alvo).style.display = 'none';
+  $('ia-busca-' + alvo).value = '';
   $('ia-modelo-' + alvo).style.display = '';
 }
 
@@ -143,6 +214,8 @@ function modeloEscolhido(alvo){
   return $('ia-modelo-' + alvo).value.trim();
 }
 
+/* ---------- ações ---------- */
+
 async function postar(url, dados){
   const r = await fetch(url, {
     method: 'POST',
@@ -166,6 +239,7 @@ async function salvarChave(alvo, btn){
       base_url: $('ia-url-' + alvo).value.trim(),
     });
     $('ia-key-' + alvo).value = '';   // chave some da tela na hora
+    $('ia-chave-' + alvo).hidden = true;
     msg(alvo, 'Chave gravada.', true);
     carregarEstado();                  // re-lista modelos do provedor novo
   } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
@@ -179,6 +253,10 @@ async function salvarModelo(alvo, btn){
   try {
     await postar('/admin/ia/modelo', { alvo, modelo });
     msg(alvo, 'Modelo atualizado.', true);
+    if (provedorSalvo[alvo]){
+      const nome = (PROVEDORES[provedorSalvo[alvo]] || {}).nome || provedorSalvo[alvo];
+      $('ia-atual-' + alvo).textContent = nome + ' · ' + modelo;
+    }
   } catch(e){ msg(alvo, 'Falha: ' + e.message, false); }
   finally { btn.disabled = false; }
 }
@@ -188,6 +266,8 @@ document.querySelectorAll('[data-ia-key]').forEach(b =>
   b.addEventListener('click', () => salvarChave(b.dataset.iaKey, b)));
 document.querySelectorAll('[data-ia-modelo]').forEach(b =>
   b.addEventListener('click', () => salvarModelo(b.dataset.iaModelo, b)));
+document.querySelectorAll('.ia-busca').forEach(inp =>
+  inp.addEventListener('input', () => renderOpcoes(inp.id.replace('ia-busca-', ''), inp.value)));
 
 // Card começa recolhido; estado só é buscado na primeira expansão.
 const iaCard = document.getElementById('ia-card');
