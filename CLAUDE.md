@@ -135,6 +135,13 @@ primeiro `docker compose up -d`.
   Caso âncora: tool `remanejar_dia(data, acao, motivo)` [DONO] — fecha o dia,
   (se acao="cancelar") cancela os agendamentos, e cria uma tarefa
   `contatar_cliente` por cliente afetado.
+- **Proatividade no painel**: card "Proatividade Pendente" (`partials/
+  proatividade.html` + `js/proatividade.js`, poll 20s) mostra a fila ao vivo —
+  pendente/executando + últimas falhadas (concluídas/canceladas fora).
+  `GET /admin/tarefas/estado` (`db.listar_tarefas_painel` +
+  `tarefas.descrever_tarefa` p/ resumo legível) e
+  `POST /admin/tarefas/{id}/cancelar` (`db.cancelar_tarefa` — só pendente vira
+  `cancelada`, status string sem migração; executando/falhou → 409).
 - **Horários de funcionamento**: card próprio no painel; grade semanal na
   tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
   linha = fechado). `POST /admin/horarios` (replace-all da grade),

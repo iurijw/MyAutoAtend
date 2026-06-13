@@ -114,6 +114,49 @@ def _montar_instrucao(t: db.Tarefa) -> str | None:
     return None
 
 
+_RESUMO_ACAO = {
+    "reagendado": "Avisar remarcação",
+    "cancelado": "Avisar cancelamento",
+    "remarcar": "Oferecer remarcação (dia fechado)",
+    "cancelar": "Avisar cancelamento (dia fechado)",
+}
+
+
+def descrever_tarefa(t: db.Tarefa) -> dict:
+    """Resumo legível de uma tarefa para o painel. Concentra aqui o
+    conhecimento dos payloads (mesmo lugar que monta as instruções)."""
+    payload = json.loads(t.payload or "{}")
+    acao = payload.get("acao", "")
+    nome_cliente = ""
+    servico = ""
+    quando = ""
+    ag = db.get_agendamento(payload.get("agendamento_id") or 0)
+    if ag:
+        nome_cliente = ag.nome_cliente
+        s = db.get_servico(ag.servico_id)
+        servico = s.nome if s else f"serviço #{ag.servico_id}"
+        quando = ag.inicio
+    titulo = _RESUMO_ACAO.get(acao, t.tipo)
+    return {
+        "id": t.id,
+        "status": t.status,
+        "tipo": t.tipo,
+        "acao": acao,
+        "titulo": titulo,
+        "alvo": t.telefone_alvo,
+        "nome_cliente": nome_cliente,
+        "servico": servico,
+        "quando_agendamento": quando,
+        "agendado_para": t.agendado_para,
+        "tentativas": t.tentativas,
+        "max_tentativas": MAX_TENTATIVAS,
+        "criado_em": t.criado_em,
+        "resultado": t.resultado,
+        "janela_inicio": JANELA_INICIO,
+        "janela_fim": JANELA_FIM,
+    }
+
+
 def _instrucao_contatar_cliente(payload: dict) -> str | None:
     ag = db.get_agendamento(payload.get("agendamento_id") or 0)
     if not ag:

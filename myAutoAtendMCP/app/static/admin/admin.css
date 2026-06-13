@@ -104,6 +104,48 @@ button:active,.btn:active{transform:translateY(1px);}
 .avisar-cli{display:flex; align-items:center; gap:5px; font-size:.78rem; color:var(--ink-soft); white-space:nowrap; cursor:pointer;}
 .reagenda .avisar-cli input{width:auto; max-width:none; padding:0; margin:0;}
 
+/* ---------- proatividade (fila ao vivo do bot) ---------- */
+.proat-live{display:inline-flex; align-items:center; gap:6px; margin-left:auto;
+  font:600 10px/1 "Hanken Grotesk"; letter-spacing:.16em; text-transform:uppercase; color:var(--green);}
+.proat-live.off{color:var(--ink-soft); opacity:.5;}
+.proat-live + .tag{margin-left:10px;}
+.proat-live-dot{width:7px; height:7px; border-radius:50%; background:var(--green);
+  box-shadow:0 0 0 0 rgba(63,107,76,.5); animation:proat-pulse 2s infinite;}
+.proat-live.off .proat-live-dot{background:var(--ink-soft); animation:none; box-shadow:none;}
+@keyframes proat-pulse{
+  0%{box-shadow:0 0 0 0 rgba(63,107,76,.45);}
+  70%{box-shadow:0 0 0 7px rgba(63,107,76,0);}
+  100%{box-shadow:0 0 0 0 rgba(63,107,76,0);}
+}
+.proat-sub{color:var(--ink-soft); font-size:14px; margin:-6px 0 18px; max-width:62ch;}
+.proat-lista{display:flex; flex-direction:column;}
+
+.proat-item{display:flex; align-items:stretch; gap:14px; padding:14px 4px 14px 0;
+  border-bottom:1px solid var(--line);}
+.proat-item:last-child{border-bottom:none;}
+.proat-rail{flex:none; width:3px; border-radius:3px; background:var(--gold-soft);}
+.proat-item.is-executando .proat-rail{background:var(--green);}
+.proat-item.is-falhou .proat-rail{background:var(--oxblood);}
+.proat-body{flex:1; min-width:0;}
+.proat-top{display:flex; align-items:center; gap:9px; flex-wrap:wrap;}
+.proat-titulo{font-weight:600; font-size:15px;}
+.proat-quem{margin-top:3px; font-size:14px; color:var(--ink);}
+.proat-quem .proat-ctx{color:var(--ink-soft);}
+.proat-meta{margin-top:6px; display:flex; gap:7px; flex-wrap:wrap;
+  font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--ink-soft);}
+.proat-dica{color:var(--gold);}
+.proat-erro{margin-top:8px; padding:7px 11px; border-radius:8px; font-size:12.5px;
+  background:rgba(138,42,47,.08); color:var(--oxblood-d); border:1px solid rgba(138,42,47,.18);
+  font-family:"JetBrains Mono",monospace; word-break:break-word;}
+
+.proat-badge{flex:none; font:700 10px/1 "Hanken Grotesk"; letter-spacing:.08em;
+  text-transform:uppercase; padding:4px 9px; border-radius:999px;}
+.proat-badge.pendente{background:rgba(184,134,47,.16); color:var(--gold);}
+.proat-badge.executando{background:rgba(63,107,76,.16); color:var(--green);}
+.proat-badge.falhou{background:rgba(138,42,47,.14); color:var(--oxblood);}
+.proat-cancel{flex:none; align-self:center;}
+.proat-empty{padding:24px 4px; text-align:center; color:var(--ink-soft); font-style:italic;}
+
 .grid2{display:grid; grid-template-columns:1.3fr 1fr; gap:22px; align-items:start;}
 @media(max-width:860px){
   .stats{grid-template-columns:1fr 1fr;}

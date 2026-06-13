@@ -442,6 +442,42 @@ def resetar_tarefas_executando() -> int:
         return len(presas)
 
 
+def listar_tarefas_painel(limite_falhadas: int = 20) -> list[Tarefa]:
+    """Fila visível no painel: todas pendente/executando + as últimas N falhadas.
+    Concluídas e canceladas ficam de fora. Ordem: ativas por `agendado_para`
+    (próxima a disparar primeiro), falhadas por id desc (mais recente no topo)."""
+    with _session() as s:
+        ativas = list(
+            s.exec(
+                select(Tarefa)
+                .where(Tarefa.status.in_(["pendente", "executando"]))
+                .order_by(Tarefa.agendado_para, Tarefa.id)
+            ).all()
+        )
+        falhadas = list(
+            s.exec(
+                select(Tarefa)
+                .where(Tarefa.status == "falhou")
+                .order_by(Tarefa.id.desc())
+                .limit(limite_falhadas)
+            ).all()
+        )
+        return ativas + falhadas
+
+
+def cancelar_tarefa(tarefa_id: int) -> bool:
+    """Remove uma tarefa da fila (marca `cancelada`). Só pendente — `executando`
+    está em voo e `tarefas_vencidas` só pega `pendente`, então o worker ignora."""
+    with _lock, _session() as s:
+        t = s.get(Tarefa, tarefa_id)
+        if not t or t.status != "pendente":
+            return False
+        t.status = "cancelada"
+        s.add(t)
+        s.commit()
+    return True
+
+
 def chaves_conversas() -> list[str]:
     """Chaves (remoteJid) com memória existente — p/ o worker reusar a chave
     do contato em vez de inventar outra (nono dígito muda o jid)."""

@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import agente, db, evolution, ia
+from . import agente, db, evolution, ia, tarefas
 from .config import settings
 from .phone import mesmo_numero, normalizar
 from .tools import _agora_local
@@ -442,6 +442,26 @@ def reagendar_agendamento(
             inicio_anterior=inicio_anterior,
         )
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Proatividade (fila de tarefas do bot) — consumido por JS no painel (poll)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/tarefas/estado")
+def tarefas_estado(_: str = Depends(autenticar)):
+    """Fila de ações proativas para o card 'Proatividade Pendente'."""
+    return {"tarefas": [tarefas.descrever_tarefa(t) for t in db.listar_tarefas_painel()]}
+
+
+@router.post("/admin/tarefas/{tarefa_id}/cancelar")
+def tarefa_cancelar(tarefa_id: int, _: str = Depends(autenticar)):
+    if not db.cancelar_tarefa(tarefa_id):
+        raise HTTPException(
+            status_code=409, detail="Tarefa não está mais pendente na fila."
+        )
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
