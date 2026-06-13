@@ -111,6 +111,14 @@ primeiro `docker compose up -d`.
   painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em
   `_migrar`). Suprimido se ação é do próprio dono, telefone placeholder ou
   flag off; falha de envio nunca quebra a tool (`enviar_texto_sync`, 5s).
+- **Aviso ao cliente (aval do dono)**: reagendar/cancelar individual pelo dono
+  pode disparar aviso proativo da IA ao cliente — painel (checkbox no form de
+  reagendar; 2º `confirm` no cancelar) e tools `reagendar`/`cancelar` (param
+  `avisar_cliente`, honrado só p/ dono em agendamento de terceiro; o prompt MCP
+  manda pedir o aval antes). `db.criar_aviso_cliente` enfileira `Tarefa`
+  `contatar_cliente` (acoes `reagendado`/`cancelado`, instruções em
+  `tarefas.py`); avisos pendentes do mesmo agendamento são substituídos
+  (reagendos encadeados herdam o `inicio_anterior` original).
 - **Endurecimento contra injeção**: webhook exige `?token=` (hash da SENHA,
   `settings.webhook_token`; Evolution configurada com ele no bootstrap —
   forja local de remoteJid → 403); `[TAREFA INTERNA]` vindo do webhook é

@@ -18,7 +18,8 @@ from fastapi.templating import Jinja2Templates
 
 from . import agente, db, evolution, ia
 from .config import settings
-from .phone import normalizar
+from .phone import mesmo_numero, normalizar
+from .tools import _agora_local
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -386,9 +387,24 @@ def novo_agendamento(
     return RedirectResponse("/admin", status_code=303)
 
 
+def _avisar_cliente_permitido(ag: db.Agendamento) -> bool:
+    """Aviso proativo só faz sentido para agendamento de terceiro — o painel
+    É o dono, avisar o próprio número viraria o bot falando com o dono."""
+    return not mesmo_numero(ag.telefone_cliente, db.get_config().telefone_dono)
+
+
 @router.post("/admin/agendamento/{agendamento_id}/cancelar")
-def cancelar_agendamento(agendamento_id: int, _: str = Depends(autenticar)):
-    db.cancelar_agendamento(agendamento_id)
+def cancelar_agendamento(
+    agendamento_id: int,
+    _: str = Depends(autenticar),
+    avisar_cliente: str = Form(""),
+):
+    ag = db.get_agendamento(agendamento_id)  # dados p/ o aviso, antes de cancelar
+    cancelou = db.cancelar_agendamento(agendamento_id)
+    if cancelou and avisar_cliente and ag and _avisar_cliente_permitido(ag):
+        db.criar_aviso_cliente(
+            ag, "cancelado", _agora_local().isoformat(timespec="minutes")
+        )
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -397,6 +413,7 @@ def reagendar_agendamento(
     agendamento_id: int,
     _: str = Depends(autenticar),
     novo_inicio: str = Form(...),
+    avisar_cliente: str = Form(""),
 ):
     """Remarca um agendamento. `novo_inicio` no formato YYYY-MM-DDTHH:MM.
 
@@ -411,11 +428,19 @@ def reagendar_agendamento(
         dt_inicio = datetime.fromisoformat(novo_inicio)
     except ValueError:
         raise HTTPException(status_code=400, detail="Horário inválido.")
+    inicio_anterior = ag.inicio
     dur = servico.duracao_min if servico else 30
     novo_fim = (dt_inicio + timedelta(minutes=dur)).isoformat(timespec="minutes")
-    db.reagendar_agendamento(
+    ok = db.reagendar_agendamento(
         agendamento_id, dt_inicio.isoformat(timespec="minutes"), novo_fim
     )
+    if ok and avisar_cliente and _avisar_cliente_permitido(ag):
+        db.criar_aviso_cliente(
+            db.get_agendamento(agendamento_id),
+            "reagendado",
+            _agora_local().isoformat(timespec="minutes"),
+            inicio_anterior=inicio_anterior,
+        )
     return RedirectResponse("/admin", status_code=303)
 
 

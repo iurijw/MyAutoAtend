@@ -98,9 +98,11 @@ button:active,.btn:active{transform:translateY(1px);}
 .acts{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;}
 .empty{padding:30px 12px; text-align:center; color:var(--ink-soft); font-style:italic;}
 
-.reagenda{display:none; margin-top:10px; gap:8px; align-items:center;}
+.reagenda{display:none; margin-top:10px; gap:8px; align-items:center; flex-wrap:wrap;}
 .reagenda.open{display:flex;}
 .reagenda input{max-width:220px; padding:7px 10px;}
+.avisar-cli{display:flex; align-items:center; gap:5px; font-size:.78rem; color:var(--ink-soft); white-space:nowrap; cursor:pointer;}
+.reagenda .avisar-cli input{width:auto; max-width:none; padding:0; margin:0;}
 
 .grid2{display:grid; grid-template-columns:1.3fr 1fr; gap:22px; align-items:start;}
 @media(max-width:860px){

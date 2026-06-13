@@ -166,17 +166,45 @@ def meus_agendamentos(telefone_solicitante: str | None = None) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
+def _enfileirar_aviso_cliente(
+    ag, acao: str, telefone_solicitante: str | None, inicio_anterior: str | None = None
+) -> bool:
+    """Aviso proativo da IA ao cliente sobre ação do dono — só quando o DONO
+    mexe em agendamento de OUTRA pessoa (avisar o próprio dono não faz sentido)."""
+    if not auth.eh_dono(telefone_solicitante):
+        return False
+    if mesmo_numero(ag.telefone_cliente, db.get_config().telefone_dono):
+        return False
+    db.criar_aviso_cliente(
+        ag,
+        acao,
+        _agora_local().isoformat(timespec="minutes"),
+        inicio_anterior=inicio_anterior,
+    )
+    return True
+
+
 @mcp.tool()
 def reagendar(
-    agendamento_id: int, novo_inicio: str, telefone_solicitante: str | None = None
+    agendamento_id: int,
+    novo_inicio: str,
+    avisar_cliente: bool = False,
+    telefone_solicitante: str | None = None,
 ) -> dict:
-    """Remarca um agendamento. Cliente só remarca o próprio; dono remarca qualquer um."""
+    """Remarca um agendamento. Cliente só remarca o próprio; dono remarca qualquer um.
+
+    `avisar_cliente` [SÓ DONO]: quando o dono remarca o horário de um cliente,
+    True faz a IA contatar o cliente em segundo plano avisando a mudança.
+    Pergunte ao dono se ele quer avisar; só passe True com o aval explícito
+    dele. Ignorado para clientes e para agendamentos do próprio dono.
+    """
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
         return auth.NEGADO_PROPRIO
 
     ag = db.get_agendamento(agendamento_id)
     if not ag:
         return {"erro": "Agendamento não encontrado."}
+    inicio_anterior = ag.inicio
 
     servico = db.get_servico(ag.servico_id)
     try:
@@ -203,19 +231,39 @@ def reagendar(
     notificacoes.notificar_dono(
         "reagendado", atualizado, auth.requester(telefone_solicitante)
     )
-    return {"ok": True, "agendamento": db.como_dict(atualizado)}
+    resultado = {"ok": True, "agendamento": db.como_dict(atualizado)}
+    if avisar_cliente and _enfileirar_aviso_cliente(
+        atualizado, "reagendado", telefone_solicitante, inicio_anterior=inicio_anterior
+    ):
+        resultado["cliente_sera_avisado"] = True
+    return resultado
 
 
 @mcp.tool()
-def cancelar(agendamento_id: int, telefone_solicitante: str | None = None) -> dict:
-    """Cancela um agendamento. Cliente só cancela o próprio; dono cancela qualquer um."""
+def cancelar(
+    agendamento_id: int,
+    avisar_cliente: bool = False,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """Cancela um agendamento. Cliente só cancela o próprio; dono cancela qualquer um.
+
+    `avisar_cliente` [SÓ DONO]: quando o dono cancela o horário de um cliente,
+    True faz a IA contatar o cliente em segundo plano avisando o cancelamento.
+    Pergunte ao dono se ele quer avisar; só passe True com o aval explícito
+    dele. Ignorado para clientes e para agendamentos do próprio dono.
+    """
     if not auth.pode_mexer_no_agendamento(telefone_solicitante, agendamento_id):
         return auth.NEGADO_PROPRIO
     ag = db.get_agendamento(agendamento_id)  # dados p/ o aviso, antes de cancelar
     if not db.cancelar_agendamento(agendamento_id):
         return {"erro": "Agendamento não encontrado ou já cancelado."}
     notificacoes.notificar_dono("cancelado", ag, auth.requester(telefone_solicitante))
-    return {"ok": True}
+    resultado = {"ok": True}
+    if avisar_cliente and _enfileirar_aviso_cliente(
+        ag, "cancelado", telefone_solicitante
+    ):
+        resultado["cliente_sera_avisado"] = True
+    return resultado
 
 
 # ---------------------------------------------------------------------------

@@ -22,13 +22,16 @@
           <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
           <form class="reagenda" id="rg{{ a.id }}" method="post" action="/admin/agendamento/{{ a.id }}/reagendar">
             <input type="datetime-local" name="novo_inicio" value="{{ a.inicio }}" required>
+            <label class="avisar-cli" title="A IA manda mensagem no WhatsApp do cliente avisando a mudança"><input type="checkbox" name="avisar_cliente" value="1"> Avisar cliente</label>
             <button class="btn-sm btn-primary" style="margin:0">Confirmar</button>
           </form>
         </td>
         <td>
           <div class="acts">
             <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
-            <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar" onsubmit="return confirm('Cancelar o agendamento de {{ a.nome_cliente }}?')">
+            <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
+                  onsubmit="if(!confirm('Cancelar o agendamento de {{ a.nome_cliente }}?'))return false;this.avisar_cliente.value=confirm('Avisar {{ a.nome_cliente }} pelo WhatsApp? A IA manda a mensagem do cancelamento.')?'1':'';">
+              <input type="hidden" name="avisar_cliente" value="">
               <button class="btn-sm btn-danger">Cancelar</button>
             </form>
           </div>

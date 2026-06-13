@@ -120,7 +120,7 @@ class Tarefa(SQLModel, table=True):
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    tipo: str  # "contatar_cliente" (remanejamento de dia) — outros no futuro
+    tipo: str  # "contatar_cliente" (remanejo de dia / aviso de ação do dono)
     telefone_alvo: str
     payload: str = "{}"  # JSON com os dados do tipo
     status: str = "pendente"  # pendente | executando | concluida | falhou
@@ -354,6 +354,57 @@ def criar_tarefa(
         s.add(t)
         s.commit()
         return t
+
+
+def criar_aviso_cliente(
+    ag: Agendamento,
+    acao: str,
+    agendado_para: str,
+    inicio_anterior: str | None = None,
+) -> Tarefa:
+    """Enfileira aviso proativo da IA ao cliente sobre ação do dono/admin no
+    agendamento — `acao` "reagendado" ou "cancelado" (instruções por ação em
+    app/tarefas.py).
+
+    Avisos pendentes do mesmo agendamento são substituídos: ao cliente só
+    interessa o estado final. Reagendamento em cima de outro ainda não avisado
+    herda o `inicio_anterior` do aviso substituído — o único horário que o
+    cliente conhece.
+    """
+    payload: dict = {"agendamento_id": ag.id, "acao": acao}
+    if inicio_anterior:
+        payload["inicio_anterior"] = inicio_anterior
+    for antigo in _obsoletar_avisos_pendentes(ag.id):
+        if (
+            acao == "reagendado"
+            and antigo.get("acao") == "reagendado"
+            and antigo.get("inicio_anterior")
+        ):
+            payload["inicio_anterior"] = antigo["inicio_anterior"]
+            break
+    return criar_tarefa("contatar_cliente", ag.telefone_cliente, payload, agendado_para)
+
+
+def _obsoletar_avisos_pendentes(agendamento_id: int) -> list[dict]:
+    """Conclui os `contatar_cliente` pendentes do agendamento; retorna os
+    payloads substituídos na ordem de criação."""
+    with _lock, _session() as s:
+        stmt = (
+            select(Tarefa)
+            .where(Tarefa.tipo == "contatar_cliente", Tarefa.status == "pendente")
+            .order_by(Tarefa.id)
+        )
+        substituidos: list[dict] = []
+        for t in s.exec(stmt):
+            payload = json.loads(t.payload or "{}")
+            if payload.get("agendamento_id") != agendamento_id:
+                continue
+            t.status = "concluida"
+            t.resultado = "Substituída por aviso mais recente."
+            s.add(t)
+            substituidos.append(payload)
+        s.commit()
+        return substituidos
 
 
 def tarefas_vencidas(agora: str) -> list[Tarefa]:

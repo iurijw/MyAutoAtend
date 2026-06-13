@@ -119,26 +119,52 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
     if not ag:
         return None
     acao = payload.get("acao", "remarcar")
-    if acao == "remarcar" and ag.status != "ativo":
+    if acao in ("remarcar", "reagendado") and ag.status != "ativo":
         return None  # cliente já cancelou/resolveu nesse meio tempo
     servico = db.get_servico(ag.servico_id)
     nome_servico = servico.nome if servico else f"serviço #{ag.servico_id}"
     data, hora = (ag.inicio.split("T") + [""])[:2]
-    motivo = payload.get("motivo") or "um imprevisto"
-    base = (
-        f"O dono teve um imprevisto ({motivo}) e não poderá atender no dia {data}. "
-        f"O cliente {ag.nome_cliente} tem \"{nome_servico}\" às {hora} "
-        f"(agendamento #{ag.id}). "
-    )
-    if acao == "cancelar":
-        return base + (
-            "Esse agendamento JÁ FOI CANCELADO pelo dono. Avise o cliente com "
-            "delicadeza, peça desculpas pelo transtorno e ofereça ajuda para "
-            "marcar uma nova data se ele quiser."
+
+    if acao in ("remarcar", "cancelar"):  # remanejar_dia: o dia inteiro fechou
+        motivo = payload.get("motivo") or "um imprevisto"
+        base = (
+            f"O dono teve um imprevisto ({motivo}) e não poderá atender no dia {data}. "
+            f"O cliente {ag.nome_cliente} tem \"{nome_servico}\" às {hora} "
+            f"(agendamento #{ag.id}). "
         )
-    return base + (
-        "Avise o cliente, peça desculpas pelo transtorno e ofereça remarcação "
-        "para outra data (a data original está fechada — use "
-        "consultar_horarios_disponiveis para sugerir opções). Se o cliente "
-        "preferir cancelar, cancele com a ferramenta."
-    )
+        if acao == "cancelar":
+            return base + (
+                "Esse agendamento JÁ FOI CANCELADO pelo dono. Avise o cliente com "
+                "delicadeza, peça desculpas pelo transtorno e ofereça ajuda para "
+                "marcar uma nova data se ele quiser."
+            )
+        return base + (
+            "Avise o cliente, peça desculpas pelo transtorno e ofereça remarcação "
+            "para outra data (a data original está fechada — use "
+            "consultar_horarios_disponiveis para sugerir opções). Se o cliente "
+            "preferir cancelar, cancele com a ferramenta."
+        )
+
+    # Ação individual do dono/admin (painel ou tool com avisar_cliente=True).
+    if acao == "cancelado":
+        return (
+            f"O dono cancelou o agendamento #{ag.id} de {ag.nome_cliente}: "
+            f"\"{nome_servico}\" do dia {data} às {hora}. O cancelamento JÁ FOI "
+            "FEITO — não tente desfazer nem cancelar de novo. Avise o cliente "
+            "com delicadeza, peça desculpas pelo transtorno e ofereça ajuda "
+            "para marcar uma nova data se ele quiser."
+        )
+    if acao == "reagendado":
+        antes = payload.get("inicio_anterior") or ""
+        data_ant, hora_ant = (antes.split("T") + [""])[:2]
+        de = f"que era no dia {data_ant} às {hora_ant} " if antes else ""
+        return (
+            f"O dono remarcou o agendamento #{ag.id} de {ag.nome_cliente} "
+            f"(\"{nome_servico}\") {de}para o dia {data} às {hora}. A mudança "
+            "JÁ ESTÁ FEITA. Avise o cliente, peça desculpas pelo transtorno e "
+            "pergunte se o novo horário funciona para ele. Se não funcionar, "
+            "ofereça outros horários (consultar_horarios_disponiveis) e "
+            "remarque, ou cancele se ele preferir."
+        )
+    log.warning("Ação desconhecida em contatar_cliente: %s", acao)
+    return None
