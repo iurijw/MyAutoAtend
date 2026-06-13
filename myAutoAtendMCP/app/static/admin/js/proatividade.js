@@ -3,9 +3,12 @@
    (POST /admin/tarefas/{id}/cancelar) — só em tarefas pendentes. */
 
 const POLL_MS = 20000;
+const card = document.getElementById('proat-card');
 const lista = document.getElementById('proat-lista');
 const tagCount = document.getElementById('proat-count');
 const live = document.getElementById('proat-live');
+
+document.getElementById('proat-head').addEventListener('click', () => card.classList.toggle('collapsed'));
 
 const STATUS = {
   pendente:   { rotulo: 'na fila',     cls: 'pendente'   },
