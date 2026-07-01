@@ -301,6 +301,44 @@ button:active,.btn:active{transform:translateY(1px);}
 .gear-row.on .sw{background:var(--green);}
 .gear-row.on .sw::after{left:17px;}
 
+/* ===========================================================================
+   Toasts — notificações flutuantes (erro / aviso / ok)
+   Cartão de papel, barra de acento à esquerda (eco do .pole), sem ícones.
+   =========================================================================== */
+.toast-wrap{position:fixed; right:22px; bottom:22px; z-index:120;
+  display:flex; flex-direction:column; gap:12px; align-items:stretch;
+  width:min(380px, calc(100vw - 44px)); pointer-events:none;}
+.toast{position:relative; background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:14px 40px 14px 20px; box-shadow:0 20px 44px -20px rgba(33,28,22,.42);
+  pointer-events:auto; overflow:hidden;
+  opacity:0; transform:translateY(12px) scale(.98);
+  transition:opacity .25s cubic-bezier(.2,.7,.2,1), transform .25s cubic-bezier(.2,.7,.2,1);}
+.toast::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--gold);}
+.toast.shown{opacity:1; transform:none;}
+.toast.saindo{opacity:0; transform:translateY(6px) scale(.98);}
+.toast-erro::before{background:var(--oxblood);}
+.toast-aviso::before{background:var(--gold);}
+.toast-ok::before{background:var(--green);}
+.toast-eyebrow{margin:0 0 4px; font:600 11px/1 "Hanken Grotesk"; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--gold);}
+.toast-erro .toast-eyebrow{color:var(--oxblood);}
+.toast-ok .toast-eyebrow{color:var(--green);}
+.toast-titulo{margin:0 0 3px; font-weight:600; font-size:14.5px; color:var(--ink);}
+.toast-corpo{margin:0; font-size:14px; line-height:1.5; color:var(--ink); word-break:break-word;}
+.toast-fechar{position:absolute; top:8px; right:8px; padding:4px 7px; border:none; background:transparent;
+  color:var(--ink-soft); font-size:13px; line-height:1; border-radius:6px; opacity:.5; cursor:pointer;
+  transition:opacity .15s, background .15s, color .15s;}
+.toast-fechar:hover{opacity:1; background:var(--paper-2); color:var(--ink);}
+@media(max-width:600px){ .toast-wrap{left:22px; right:22px; width:auto;} }
+@media(prefers-reduced-motion: reduce){
+  .toast{transition:none; transform:none;}
+  .toast.shown,.toast.saindo{transform:none;}
+}
+
+/* ---------- campos com erro de validação (client-side) ---------- */
+.campo-erro{border-color:var(--oxblood) !important; box-shadow:0 0 0 3px rgba(138,42,47,.14);}
+.campo-erro-msg{margin:6px 0 0; font-size:12.5px; font-weight:600; color:var(--oxblood);}
+
 /* page-load reveal */
 .reveal{opacity:0; transform:translateY(14px); animation:rise .6s cubic-bezier(.2,.7,.2,1) forwards;}
 @keyframes rise{to{opacity:1; transform:none;}}

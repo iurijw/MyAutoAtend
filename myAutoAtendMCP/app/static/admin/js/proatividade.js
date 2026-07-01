@@ -2,6 +2,8 @@
    (GET /admin/tarefas/estado) com poll automático. Botão Cancelar por tarefa
    (POST /admin/tarefas/{id}/cancelar) — só em tarefas pendentes. */
 
+import { toast } from './toast.js';
+
 const POLL_MS = 20000;
 const card = document.getElementById('proat-card');
 const lista = document.getElementById('proat-lista');
@@ -105,9 +107,15 @@ lista.addEventListener('click', async e => {
   btn.disabled = true;
   btn.textContent = '…';
   try {
-    await fetch(`/admin/tarefas/${btn.dataset.id}/cancelar`, { method: 'POST' });
-  } catch (_) { /* recarrega de qualquer forma — reflete o estado real */ }
-  carregar();
+    const r = await fetch(`/admin/tarefas/${btn.dataset.id}/cancelar`, {
+      method: 'POST', headers: { 'Accept': 'application/json' },
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast('erro', d.detail || 'Não foi possível cancelar esta tarefa.');
+    }
+  } catch (_) { toast('erro', 'Falha de conexão ao cancelar a tarefa.'); }
+  carregar();  // recarrega de qualquer forma — reflete o estado real
 });
 
 carregar();

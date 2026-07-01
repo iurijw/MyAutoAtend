@@ -1,5 +1,7 @@
 /* Card "Conexão WhatsApp": estado da instância, QR Code e desconexão. */
 
+import { toast } from './toast.js';
+
 const elStatus  = document.getElementById('wa-status');
 const elHint    = document.getElementById('wa-hint');
 const elQr      = document.getElementById('wa-qr');
@@ -90,8 +92,10 @@ async function gerarQr(){
 async function desconectar(){
   if (!confirm('Desconectar o WhatsApp deste número?')) return;
   btnOut.disabled = true;
-  try { await fetch('/admin/whatsapp/desconectar', {method:'POST'}); }
-  catch(e){}
+  try {
+    const r = await fetch('/admin/whatsapp/desconectar', {method:'POST'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  } catch(e){ toast('erro', 'Não foi possível desconectar agora. Tente de novo em instantes.'); }
   finally { btnOut.disabled = false; estado(); }
 }
 
