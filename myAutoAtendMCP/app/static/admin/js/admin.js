@@ -1,6 +1,7 @@
 /* Entrada única do painel /admin — cada módulo cuida de um card/feature.
    Dados vindos do servidor (Jinja) chegam por window.__ADMIN__ (ver admin.html). */
 
+import './tema.js';
 import './forms.js';
 import './whatsapp.js';
 import './ia.js';

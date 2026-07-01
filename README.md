@@ -168,7 +168,7 @@ docker compose up -d --build
 - [ ] Adicionar uma pequena memória para cada cliente, com o objetivo de manter informações cruciais (nome, opções de acessibilidade etc.). Feature opcional, ativada no admin UI.
 - [ ] Adicionar opção de outros provedores de speech-to-text (Whisper).
 - [ ] Adicionar opção de geração de áudio pelo bot (para pessoas que não sabem ler e escrever). Ao implementar, ativar a sub-aba "Enviar áudio" no card Provedores de IA do painel (hoje desabilitada com badge "em breve" em `templates/partials/ia.html`) e criar o pane de configuração correspondente (provedor/chave/modelo TTS).
-- [ ] Adicionar dark mode no painel admin.
+- [x] Adicionar dark mode no painel admin.
 - [ ] Adicionar parte no painel admin para baixar os dados (backup geral) e opção de importá-los novamente.
 - [ ] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possível criar contas bancárias. Nesse contexto, criar botão para marcar o agendamento como concluído, com forma de pagamento e valor recebido (valor autopreenchido, mas ajustável, de acordo com o valor do serviço cadastrado).
 - [ ] Adicionar campo de observações no agendamento, como campo opcional (informar ao agente que o campo existe).

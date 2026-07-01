@@ -3,6 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tema aplicado ANTES do primeiro paint (evita flash claro→escuro). -->
+  <script>
+    (function(){
+      try{
+        var t = localStorage.getItem('tema');
+        if (t !== 'dark' && t !== 'light')
+          t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
+    })();
+  </script>
+  <meta name="theme-color" content="#f3ece0">
   <title>myAutoAtend · Painel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -54,6 +66,9 @@
     <h3>Cards do painel</h3>
     <p class="gear-sub">Desligue para esconder um card da página; ligue para trazê-lo de volta.</p>
     <div id="gear-lista"></div>
+    <div class="gear-row gear-pref" id="tema-row" role="switch" aria-checked="false" tabindex="0" title="Alternar entre tema claro e escuro">
+      <span class="gear-nome">Tema escuro</span><span class="sw"></span>
+    </div>
   </div>
 
   <!-- Ponte servidor → JS: único ponto onde Jinja injeta dados nos módulos. -->
