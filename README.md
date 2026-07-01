@@ -159,6 +159,8 @@ docker compose up -d --build
 ## Todo
 
 - [x] Adicionar opção de avisar o cliente quando o serviço dele for reagendado/cancelado (a IA avisa a ação do dono/administrador com o aval dele).
+- [x] Adicionar opção de cadastro de agendamentos de forma manual no painel admin.
+- [x] Tirar o horário de funcionamento das Configurações Gerais e criar uma nova aba "Horários de Funcionamento", com dia da semana e diversos intervalos de horário por dia (padrão: segunda a sexta, 08:00–12:00 e 13:30–18:00), com opções de restaurar o padrão e apagar tudo.
 - [ ] Botão no painel admin e comando via WhatsApp para o bot parar de responder a uma pessoa/número de WhatsApp específico.
 - [ ] Opção de abrir conversa (em um modal) no painel admin para visualizar as mensagens do WhatsApp, com possibilidade de enviar mensagens manualmente pelo bot. Como dependência, deve-se criar uma nova aba de conversas (além de um botão para abrir a conversa na listagem de agendamentos).
 - [ ] Mesmo com as conversas pausadas, mensagens recebidas do cliente e enviadas manualmente pelo dono/administrador devem ser colocadas na memória do agente (depende de outros to-dos).
@@ -169,6 +171,11 @@ docker compose up -d --build
 - [ ] Adicionar dark mode no painel admin.
 - [ ] Adicionar parte no painel admin para baixar os dados (backup geral) e opção de importá-los novamente.
 - [ ] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possível criar contas bancárias. Nesse contexto, criar botão para marcar o agendamento como concluído, com forma de pagamento e valor recebido (valor autopreenchido, mas ajustável, de acordo com o valor do serviço cadastrado).
+- [ ] Adicionar campo de observações no agendamento, como campo opcional (informar ao agente que o campo existe).
+- [ ] Melhorar as notificações/informações de erros na UI do admin (erros de preenchimento, conexão etc.). Os erros/avisos devem aparecer como bolhas/notificações flutuantes ou em modais (sem levar o usuário para outra página), citando especificamente os erros ocorridos.
+- [ ] Melhorar as verificações de formatação dos campos da UI do admin (número de telefone etc.).
+- [ ] Separar o prompt do MCP do dono e do cliente (mesmo que o auth seja gerenciado pela lógica interna do sistema). Obs.: avaliar separar as tools do MCP de admin e cliente conforme o número do remetente.
+- [ ] Avaliar a possibilidade de não passar as tools de admin para números que não são donos/não autorizados (clientes) — o agente nem enxergaria essas tools na conversa.
 
 <br>
 
