@@ -174,8 +174,8 @@ docker compose up -d --build
 - [ ] Adicionar campo de observações no agendamento, como campo opcional (informar ao agente que o campo existe).
 - [x] Melhorar as notificações/informações de erros na UI do admin (erros de preenchimento, conexão etc.). Os erros/avisos devem aparecer como bolhas/notificações flutuantes ou em modais (sem levar o usuário para outra página), citando especificamente os erros ocorridos.
 - [x] Melhorar as verificações de formatação dos campos da UI do admin (número de telefone etc.).
-- [ ] Separar o prompt do MCP do dono e do cliente (mesmo que o auth seja gerenciado pela lógica interna do sistema). Obs.: avaliar separar as tools do MCP de admin e cliente conforme o número do remetente.
-- [ ] Avaliar a possibilidade de não passar as tools de admin para números que não são donos/não autorizados (clientes) — o agente nem enxergaria essas tools na conversa.
+- [x] Separar o prompt do MCP do dono e do cliente (mesmo que o auth seja gerenciado pela lógica interna do sistema). Obs.: avaliar separar as tools do MCP de admin e cliente conforme o número do remetente.
+- [x] Avaliar a possibilidade de não passar as tools de admin para números que não são donos/não autorizados (clientes) — o agente nem enxergaria essas tools na conversa.
 
 <br>
 

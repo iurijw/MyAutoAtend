@@ -217,12 +217,15 @@ def ia_modelo(
 @router.get("/admin/agente/prompt")
 def agente_prompt(_: str = Depends(autenticar)):
     geral = db.get_prompt("geral")
-    mcp = db.get_prompt("mcp")
+    mcp_dono = db.get_prompt("mcp_dono")
+    mcp_cliente = db.get_prompt("mcp_cliente")
     return {
         "fonte": "painel" if geral is not None else "padrao",
         "geral": geral if geral is not None else agente.seed_prompt_geral(settings.agent_system_prompt),
-        "mcp": mcp if mcp is not None else agente.PROMPT_MCP_PADRAO,
-        "mcp_padrao": agente.PROMPT_MCP_PADRAO,
+        "mcp_dono": mcp_dono if mcp_dono is not None else agente.PROMPT_MCP_DONO_PADRAO,
+        "mcp_cliente": mcp_cliente if mcp_cliente is not None else agente.PROMPT_MCP_CLIENTE_PADRAO,
+        "mcp_dono_padrao": agente.PROMPT_MCP_DONO_PADRAO,
+        "mcp_cliente_padrao": agente.PROMPT_MCP_CLIENTE_PADRAO,
     }
 
 
@@ -230,12 +233,14 @@ def agente_prompt(_: str = Depends(autenticar)):
 def agente_prompt_salvar(
     _: str = Depends(autenticar),
     geral: str = Form(...),
-    mcp: str = Form(...),
+    mcp_dono: str = Form(...),
+    mcp_cliente: str = Form(...),
 ):
     if not geral.strip():
         raise HTTPException(status_code=400, detail="A instrução geral não pode ficar vazia.")
     db.set_prompt("geral", geral.strip())
-    db.set_prompt("mcp", mcp.strip())
+    db.set_prompt("mcp_dono", mcp_dono.strip())
+    db.set_prompt("mcp_cliente", mcp_cliente.strip())
     return {"ok": True}
 
 

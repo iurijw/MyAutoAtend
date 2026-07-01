@@ -17,15 +17,22 @@
     <details class="prompt-avancado" id="prompt-avancado">
       <summary>⚙ Instruções do MCP (avançado)</summary>
       <p class="prompt-aviso">
-        <b>Não recomendado alterar.</b> Este bloco ensina o agente a usar as ferramentas de
+        <b>Não recomendado alterar.</b> Estes blocos ensinam o agente a usar as ferramentas de
         agendamento (MCP) e a formatação das mensagens (divisão em bolhas de WhatsApp).
-        Mudanças aqui podem fazer o agente parar de consultar horários, agendar errado ou
-        mandar mensagens quebradas. Se algo der errado, use <i>Restaurar padrão</i>.
+        São dois: o do <b>dono</b> (todas as ferramentas, inclusive gestão) e o do <b>cliente</b>
+        (sem as ações restritas ao dono). Mudanças aqui podem fazer o agente parar de consultar
+        horários, agendar errado ou mandar mensagens quebradas. Se algo der errado, use
+        <i>Restaurar padrão</i>.
       </p>
-      <label>Bloco de ferramentas (MCP) e formatação</label>
-      <textarea id="prompt-mcp"></textarea>
+      <label>Bloco MCP — dono (todas as ferramentas)</label>
+      <textarea id="prompt-mcp-dono"></textarea>
       <div class="ia-acts">
-        <button class="btn-ghost btn-sm" id="prompt-restaurar">Restaurar padrão</button>
+        <button class="btn-ghost btn-sm" id="prompt-restaurar-dono">Restaurar padrão</button>
+      </div>
+      <label>Bloco MCP — cliente (sem ações do dono)</label>
+      <textarea id="prompt-mcp-cliente"></textarea>
+      <div class="ia-acts">
+        <button class="btn-ghost btn-sm" id="prompt-restaurar-cliente">Restaurar padrão</button>
       </div>
     </details>
 

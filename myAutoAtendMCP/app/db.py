@@ -55,11 +55,13 @@ class HorarioFuncionamento(SQLModel, table=True):
 class Prompt(SQLModel, table=True):
     """Partes do system prompt do agente editadas pelo painel.
 
-    Chaves usadas: "geral" (instrução principal) e "mcp" (bloco que ensina o
-    agente a usar as ferramentas). Fonte de verdade do painel — o agente lê
-    daqui a cada mensagem (app/agente.py), então salvar aplica na hora.
-    Tabela separada da Config: ambientes antigos ganham a tabela nova no
-    create_all sem precisar de migração de coluna.
+    Chaves usadas: "geral" (instrução principal), "mcp_dono" e "mcp_cliente"
+    (bloco de ferramentas — uma versão por perfil de remetente). A chave antiga
+    "mcp" (bloco único) foi aposentada: `_migrar_prompts` copia um eventual
+    texto customizado dela para as duas novas na primeira subida. Fonte de
+    verdade do painel — o agente lê daqui a cada mensagem (app/agente.py),
+    então salvar aplica na hora. Tabela separada da Config: ambientes antigos
+    ganham a tabela nova no create_all sem precisar de migração de coluna.
     """
 
     chave: str = Field(primary_key=True)
@@ -169,6 +171,7 @@ def init_db() -> None:
         )
     SQLModel.metadata.create_all(engine)
     _migrar()
+    _migrar_prompts()
     with _session() as s:
         if s.get(Config, 1) is None:
             s.add(Config(id=1))
@@ -300,6 +303,23 @@ def set_prompt(chave: str, texto: str) -> None:
             p = Prompt(chave=chave, texto=texto)
         s.add(p)
         s.commit()
+
+
+def _migrar_prompts() -> None:
+    """Migração suave da chave `mcp` (bloco único) → `mcp_dono` + `mcp_cliente`.
+
+    Roda só enquanto nenhuma das duas novas chaves existe. Se o dono tinha um
+    texto customizado no `mcp` legado, semeia AMBAS com ele (uma vez) para não
+    perder a personalização — cabe ao dono depois enxugar a versão do cliente
+    no painel. Sem valor customizado, não cria linha: o agente usa os defaults
+    de app/agente.py. A chave `mcp` deixa de ser lida."""
+    if get_prompt("mcp_dono") is not None or get_prompt("mcp_cliente") is not None:
+        return
+    legado = get_prompt("mcp")
+    if legado is None:
+        return
+    set_prompt("mcp_dono", legado)
+    set_prompt("mcp_cliente", legado)
 
 
 # ---------------------------------------------------------------------------

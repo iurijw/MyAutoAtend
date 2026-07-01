@@ -265,7 +265,7 @@ button:active,.btn:active{transform:translateY(1px);}
 #prompt-card.collapsed #prompt-body{display:none;}
 #prompt-card.collapsed .wa-chevron{transform:rotate(-90deg);}
 #prompt-geral{min-height:220px; font-size:14.5px;}
-#prompt-mcp{min-height:160px; font-family:"JetBrains Mono",monospace; font-size:13px;}
+#prompt-mcp-dono,#prompt-mcp-cliente{min-height:160px; font-family:"JetBrains Mono",monospace; font-size:13px;}
 .prompt-avancado{margin-top:18px; border:1px dashed var(--gold-soft); border-radius:12px; padding:0 16px;}
 .prompt-avancado summary{cursor:pointer; user-select:none; padding:14px 0; font-weight:600; color:var(--ink-soft);}
 .prompt-avancado[open] summary{border-bottom:1px dashed var(--gold-soft);}
