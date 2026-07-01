@@ -171,7 +171,7 @@ docker compose up -d --build
 - [x] Adicionar dark mode no painel admin.
 - [ ] Adicionar parte no painel admin para baixar os dados (backup geral) e opção de importá-los novamente.
 - [ ] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possível criar contas bancárias. Nesse contexto, criar botão para marcar o agendamento como concluído, com forma de pagamento e valor recebido (valor autopreenchido, mas ajustável, de acordo com o valor do serviço cadastrado).
-- [ ] Adicionar campo de observações no agendamento, como campo opcional (informar ao agente que o campo existe).
+- [x] Adicionar campo de observações no agendamento, como campo opcional (informar ao agente que o campo existe).
 - [x] Melhorar as notificações/informações de erros na UI do admin (erros de preenchimento, conexão etc.). Os erros/avisos devem aparecer como bolhas/notificações flutuantes ou em modais (sem levar o usuário para outra página), citando especificamente os erros ocorridos.
 - [x] Melhorar as verificações de formatação dos campos da UI do admin (número de telefone etc.).
 - [x] Separar o prompt do MCP do dono e do cliente (mesmo que o auth seja gerenciado pela lógica interna do sistema). Obs.: avaliar separar as tools do MCP de admin e cliente conforme o número do remetente.
