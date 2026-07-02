@@ -166,16 +166,19 @@ docker compose up -d --build
 - [ ] Mesmo com as conversas pausadas, mensagens recebidas do cliente e enviadas manualmente pelo dono/administrador devem ser colocadas na memória do agente (depende de outros to-dos).
 - [ ] Adicionar ficha de cadastro do cliente, como feature opcional, em uma nova aba na UI. Os campos do cliente devem ser customizáveis, com tipos de dados próprios (str, int, data etc.). O cadastro e os campos poderão ser preenchidos pelo agente durante a conversa com o cliente (conforme instrução dada a ele). A ficha de cadastro deve ter o botão de abrir conversa (depende de outros to-dos).
 - [ ] Adicionar uma pequena memória para cada cliente, com o objetivo de manter informações cruciais (nome, opções de acessibilidade etc.). Feature opcional, ativada no admin UI.
-- [ ] Adicionar opção de outros provedores de speech-to-text (Whisper).
-- [ ] Adicionar opção de geração de áudio pelo bot (para pessoas que não sabem ler e escrever). Ao implementar, ativar a sub-aba "Enviar áudio" no card Provedores de IA do painel (hoje desabilitada com badge "em breve" em `templates/partials/ia.html`) e criar o pane de configuração correspondente (provedor/chave/modelo TTS).
 - [x] Adicionar dark mode no painel admin.
-- [ ] Adicionar parte no painel admin para baixar os dados (backup geral) e opção de importá-los novamente.
 - [ ] Adicionar controle financeiro dos agendamentos (uma nova seção na UI e controle pelo bot), sendo possível criar contas bancárias. Nesse contexto, criar botão para marcar o agendamento como concluído, com forma de pagamento e valor recebido (valor autopreenchido, mas ajustável, de acordo com o valor do serviço cadastrado).
 - [x] Adicionar campo de observações no agendamento, como campo opcional (informar ao agente que o campo existe).
 - [x] Melhorar as notificações/informações de erros na UI do admin (erros de preenchimento, conexão etc.). Os erros/avisos devem aparecer como bolhas/notificações flutuantes ou em modais (sem levar o usuário para outra página), citando especificamente os erros ocorridos.
 - [x] Melhorar as verificações de formatação dos campos da UI do admin (número de telefone etc.).
 - [x] Separar o prompt do MCP do dono e do cliente (mesmo que o auth seja gerenciado pela lógica interna do sistema). Obs.: avaliar separar as tools do MCP de admin e cliente conforme o número do remetente.
 - [x] Avaliar a possibilidade de não passar as tools de admin para números que não são donos/não autorizados (clientes) — o agente nem enxergaria essas tools na conversa.
+
+### Todo avançado (mais adiante)
+
+- [ ] Adicionar opção de outros provedores de speech-to-text (Whisper).
+- [ ] Adicionar opção de geração de áudio pelo bot (para pessoas que não sabem ler e escrever). Ao implementar, ativar a sub-aba "Enviar áudio" no card Provedores de IA do painel (hoje desabilitada com badge "em breve" em `templates/partials/ia.html`) e criar o pane de configuração correspondente (provedor/chave/modelo TTS).
+- [ ] Adicionar parte no painel admin para baixar os dados (backup geral) e opção de importá-los novamente.
 
 <br>
 
