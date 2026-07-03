@@ -208,4 +208,11 @@ def contato_ocupado(telefone: str) -> bool:
 def dividir_bolhas(texto: str) -> list[str]:
     normalizado = re.sub(r"\[quebra\]", "[quebrar]", texto or "", flags=re.IGNORECASE)
     normalizado = re.sub(r"\n+", "[quebrar]", normalizado)
-    return [p.strip() for p in normalizado.split("[quebrar]") if p.strip()]
+    bolhas = [p.strip() for p in normalizado.split("[quebrar]") if p.strip()]
+    # modelos "reasoning" mal-comportados repetem o mesmo parágrafo várias
+    # vezes — bolhas consecutivas idênticas nunca são intencionais
+    sem_repeticao: list[str] = []
+    for b in bolhas:
+        if not sem_repeticao or sem_repeticao[-1] != b:
+            sem_repeticao.append(b)
+    return sem_repeticao

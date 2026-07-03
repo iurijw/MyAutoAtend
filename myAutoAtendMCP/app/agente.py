@@ -13,6 +13,7 @@ tabela Conversa, janela de 50 mensagens (paridade com o Redis Chat Memory).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -56,7 +57,7 @@ PROMPT_MCP_DONO_PADRAO = f"""{_SECAO_MCP}
 Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
 - listar_servicos: catálogo com nome, descrição, valor e duração.
 - consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD). Respeita o horário de funcionamento por dia da semana; dia fechado volta vazio com aviso — ofereça outra data.
-- agendar(servico_id, nome_cliente, inicio, observacoes): cria agendamento; inicio = YYYY-MM-DDTHH:MM; observacoes é opcional (detalhes que o cliente mencionar — não pergunte por elas).
+- agendar(servico_id, nome_cliente, inicio, observacoes): cria agendamento; inicio = YYYY-MM-DDTHH:MM; observacoes é opcional (detalhes que o cliente mencionar — não pergunte por elas). Se ainda não souber o nome de quem vai ser atendido, PERGUNTE antes de agendar — nunca use nome genérico ("cliente", "sem nome").
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id). Quando o DONO remarca/cancela horário de um cliente, pergunte se ele quer que o cliente seja avisado; só com sim explícito passe avisar_cliente=true (a IA contata o cliente em segundo plano).
 - fechar_data / abrir_data / bloquear_horario [SÓ DONO]: fecha ou reabre dias e períodos, ou bloqueia uma faixa de horário.
@@ -78,7 +79,7 @@ PROMPT_MCP_CLIENTE_PADRAO = f"""{_SECAO_MCP}
 Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, preços, horários ou agendamentos.
 - listar_servicos: catálogo com nome, descrição, valor e duração.
 - consultar_horarios_disponiveis(data, servico_id): horários livres numa data (YYYY-MM-DD). Respeita o horário de funcionamento por dia da semana; dia fechado volta vazio com aviso — ofereça outra data.
-- agendar(servico_id, nome_cliente, inicio, observacoes): cria agendamento; inicio = YYYY-MM-DDTHH:MM; observacoes é opcional (detalhes que o cliente mencionar — não pergunte por elas).
+- agendar(servico_id, nome_cliente, inicio, observacoes): cria agendamento; inicio = YYYY-MM-DDTHH:MM; observacoes é opcional (detalhes que o cliente mencionar — não pergunte por elas). Se ainda não souber o nome de quem vai ser atendido, PERGUNTE antes de agendar — nunca use nome genérico ("cliente", "sem nome").
 - meus_agendamentos: agendamentos do próprio cliente.
 - reagendar(agendamento_id, novo_inicio) e cancelar(agendamento_id): remarca ou cancela um agendamento do próprio cliente.
 - Gestão da agenda (fechar/abrir dias, bloquear horário, criar/editar serviço, remanejar um dia) é exclusiva do dono — você NÃO tem essas ferramentas. Se pedirem, explique com gentileza que isso é feito pelo dono.
@@ -284,7 +285,22 @@ async def responder(telefone: str, mensagem: str) -> str:
 
     msgs = _aparar(list(result.all_messages()))
     db.set_conversa(telefone, ModelMessagesTypeAdapter.dump_json(msgs).decode())
-    return result.output
+    return limpar_raciocinio(result.output)
+
+
+def limpar_raciocinio(texto: str) -> str:
+    """Remove raciocínio vazado por modelos "reasoning" servidos via chat
+    completions (DeepSeek R1 e afins): blocos <think>...</think>, tag de
+    fechamento órfã (fica só o que vem DEPOIS do último </think>) e o
+    embrulho <answer>. Texto de modelo bem-comportado passa intacto."""
+    t = texto or ""
+    t = re.sub(r"<think>.*?</think>", "", t, flags=re.DOTALL | re.IGNORECASE)
+    if re.search(r"</think>", t, flags=re.IGNORECASE):
+        depois = re.split(r"</think>", t, flags=re.IGNORECASE)[-1]
+        # se não sobrou nada depois do último </think>, a resposta veio antes
+        t = depois if depois.strip() else re.sub(r"</think>", "", t, flags=re.IGNORECASE)
+    t = re.sub(r"</?(answer|reasoning|thinking)>", "", t, flags=re.IGNORECASE)
+    return t.strip()
 
 
 # Prefixo que marca turno gerado pelo sistema (ações proativas). Documentado
@@ -398,7 +414,8 @@ def historico_para_bolhas(bruto: str | None) -> list[dict]:
             for p in m.parts:
                 if not isinstance(p, TextPart):
                     continue
-                texto = (p.content or "").strip()
+                # histórico antigo pode ter raciocínio vazado gravado
+                texto = limpar_raciocinio(p.content or "")
                 if texto:
                     bolhas.append({"quem": "bot", "texto": texto, "hora": _hora_local(m.timestamp)})
     return bolhas

@@ -45,6 +45,19 @@ def _agora_local() -> datetime:
     return datetime.now(tz).replace(tzinfo=None)
 
 
+# Nomes que o modelo inventa quando pula a pergunta do nome — barrados na
+# tool `agendar` (o certo é perguntar e chamar de novo com o nome real).
+_NOMES_GENERICOS = {
+    "cliente", "o cliente", "a cliente", "cliente novo", "novo cliente",
+    "sem nome", "desconhecido", "desconhecida", "nome", "usuario", "usuário",
+    "n/a", "na", "-", "?", "x", "teste", "test",
+}
+
+
+def _nome_generico(nome: str | None) -> bool:
+    return not nome or nome.strip().lower() in _NOMES_GENERICOS
+
+
 # ---------------------------------------------------------------------------
 # Tools ABERTAS
 # ---------------------------------------------------------------------------
@@ -117,6 +130,12 @@ def agendar(
     tel = auth.requester(telefone_solicitante)
     if not tel:
         return auth.NEGADO_SEM_SOLICITANTE
+
+    if _nome_generico(nome_cliente):
+        return {
+            "erro": "Nome do cliente ausente ou genérico. Pergunte o nome "
+            "real do cliente antes de agendar e chame de novo com ele."
+        }
 
     servico = db.get_servico(servico_id)
     if not servico:
