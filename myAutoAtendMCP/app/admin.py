@@ -8,6 +8,7 @@ PARA EVOLUÇÃO FUTURA: trocar Basic por login de sessão com senha em hash
 (passlib/bcrypt) e cookie seguro.
 """
 
+import re
 import secrets
 from datetime import datetime, time, timedelta
 
@@ -447,6 +448,124 @@ def reagendar_agendamento(
             inicio_anterior=inicio_anterior,
         )
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Conversas (histórico do bot por contato + pausa + envio manual) — consumido
+# por JS no painel. A memória (tabela Conversa) é indexada pelo remoteJid; a
+# ficha do contato (tabela Cliente: nome + pausa) pelo E.164 normalizado. O
+# identificador que trafega com o front é o telefone normalizado; a chave da
+# memória é reencontrada por `db.resolver_chave_conversa`.
+# ---------------------------------------------------------------------------
+
+
+def _resumo_conversas() -> list[dict]:
+    """Lista de conversas p/ o card: uma linha por contato, mais recente no
+    topo. Junta a memória (última mensagem, timestamp) com a ficha do contato
+    (nome, pausa). Inclui também contatos sem conversa ainda (ex.: pausados
+    manualmente) para que a pausa fique visível e reversível."""
+    clientes = {c.telefone: c for c in db.listar_clientes()}
+    itens: list[dict] = []
+    vistos: set[str] = set()
+    for conv in db.listar_conversas():
+        norm = normalizar(conv.telefone) or conv.telefone
+        vistos.add(norm)
+        bolhas = agente.historico_para_bolhas(conv.historico)
+        ultima = bolhas[-1] if bolhas else None
+        cli = clientes.get(norm)
+        itens.append(
+            {
+                "telefone": norm,
+                "nome": cli.nome if cli and cli.nome else "",
+                "pausado": bool(cli and cli.bot_pausado),
+                "preview": (ultima["texto"][:90] if ultima else ""),
+                "quem": ultima["quem"] if ultima else "",
+                "hora": ultima["hora"] if ultima else "",
+                "_ordem": conv.atualizado_em or "",
+            }
+        )
+    for tel, cli in clientes.items():
+        if tel in vistos:
+            continue
+        itens.append(
+            {
+                "telefone": tel,
+                "nome": cli.nome or "",
+                "pausado": bool(cli.bot_pausado),
+                "preview": "",
+                "quem": "",
+                "hora": "",
+                "_ordem": "",
+            }
+        )
+    itens.sort(key=lambda x: x["_ordem"], reverse=True)
+    for it in itens:
+        it.pop("_ordem", None)
+    return itens
+
+
+@router.get("/admin/conversas")
+def listar_conversas(_: str = Depends(autenticar)):
+    return {"conversas": _resumo_conversas()}
+
+
+@router.get("/admin/conversas/{telefone}")
+def conversa_detalhe(telefone: str, _: str = Depends(autenticar)):
+    norm = normalizar(telefone) or telefone
+    cli = db.get_cliente(norm)
+    bruto = db.get_conversa(db.resolver_chave_conversa(telefone))
+    return {
+        "telefone": norm,
+        "nome": cli.nome if cli and cli.nome else "",
+        "pausado": bool(cli and cli.bot_pausado),
+        "mensagens": agente.historico_para_bolhas(bruto),
+    }
+
+
+@router.post("/admin/conversas/{telefone}/pausa")
+def conversa_pausa(
+    telefone: str,
+    _: str = Depends(autenticar),
+    pausar: bool = Form(...),
+):
+    if mesmo_numero(telefone, db.get_config().telefone_dono):
+        raise HTTPException(
+            status_code=400,
+            detail="O dono não pode ser pausado — é a interface de gestão.",
+        )
+    c = db.set_pausa_cliente(telefone, pausar)
+    return {"ok": True, "telefone": c.telefone, "bot_pausado": c.bot_pausado}
+
+
+@router.post("/admin/conversas/{telefone}/enviar")
+async def conversa_enviar(
+    telefone: str,
+    _: str = Depends(autenticar),
+    texto: str = Form(...),
+):
+    """Envia UMA mensagem manual pelo WhatsApp (sem IA) e só grava na memória
+    como fala do bot APÓS o envio dar certo. Falha da Evolution → 502 (o caso
+    comum é o WhatsApp não estar pareado)."""
+    msg = texto.strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Escreva uma mensagem antes de enviar.")
+    numero = re.sub(r"\D", "", telefone)
+    if not numero:
+        raise HTTPException(status_code=400, detail="Telefone inválido.")
+    # Digitação curta e proporcional (bem menor que o pipeline reativo).
+    digitando_ms = int(min(0.3 + len(msg) * 0.012, 1.8) * 1000)
+    try:
+        # Timeout curto: sem WhatsApp pareado o sendText trava — o painel
+        # precisa cair no 502 rápido para o toast aparecer.
+        await evolution.enviar_texto(numero, msg, digitando_ms=digitando_ms, timeout=8.0)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível enviar pelo WhatsApp. Confira se o número "
+            "está conectado no card Conexão WhatsApp.",
+        ) from e
+    agente.registrar_na_memoria(db.resolver_chave_conversa(telefone), msg, "bot")
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------

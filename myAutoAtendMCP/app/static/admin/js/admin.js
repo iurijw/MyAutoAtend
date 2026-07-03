@@ -8,6 +8,7 @@ import './ia.js';
 import './prompt.js';
 import './horarios.js';
 import './proatividade.js';
+import './conversas.js';
 import './config.js';
 import './drag.js';
 import './gear.js';

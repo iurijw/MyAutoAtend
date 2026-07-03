@@ -23,7 +23,7 @@ import secrets
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from . import agente, auth, evolution, ia
+from . import agente, auth, db, evolution, ia
 from .config import settings
 from .phone import mesmo_numero
 
@@ -71,6 +71,19 @@ async def _processar_evento(body: dict) -> None:
         if texto is None:
             return  # tipo não suportado (sticker, contato, etc.)
         texto = _sanitizar_entrada(texto)
+
+        # Contato conhecido: upsert sob demanda, aproveitando o nome do WhatsApp.
+        db.upsert_cliente(remote_jid, data.get("pushName") or "")
+
+        # Bot pausado p/ este contato: a mídia já virou texto e a mensagem é
+        # gravada na memória (o dono retoma com o contexto completo ao
+        # despausar), mas o agente NÃO roda e NADA é enviado — sem debounce,
+        # não há resposta para agrupar. O dono nunca é pausável.
+        dono = mesmo_numero(remote_jid, db.get_config().telefone_dono)
+        if not dono and db.cliente_pausado(remote_jid):
+            agente.registrar_na_memoria(remote_jid, texto, "cliente")
+            log.info("Bot pausado p/ %s — mensagem só gravada, sem resposta", remote_jid)
+            return
 
         await evolution.marcar_como_lida(remote_jid, False, key.get("id") or "")
         _agendar_lote(remote_jid, texto)

@@ -12,6 +12,7 @@ conflito e o INSERT dentro do mesmo processo (instância única).
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from threading import Lock
 from typing import Optional
@@ -19,7 +20,7 @@ from typing import Optional
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .config import settings
-from .phone import mesmo_numero
+from .phone import mesmo_numero, normalizar
 
 # ---------------------------------------------------------------------------
 # Modelos (tabelas)
@@ -92,6 +93,22 @@ class Conversa(SQLModel, table=True):
     telefone: str = Field(primary_key=True)
     historico: str
     atualizado_em: str = ""
+
+
+class Cliente(SQLModel, table=True):
+    """Contato que já apareceu no WhatsApp do bot (telefone E.164 como PK).
+
+    Criada sob demanda: upsert no pipeline do webhook (aproveita o pushName
+    para o nome) e ao pausar pelo painel. Nasce só com nome + estado de pausa,
+    mas vai crescer (ficha de cadastro, memória por cliente) — por isso os
+    acessos passam pelos helpers get/upsert. Tabela nova: o create_all cobre,
+    sem ALTER. A chave é o E.164 normalizado; a memória (Conversa) continua
+    indexada pelo remoteJid bruto — `resolver_chave_conversa` faz a ponte.
+    """
+
+    telefone: str = Field(primary_key=True)  # E.164 normalizado
+    nome: str = ""
+    bot_pausado: bool = False
 
 
 class Servico(SQLModel, table=True):
@@ -526,6 +543,75 @@ def set_conversa(telefone: str, historico: str) -> None:
         c.atualizado_em = datetime.now().isoformat(timespec="seconds")
         s.add(c)
         s.commit()
+
+
+def listar_conversas() -> list[Conversa]:
+    """Todas as conversas com memória (fonte da lista de conversas do painel)."""
+    with _session() as s:
+        return list(s.exec(select(Conversa)).all())
+
+
+def resolver_chave_conversa(telefone: str) -> str:
+    """remoteJid da memória de um contato a partir de um telefone qualquer.
+
+    Reusa a chave existente se o número bater (o jid real pode diferir do
+    E.164 pelo nono dígito, e inventar outra chave racharia o histórico);
+    sem conversa ainda, constrói o jid a partir dos dígitos.
+    """
+    for chave in chaves_conversas():
+        if mesmo_numero(chave, telefone):
+            return chave
+    return f"{re.sub(r'[^0-9]', '', telefone or '')}@s.whatsapp.net"
+
+
+# ---------------------------------------------------------------------------
+# Clientes (contatos conhecidos: nome + pausa do bot — cresce depois)
+# ---------------------------------------------------------------------------
+
+
+def get_cliente(telefone: str) -> Cliente | None:
+    """Contato pelo telefone (normalizado para E.164). None se nunca falou."""
+    with _session() as s:
+        return s.get(Cliente, normalizar(telefone) or telefone)
+
+
+def listar_clientes() -> list[Cliente]:
+    with _session() as s:
+        return list(s.exec(select(Cliente)).all())
+
+
+def upsert_cliente(telefone: str, nome: str | None = None) -> Cliente:
+    """Cria ou atualiza um contato. `nome` só sobrescreve quando vem
+    preenchido — um pushName vazio não apaga o nome já salvo."""
+    chave = normalizar(telefone) or telefone
+    with _lock, _session() as s:
+        c = s.get(Cliente, chave)
+        if c is None:
+            c = Cliente(telefone=chave)
+        if nome and nome.strip():
+            c.nome = nome.strip()
+        s.add(c)
+        s.commit()
+        return c
+
+
+def set_pausa_cliente(telefone: str, pausado: bool) -> Cliente:
+    """Liga/desliga a pausa do bot para um contato (upsert)."""
+    chave = normalizar(telefone) or telefone
+    with _lock, _session() as s:
+        c = s.get(Cliente, chave)
+        if c is None:
+            c = Cliente(telefone=chave)
+        c.bot_pausado = pausado
+        s.add(c)
+        s.commit()
+        return c
+
+
+def cliente_pausado(telefone: str) -> bool:
+    """True se o bot está pausado para este contato."""
+    c = get_cliente(telefone)
+    return bool(c and c.bot_pausado)
 
 
 # ---------------------------------------------------------------------------

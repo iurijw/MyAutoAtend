@@ -23,10 +23,8 @@ import asyncio
 import json
 import logging
 import random
-import re
 
 from . import agente, db, ia, whatsapp
-from .phone import mesmo_numero
 from .tools import _agora_local
 
 log = logging.getLogger("tarefas")
@@ -73,7 +71,7 @@ async def _executar(t: db.Tarefa) -> None:
                 t.id, status="concluida", resultado="Tarefa obsoleta — nada a fazer."
             )
             return
-        alvo = _chave_contato(t.telefone_alvo)
+        alvo = db.resolver_chave_conversa(t.telefone_alvo)
         resposta = await agente.executar_tarefa(alvo, instrucao)
         await whatsapp.enviar_bolhas(alvo.split("@")[0], resposta)
         db.atualizar_tarefa(t.id, status="concluida", resultado=resposta[:500])
@@ -88,16 +86,6 @@ async def _executar(t: db.Tarefa) -> None:
         else:
             db.atualizar_tarefa(t.id, status="pendente")
         log.exception("Tarefa %d falhou (tentativa %d)", t.id, t.tentativas + 1)
-
-
-def _chave_contato(telefone: str) -> str:
-    """remoteJid do contato. Reusa a chave de memória existente se houver —
-    o jid real pode diferir do E.164 (nono dígito), e inventar outra chave
-    racharia o histórico da conversa."""
-    for chave in db.chaves_conversas():
-        if mesmo_numero(chave, telefone):
-            return chave
-    return f"{re.sub(r'[^0-9]', '', telefone)}@s.whatsapp.net"
 
 
 # ---------------------------------------------------------------------------

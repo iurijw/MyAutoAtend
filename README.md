@@ -161,9 +161,9 @@ docker compose up -d --build
 - [x] Adicionar opção de avisar o cliente quando o serviço dele for reagendado/cancelado (a IA avisa a ação do dono/administrador com o aval dele).
 - [x] Adicionar opção de cadastro de agendamentos de forma manual no painel admin.
 - [x] Tirar o horário de funcionamento das Configurações Gerais e criar uma nova aba "Horários de Funcionamento", com dia da semana e diversos intervalos de horário por dia (padrão: segunda a sexta, 08:00–12:00 e 13:30–18:00), com opções de restaurar o padrão e apagar tudo.
-- [ ] Botão no painel admin e comando via WhatsApp para o bot parar de responder a uma pessoa/número de WhatsApp específico.
-- [ ] Opção de abrir conversa (em um modal) no painel admin para visualizar as mensagens do WhatsApp, com possibilidade de enviar mensagens manualmente pelo bot. Como dependência, deve-se criar uma nova aba de conversas (além de um botão para abrir a conversa na listagem de agendamentos).
-- [ ] Mesmo com as conversas pausadas, mensagens recebidas do cliente e enviadas manualmente pelo dono/administrador devem ser colocadas na memória do agente (depende de outros to-dos).
+- [x] Botão no painel admin e comando via WhatsApp para o bot parar de responder a uma pessoa/número de WhatsApp específico.
+- [x] Opção de abrir conversa (em um modal) no painel admin para visualizar as mensagens do WhatsApp, com possibilidade de enviar mensagens manualmente pelo bot. Como dependência, deve-se criar uma nova aba de conversas (além de um botão para abrir a conversa na listagem de agendamentos).
+- [x] Mesmo com as conversas pausadas, mensagens recebidas do cliente e enviadas manualmente pelo dono/administrador devem ser colocadas na memória do agente (depende de outros to-dos).
 - [ ] Adicionar ficha de cadastro do cliente, como feature opcional, em uma nova aba na UI. Os campos do cliente devem ser customizáveis, com tipos de dados próprios (str, int, data etc.). O cadastro e os campos poderão ser preenchidos pelo agente durante a conversa com o cliente (conforme instrução dada a ele). A ficha de cadastro deve ter o botão de abrir conversa (depende de outros to-dos).
 - [ ] Adicionar uma pequena memória para cada cliente, com o objetivo de manter informações cruciais (nome, opções de acessibilidade etc.). Feature opcional, ativada no admin UI.
 - [x] Adicionar dark mode no painel admin.

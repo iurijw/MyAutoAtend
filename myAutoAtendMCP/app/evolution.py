@@ -150,14 +150,21 @@ def enviar_texto_sync(numero: str, texto: str) -> None:
         r.raise_for_status()
 
 
-async def enviar_texto(numero: str, texto: str, digitando_ms: int = 0) -> None:
-    """Envia texto; `digitando_ms` > 0 mostra "digitando..." antes (delay)."""
+async def enviar_texto(
+    numero: str, texto: str, digitando_ms: int = 0, timeout: float | None = None
+) -> None:
+    """Envia texto; `digitando_ms` > 0 mostra "digitando..." antes (delay).
+
+    `timeout` sobrescreve o do cliente (30s): o envio manual do painel passa um
+    valor curto para não prender a requisição atrás de uma instância
+    desconectada (a Evolution trava o sendText nesse caso)."""
     corpo: dict = {"number": numero, "text": texto}
     if digitando_ms > 0:
         corpo["delay"] = digitando_ms
     async with _async_client() as c:
+        kwargs = {"timeout": timeout} if timeout is not None else {}
         r = await c.post(
-            f"/message/sendText/{settings.evolution_instance}", json=corpo
+            f"/message/sendText/{settings.evolution_instance}", json=corpo, **kwargs
         )
         r.raise_for_status()
 

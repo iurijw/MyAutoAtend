@@ -28,6 +28,7 @@
         </td>
         <td>
           <div class="acts">
+            <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
             <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
             <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
                   onsubmit="if(!confirm('Cancelar o agendamento de {{ a.nome_cliente }}?'))return false;this.avisar_cliente.value=confirm('Avisar {{ a.nome_cliente }} pelo WhatsApp? A IA manda a mensagem do cancelamento.')?'1':'';">

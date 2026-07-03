@@ -401,6 +401,30 @@ def remanejar_dia(
 
 
 @mcp.tool()
+def pausar_bot(
+    telefone: str,
+    pausar: bool = True,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """[DONO] Silencia ou retoma o bot para um contato.
+
+    Com `pausar` True o bot para de responder àquele número: as mensagens do
+    contato seguem sendo GRAVADAS na memória, mas nenhuma resposta é enviada —
+    o dono assume a conversa. `pausar` False retoma o atendimento automático.
+    O próprio dono nunca pode ser pausado (é a interface de gestão).
+    """
+    if not auth.eh_dono(telefone_solicitante):
+        return auth.NEGADO_DONO
+    alvo = normalizar(telefone) or (telefone or "").strip()
+    if not alvo:
+        return {"erro": "Informe o telefone do contato."}
+    if mesmo_numero(alvo, db.get_config().telefone_dono):
+        return {"erro": "O dono não pode ser pausado."}
+    c = db.set_pausa_cliente(alvo, pausar)
+    return {"ok": True, "telefone": c.telefone, "bot_pausado": c.bot_pausado}
+
+
+@mcp.tool()
 def criar_servico(
     nome: str,
     descricao: str,
