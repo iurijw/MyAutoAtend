@@ -434,12 +434,19 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(223,111,115,.16); co
    =========================================================================== */
 .wrap{max-width:none;}                       /* os cards ocupam o browser todo */
 .grid-stack{margin-top:14px;}
-/* vão entre cards garantido por CSS (11px por lado = 22px entre vizinhos),
-   independente do stylesheet dinâmico do gridstack (margin da init) */
-.grid-stack > .grid-stack-item > .grid-stack-item-content{inset:11px !important;}
-.grid-stack .drag-sec{margin:0;}
-.grid-stack-item-content{display:flex; flex-direction:column;}
-.grid-stack .card{margin:0; flex:1 1 auto; min-height:0; overflow-y:auto;}
+/* O .drag-sec é o próprio .card, e vira o item da grade — se o visual ficasse
+   nele, os vizinhos encostariam. Então o item externo fica transparente e o
+   VISUAL do card mora no .grid-stack-item-content, cujo inset de 11px por
+   lado cria o vão real de 22px entre cards. */
+.grid-stack > .grid-stack-item{background:transparent; border:none; box-shadow:none; padding:0; margin:0;}
+.grid-stack > .grid-stack-item > .grid-stack-item-content{
+  inset:11px !important;
+  background:var(--card); border:1px solid var(--line); border-radius:18px;
+  box-shadow:0 18px 40px -30px var(--shadow);
+  padding:26px 26px 28px; overflow-y:auto;
+}
+html[data-theme="dark"] .grid-stack > .grid-stack-item{box-shadow:none;}
+html[data-theme="dark"] .grid-stack > .grid-stack-item > .grid-stack-item-content{box-shadow:0 18px 40px -26px rgba(0,0,0,.72);}
 /* alça de resize do canto: discreta e coerente com o papel */
 .grid-stack > .grid-stack-item > .ui-resizable-se{opacity:.35; filter:grayscale(1);}
 .grid-stack > .grid-stack-item > .ui-resizable-se:hover{opacity:.8;}
