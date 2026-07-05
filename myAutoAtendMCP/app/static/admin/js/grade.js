@@ -8,6 +8,20 @@ const KEY = 'admin-grade-v1';
 const CELULA = 30;   // px por linha da grade
 const MARGEM = 22;   // vão entre cards (mesmo respiro do painel antigo empilhado)
 
+// Layout padrão de primeira visita (grade de 12 colunas, 2 colunas de cards).
+// Card novo que ainda não estiver aqui cai no fallback (linha cheia, auto).
+const PADRAO = {
+  conversas:    { x: 0, y: 0,  w: 5, h: 13 },
+  agendamentos: { x: 5, y: 0,  w: 7, h: 13 },
+  wa:           { x: 0, y: 13, w: 5, h: 14 },
+  ia:           { x: 5, y: 13, w: 7, h: 14 },
+  horarios:     { x: 0, y: 27, w: 5, h: 17 },
+  prompt:       { x: 5, y: 27, w: 7, h: 17 },
+  catalogo:     { x: 0, y: 44, w: 7, h: 30 },
+  config:       { x: 7, y: 44, w: 5, h: 13 },
+  proatividade: { x: 7, y: 57, w: 5, h: 17 },
+};
+
 const wrap = document.querySelector('.wrap');
 const secs = [...wrap.querySelectorAll(':scope > .drag-sec')];
 if (!secs.length || typeof GridStack === 'undefined') {
@@ -20,34 +34,37 @@ function iniciar() {
   let salvo = {};
   try { salvo = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (_) { /* layout corrompido → padrão */ }
 
+  // posição efetiva de um card: escolha do usuário > layout padrão > nada
+  const posDe = (sec) => salvo[sec] || PADRAO[sec];
+
   // contêiner da grade no lugar dos cards (header/stats ficam fora)
   const grade = document.createElement('div');
   grade.className = 'grid-stack';
   secs[0].before(grade);
 
-  // Pré-ordena pela posição salva (y, depois x): o gridstack posiciona na
+  // Pré-ordena pela posição efetiva (y, depois x): o gridstack posiciona na
   // ordem do DOM, e montar "de baixo pra cima" cascateia colisões que
-  // embaralham o layout no F5. Sem posição salva → fim (auto-position).
+  // embaralham o layout no F5. Sem posição → fim (auto-position).
   const ordenados = [...secs].sort((a, b) => {
-    const pa = salvo[a.dataset.sec], pb = salvo[b.dataset.sec];
+    const pa = posDe(a.dataset.sec), pb = posDe(b.dataset.sec);
     if (!pa && !pb) return 0;
     if (!pa) return 1;
     if (!pb) return -1;
     return (pa.y - pb.y) || (pa.x - pb.x);
   });
 
-  // Marca um card como item da grade com a posição salva (ou padrão de
-  // primeira visita). Só entra aqui card VISÍVEL: card oculto não pode
-  // participar da montagem — coordenadas velhas/ausentes dele colidem com o
-  // layout dos visíveis e empurram card bom pra baixo no F5.
+  // Marca um card como item da grade com a posição efetiva (salva ou padrão).
+  // Só entra aqui card VISÍVEL: card oculto não pode participar da montagem —
+  // coordenadas velhas/ausentes dele colidem com o layout dos visíveis e
+  // empurram card bom pra baixo no F5.
   const prepararItem = (s) => {
     s.classList.add('grid-stack-item');
-    const pos = salvo[s.dataset.sec];
+    const pos = posDe(s.dataset.sec);
     if (pos) {
       s.setAttribute('gs-x', pos.x); s.setAttribute('gs-y', pos.y);
       s.setAttribute('gs-w', pos.w); s.setAttribute('gs-h', pos.h);
     } else {
-      // primeira visita: card em linha cheia com a altura do conteúdo atual
+      // card novo fora do PADRAO: linha cheia com a altura do conteúdo atual
       const px = s.firstElementChild ? s.firstElementChild.offsetHeight : 0;
       const h = px ? Math.max(4, Math.round((px + MARGEM) / (CELULA + MARGEM))) : 10;
       s.setAttribute('gs-w', '12');
@@ -80,9 +97,9 @@ function iniciar() {
   // Restore canônico por id: reafirma as posições salvas depois do init —
   // imune a qualquer colisão/ajuste que o engine tenha feito na montagem.
   // O `false` é essencial: sem ele o load() REMOVE widgets fora da lista.
-  const comPos = ordenados.filter(s => s.gridstackNode && salvo[s.dataset.sec]);
+  const comPos = ordenados.filter(s => s.gridstackNode && posDe(s.dataset.sec));
   if (comPos.length) {
-    grid.load(comPos.map(s => ({ id: s.dataset.sec, ...salvo[s.dataset.sec] })), false);
+    grid.load(comPos.map(s => ({ id: s.dataset.sec, ...posDe(s.dataset.sec) })), false);
   }
 
   // só persiste o layout de 12 colunas — o modo 1 coluna (mobile) é derivado

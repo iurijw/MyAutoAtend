@@ -1,6 +1,6 @@
-/* Alternância de tema (claro/escuro). O tema já é aplicado antes do paint pelo
-   script inline no <head>; aqui cuidamos do switch (na engrenagem), da
-   persistência em localStorage e do acompanhamento da preferência do SO. */
+/* Alternância de tema (claro/escuro; padrão do painel é o escuro). O tema já
+   é aplicado antes do paint pelo script inline no <head>; aqui cuidamos do
+   switch (na engrenagem) e da persistência em localStorage. */
 
 const KEY = 'tema';
 const row = document.getElementById('tema-row');
@@ -34,11 +34,3 @@ if (row) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(); }
   });
 }
-
-// Sem escolha manual salva, acompanha o tema do sistema em tempo real.
-try {
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-    if (localStorage.getItem(KEY)) return;   // a escolha do usuário tem prioridade
-    aplicar(e.matches ? 'dark' : 'light');
-  });
-} catch (_) { /* navegador antigo sem addEventListener no MediaQueryList */ }

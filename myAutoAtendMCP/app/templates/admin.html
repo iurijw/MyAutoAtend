@@ -3,15 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Tema aplicado ANTES do primeiro paint (evita flash claro→escuro). -->
+  <!-- Tema aplicado ANTES do primeiro paint (evita flash). Padrão: escuro. -->
   <script>
     (function(){
       try{
         var t = localStorage.getItem('tema');
-        if (t !== 'dark' && t !== 'light')
-          t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        if (t !== 'dark' && t !== 'light') t = 'dark';
         document.documentElement.setAttribute('data-theme', t);
-      }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
+      }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
     })();
   </script>
   <meta name="theme-color" content="#f3ece0">
