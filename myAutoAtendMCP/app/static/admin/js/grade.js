@@ -36,28 +36,35 @@ function iniciar() {
     return (pa.y - pb.y) || (pa.x - pb.x);
   });
 
-  ordenados.forEach(s => {
-    // gridstack exige item > content; o miolo do card desce pro content
-    const conteudo = document.createElement('div');
-    conteudo.className = 'grid-stack-item-content';
-    while (s.firstChild) conteudo.appendChild(s.firstChild);
-    s.appendChild(conteudo);
+  // Marca um card como item da grade com a posição salva (ou padrão de
+  // primeira visita). Só entra aqui card VISÍVEL: card oculto não pode
+  // participar da montagem — coordenadas velhas/ausentes dele colidem com o
+  // layout dos visíveis e empurram card bom pra baixo no F5.
+  const prepararItem = (s) => {
     s.classList.add('grid-stack-item');
-    s.setAttribute('gs-id', s.dataset.sec);
-    grade.appendChild(s);
-
     const pos = salvo[s.dataset.sec];
     if (pos) {
       s.setAttribute('gs-x', pos.x); s.setAttribute('gs-y', pos.y);
       s.setAttribute('gs-w', pos.w); s.setAttribute('gs-h', pos.h);
     } else {
       // primeira visita: card em linha cheia com a altura do conteúdo atual
-      const px = conteudo.offsetHeight || 0;
+      const px = s.firstElementChild ? s.firstElementChild.offsetHeight : 0;
       const h = px ? Math.max(4, Math.round((px + MARGEM) / (CELULA + MARGEM))) : 10;
       s.setAttribute('gs-w', '12');
       s.setAttribute('gs-h', String(h));
       s.setAttribute('gs-auto-position', 'true');
     }
+  };
+
+  ordenados.forEach(s => {
+    // gridstack exige item > content; o miolo do card desce pro content
+    const conteudo = document.createElement('div');
+    conteudo.className = 'grid-stack-item-content';
+    while (s.firstChild) conteudo.appendChild(s.firstChild);
+    s.appendChild(conteudo);
+    s.setAttribute('gs-id', s.dataset.sec);
+    grade.appendChild(s);
+    if (!s.classList.contains('sec-oculta')) prepararItem(s);
   });
 
   const grid = GridStack.init({
@@ -73,15 +80,10 @@ function iniciar() {
   // Restore canônico por id: reafirma as posições salvas depois do init —
   // imune a qualquer colisão/ajuste que o engine tenha feito na montagem.
   // O `false` é essencial: sem ele o load() REMOVE widgets fora da lista.
-  const comPos = ordenados.filter(s => salvo[s.dataset.sec]);
+  const comPos = ordenados.filter(s => s.gridstackNode && salvo[s.dataset.sec]);
   if (comPos.length) {
     grid.load(comPos.map(s => ({ id: s.dataset.sec, ...salvo[s.dataset.sec] })), false);
   }
-
-  // cards já ocultos no boot saem da grade (o DOM fica, o gear reexibe)
-  secs.forEach(s => {
-    if (s.classList.contains('sec-oculta') && s.gridstackNode) grid.removeWidget(s, false, false);
-  });
 
   // só persiste o layout de 12 colunas — o modo 1 coluna (mobile) é derivado
   const salvar = () => {
@@ -108,8 +110,14 @@ function iniciar() {
     secs.forEach(s => {
       const esconder = ocultos.includes(s.dataset.sec);
       const ativo = !!s.gridstackNode;
-      if (esconder && ativo) grid.removeWidget(s, false, false);
-      else if (!esconder && !ativo) grid.makeWidget(s);
+      if (esconder && ativo) {
+        grid.removeWidget(s, false, false);
+      } else if (!esconder && !ativo) {
+        // oculto no boot nunca virou item — prepara agora (posição salva ou
+        // padrão); quem já foi item mantém os gs-* de quando foi escondido
+        if (!s.classList.contains('grid-stack-item')) prepararItem(s);
+        grid.makeWidget(s);
+      }
     });
     salvar();
   });
