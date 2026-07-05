@@ -6,7 +6,7 @@
 
 const KEY = 'admin-grade-v1';
 const CELULA = 30;   // px por linha da grade
-const MARGEM = 12;   // px entre itens
+const MARGEM = 22;   // vão entre cards (mesmo respiro do painel antigo empilhado)
 
 const wrap = document.querySelector('.wrap');
 const secs = [...wrap.querySelectorAll(':scope > .drag-sec')];
