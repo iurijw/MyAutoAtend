@@ -25,13 +25,25 @@ function iniciar() {
   grade.className = 'grid-stack';
   secs[0].before(grade);
 
-  secs.forEach(s => {
+  // Pré-ordena pela posição salva (y, depois x): o gridstack posiciona na
+  // ordem do DOM, e montar "de baixo pra cima" cascateia colisões que
+  // embaralham o layout no F5. Sem posição salva → fim (auto-position).
+  const ordenados = [...secs].sort((a, b) => {
+    const pa = salvo[a.dataset.sec], pb = salvo[b.dataset.sec];
+    if (!pa && !pb) return 0;
+    if (!pa) return 1;
+    if (!pb) return -1;
+    return (pa.y - pb.y) || (pa.x - pb.x);
+  });
+
+  ordenados.forEach(s => {
     // gridstack exige item > content; o miolo do card desce pro content
     const conteudo = document.createElement('div');
     conteudo.className = 'grid-stack-item-content';
     while (s.firstChild) conteudo.appendChild(s.firstChild);
     s.appendChild(conteudo);
     s.classList.add('grid-stack-item');
+    s.setAttribute('gs-id', s.dataset.sec);
     grade.appendChild(s);
 
     const pos = salvo[s.dataset.sec];
@@ -58,6 +70,14 @@ function iniciar() {
     columnOpts: { breakpoints: [{ w: 900, c: 1 }] },  // 1 coluna no mobile
   }, grade);
 
+  // Restore canônico por id: reafirma as posições salvas depois do init —
+  // imune a qualquer colisão/ajuste que o engine tenha feito na montagem.
+  // O `false` é essencial: sem ele o load() REMOVE widgets fora da lista.
+  const comPos = ordenados.filter(s => salvo[s.dataset.sec]);
+  if (comPos.length) {
+    grid.load(comPos.map(s => ({ id: s.dataset.sec, ...salvo[s.dataset.sec] })), false);
+  }
+
   // cards já ocultos no boot saem da grade (o DOM fica, o gear reexibe)
   secs.forEach(s => {
     if (s.classList.contains('sec-oculta') && s.gridstackNode) grid.removeWidget(s, false, false);
@@ -72,7 +92,9 @@ function iniciar() {
     });
     localStorage.setItem(KEY, JSON.stringify(salvo));
   };
-  grid.on('change', salvar);
+  // salva SÓ em gesto do usuário (nunca no 'change': o engine dispara change
+  // em ajustes da montagem e persistiria um layout transitório errado)
+  grid.on('dragstop resizestop', () => salvar());
 
   // gear.js avisa quando a lista de ocultos muda
   document.addEventListener('admin:cards-ocultos', e => {
