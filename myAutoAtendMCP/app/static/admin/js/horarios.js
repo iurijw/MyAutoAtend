@@ -2,7 +2,6 @@
    intervalos por dia (form é POST clássico — replace-all no servidor). */
 
 const card = document.getElementById('horarios-card');
-document.getElementById('horarios-head').addEventListener('click', () => card.classList.toggle('collapsed'));
 
 function novaLinha(dia){
   const div = document.createElement('div');

@@ -30,28 +30,7 @@
       <div class="pole"></div>
       <p class="eyebrow">myAutoAtend · Painel de Controle</p>
       <h1>Agenda &amp; <em>Serviços</em></h1>
-      <p class="lede">Tudo configurado aqui alimenta as ferramentas do agente de WhatsApp em tempo real.</p>
-      <div class="shortcuts">
-        <a class="btn btn-ghost btn-sm" href="{{ evolution_url }}" target="_blank" rel="noopener">📡 Evolution API ↗</a>
-      </div>
     </header>
-
-    {% set proximo = agendamentos[0] if agendamentos else None %}
-    <section class="stats">
-      <div class="stat reveal"><div class="num">{{ agendamentos|length }}</div><div class="lbl">Agendamentos ativos</div></div>
-      <div class="stat reveal"><div class="num">{{ n_ativos }}</div><div class="lbl">Serviços no ar</div></div>
-      <div class="stat reveal"><div class="num">{{ bloqueios|length }}</div><div class="lbl">Bloqueios</div></div>
-      <div class="stat accent reveal">
-        <div class="lbl" style="margin-bottom:8px">Próximo cliente</div>
-        {% if proximo %}
-          <div class="num" style="font-size:26px">{{ proximo.nome_cliente }}</div>
-          <div class="when">{{ proximo.inicio.replace('T',' · ') }}</div>
-        {% else %}
-          <div class="num" style="font-size:26px">—</div>
-          <div class="when">agenda livre</div>
-        {% endif %}
-      </div>
-    </section>
 
     {% include "partials/whatsapp.html" %}
     {% include "partials/ia.html" %}

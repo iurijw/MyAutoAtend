@@ -4,10 +4,8 @@
 import { toast } from './toast.js';
 
 const $ = (id) => document.getElementById(id);
-const card = $('prompt-card');
 let mcpDonoPadrao = '';
 let mcpClientePadrao = '';
-let carregado = false;
 
 function msg(texto, ok){
   const el = $('prompt-msg');
@@ -68,11 +66,4 @@ $('prompt-salvar').addEventListener('click', (ev) => salvar(ev.currentTarget));
 $('prompt-restaurar-dono').addEventListener('click', () => restaurar('prompt-mcp-dono', mcpDonoPadrao, 'dono'));
 $('prompt-restaurar-cliente').addEventListener('click', () => restaurar('prompt-mcp-cliente', mcpClientePadrao, 'cliente'));
 
-// Card começa recolhido; busca o conteúdo só na primeira expansão.
-$('prompt-head').addEventListener('click', () => {
-  card.classList.toggle('collapsed');
-  if (!card.classList.contains('collapsed') && !carregado){
-    carregado = true;
-    carregar();
-  }
-});
+carregar();  // cards ficam sempre abertos na grade — carrega no boot

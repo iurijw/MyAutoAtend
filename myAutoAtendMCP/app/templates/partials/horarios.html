@@ -1,6 +1,6 @@
 <!-- ============ HORÁRIOS DE FUNCIONAMENTO ============ -->
-<div class="card collapsed drag-sec" id="horarios-card" data-sec="horarios">
-  <div class="card-head" id="horarios-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Horários de Funcionamento</h2><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span><span class="wa-chevron" title="Expandir/recolher">▾</span></div>
+<div class="card drag-sec" id="horarios-card" data-sec="horarios">
+  <div class="card-head" id="horarios-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Horários de Funcionamento</h2><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
   <div id="horarios-body">
     <p class="hf-sub">Grade semanal de atendimento — o agente só oferece e aceita horários dentro destes intervalos. Dia sem intervalo fica fechado.</p>
     {% set dias_nomes = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'] %}

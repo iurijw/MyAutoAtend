@@ -9,7 +9,6 @@ import './prompt.js';
 import './horarios.js';
 import './proatividade.js';
 import './conversas.js';
-import './config.js';
 import './gear.js';
 import './grade.js';
 import './avatars.js';

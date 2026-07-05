@@ -1,6 +1,6 @@
 <!-- ============ CONFIGURAÇÃO ============ -->
-<div class="card collapsed drag-sec" id="config-card" data-sec="config">
-  <div class="card-head" id="config-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Geral</span><span class="wa-chevron" title="Expandir/recolher">▾</span></div>
+<div class="card drag-sec" id="config-card" data-sec="config">
+  <div class="card-head" id="config-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Configuração geral</h2><span class="tag">Geral</span></div>
   <form method="post" action="/admin/config" id="config-body">
     <div class="row">
       <div><label>Telefone do dono <span style="text-transform:none;font-weight:400">(autoriza ações restritas)</span></label><input name="telefone_dono" value="{{ config.telefone_dono }}" data-valida="telefone" inputmode="tel"></div>

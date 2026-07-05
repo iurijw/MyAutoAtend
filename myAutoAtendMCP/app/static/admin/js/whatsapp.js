@@ -9,10 +9,7 @@ const elCode    = document.getElementById('wa-code');
 const elMsg     = document.getElementById('wa-msg');
 const btnCon    = document.getElementById('wa-connect');
 const btnOut    = document.getElementById('wa-logout');
-const elCard    = document.getElementById('wa-card');
-const elHead    = document.getElementById('wa-head');
 let pollTimer   = null;
-let wasOpen     = false;
 
 function pill(cls, txt){ elStatus.className = 'pill ' + cls; elStatus.textContent = txt; }
 
@@ -30,11 +27,7 @@ function render(state){
     elMsg.innerHTML = 'Número conectado e atendendo. Para trocar de número, desconecte primeiro.';
     btnCon.style.display = 'none';
     btnOut.style.display = '';
-    if (!wasOpen) elCard.classList.add('collapsed');  // recolhe ao conectar
-    wasOpen = true;
   } else if (state === 'connecting'){
-    wasOpen = false;
-    elCard.classList.remove('collapsed');
     pill('connecting', 'aguardando leitura');
     btnCon.style.display = '';
     btnCon.textContent = 'Gerar novo QR';
@@ -46,8 +39,6 @@ function render(state){
     btnCon.style.display = '';
     btnCon.textContent = 'Gerar QR Code';
     btnOut.style.display = 'none';
-    wasOpen = false;
-    elCard.classList.remove('collapsed');
   }
 }
 
@@ -101,5 +92,4 @@ async function desconectar(){
 
 btnCon.addEventListener('click', gerarQr);
 btnOut.addEventListener('click', desconectar);
-elHead.addEventListener('click', () => elCard.classList.toggle('collapsed'));
 estado();

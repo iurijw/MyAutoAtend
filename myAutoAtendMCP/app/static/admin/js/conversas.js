@@ -7,7 +7,6 @@ import { toast } from './toast.js';
 const LISTA_POLL_MS = 20000;
 const MODAL_POLL_MS = 12000;
 
-const card = document.getElementById('conversas-card');
 const lista = document.getElementById('conversas-lista');
 const tagCount = document.getElementById('conversas-count');
 const live = document.getElementById('conversas-live');
@@ -30,9 +29,6 @@ const btnEnviar = document.getElementById('conv-modal-enviar');
 const fotos = {};
 let alvo = null;          // telefone da conversa aberta no modal (E.164)
 let modalTimer = null;
-
-document.getElementById('conversas-head')
-  .addEventListener('click', () => card.classList.toggle('collapsed'));
 
 function esc(s) {
   const d = document.createElement('div');

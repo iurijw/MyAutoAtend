@@ -269,13 +269,4 @@ document.querySelectorAll('[data-ia-modelo]').forEach(b =>
 document.querySelectorAll('.ia-busca').forEach(inp =>
   inp.addEventListener('input', () => renderOpcoes(inp.id.replace('ia-busca-', ''), inp.value)));
 
-// Card começa recolhido; estado só é buscado na primeira expansão.
-const iaCard = document.getElementById('ia-card');
-let estadoCarregado = false;
-document.getElementById('ia-head').addEventListener('click', () => {
-  iaCard.classList.toggle('collapsed');
-  if (!iaCard.classList.contains('collapsed') && !estadoCarregado){
-    estadoCarregado = true;
-    carregarEstado();
-  }
-});
+carregarEstado();  // cards ficam sempre abertos na grade — carrega no boot
