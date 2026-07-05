@@ -24,6 +24,8 @@ function render(){
   badge.textContent = ocultos.length;
   badge.style.display = ocultos.length ? '' : 'none';
   lista.querySelectorAll('.gear-row').forEach(r => r.classList.toggle('on', !ocultos.includes(r.dataset.sec)));
+  // grade.js sincroniza os itens do gridstack com a lista de ocultos
+  document.dispatchEvent(new CustomEvent('admin:cards-ocultos', { detail: [...ocultos] }));
 }
 
 function alternar(chave){

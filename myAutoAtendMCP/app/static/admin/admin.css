@@ -390,7 +390,6 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(223,111,115,.16); co
   padding:2px 6px; border-radius:6px; opacity:.5; flex:none; align-self:center;}
 .drag-grip:hover{opacity:1; background:var(--paper-2);}
 .drag-grip:active{cursor:grabbing;}
-.drag-sec.dragging{opacity:.45; outline:2px dashed var(--gold-soft); outline-offset:4px;}
 
 /* ---------- ocultar cards + engrenagem ---------- */
 .sec-oculta{display:none !important;}
@@ -474,3 +473,20 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(223,111,115,.16); co
 @keyframes rise{to{opacity:1; transform:none;}}
 .reveal:nth-child(1){animation-delay:.02s} .reveal:nth-child(2){animation-delay:.08s}
 .reveal:nth-child(3){animation-delay:.14s} .reveal:nth-child(4){animation-delay:.20s}
+
+/* ===========================================================================
+   Grade de cards (Gridstack) — janela inteira, drag pelo grip, resize nas
+   bordas. Ver static/admin/js/grade.js (layout salvo em localStorage).
+   =========================================================================== */
+.wrap{max-width:none;}                       /* os cards ocupam o browser todo */
+.grid-stack{margin-top:14px;}
+.grid-stack .drag-sec{margin:0;}
+.grid-stack-item-content{display:flex; flex-direction:column;}
+.grid-stack .card{margin:0; flex:1 1 auto; min-height:0; overflow-y:auto;}
+/* alça de resize do canto: discreta e coerente com o papel */
+.grid-stack > .grid-stack-item > .ui-resizable-se{opacity:.35; filter:grayscale(1);}
+.grid-stack > .grid-stack-item > .ui-resizable-se:hover{opacity:.8;}
+html[data-theme="dark"] .grid-stack > .grid-stack-item > .ui-resizable-se{filter:grayscale(1) invert(1);}
+/* placeholder do drag/resize na cara do painel */
+.grid-stack > .grid-stack-placeholder > .placeholder-content{
+  border:2px dashed var(--gold-soft); border-radius:18px; background:rgba(216,205,185,.12);}
