@@ -434,6 +434,9 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(223,111,115,.16); co
    =========================================================================== */
 .wrap{max-width:none;}                       /* os cards ocupam o browser todo */
 .grid-stack{margin-top:14px;}
+/* vão entre cards garantido por CSS (11px por lado = 22px entre vizinhos),
+   independente do stylesheet dinâmico do gridstack (margin da init) */
+.grid-stack > .grid-stack-item > .grid-stack-item-content{inset:11px !important;}
 .grid-stack .drag-sec{margin:0;}
 .grid-stack-item-content{display:flex; flex-direction:column;}
 .grid-stack .card{margin:0; flex:1 1 auto; min-height:0; overflow-y:auto;}
