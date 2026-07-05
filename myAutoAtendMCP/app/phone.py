@@ -52,6 +52,24 @@ def normalizar(telefone: str | None) -> str:
     return digitos
 
 
+def formatar_internacional(telefone: str | None) -> str:
+    """Forma legível p/ exibição ("+55 45 99999-0000"). Aceita jid/E.164/dígitos;
+    devolve o que recebeu (sem sufixo @) se não der para parsear."""
+    if not telefone:
+        return ""
+    bruto = telefone.split("@")[0]
+    digitos = re.sub(r"\D", "", bruto)
+    try:
+        num = phonenumbers.parse("+" + digitos, None)
+        if phonenumbers.is_valid_number(num):
+            return phonenumbers.format_number(
+                num, phonenumbers.PhoneNumberFormat.INTERNATIONAL
+            )
+    except phonenumbers.NumberParseException:
+        pass
+    return bruto
+
+
 def mesmo_numero(a: str | None, b: str | None) -> bool:
     """Compara dois telefones de forma tolerante a formatação."""
     na, nb = normalizar(a), normalizar(b)

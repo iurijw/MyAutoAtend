@@ -275,6 +275,12 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(223,111,115,.16); co
 .wa-code{font-family:"JetBrains Mono",monospace; font-size:20px; letter-spacing:.18em;
   background:var(--paper); border:1px dashed var(--line); border-radius:10px; padding:10px 14px;}
 .pill.connecting{background:rgba(184,134,47,.16); color:var(--gold);}
+/* identidade do número conectado (aparece só com estado open) */
+.wa-perfil{display:flex; align-items:center; gap:12px; padding:12px 16px;
+  background:var(--paper); border:1px solid var(--line); border-radius:12px;}
+.wa-perfil .ava{width:44px; height:44px; font-size:17px;}
+.wa-perfil-nome{font-weight:600; line-height:1.25;}
+.wa-perfil .meta{word-break:normal;}
 @media(max-width:860px){ .wa-body{grid-template-columns:1fr;} .wa-qr-box{min-width:0;} }
 /* card WhatsApp colapsável */
 #wa-card .card-head{margin-bottom:20px;}

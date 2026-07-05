@@ -41,11 +41,50 @@ def _client() -> httpx.Client:
 
 
 def estado() -> dict:
-    """Estado da conexão da instância: open | connecting | close."""
+    """Estado da conexão da instância: open | connecting | close.
+
+    Conectado (`open`) → agrega `perfil` (número/nome/foto do WhatsApp
+    pareado) para o card do painel mostrar QUEM está atendendo. Falha no
+    perfil nunca derruba o estado."""
     with _client() as c:
         r = c.get(f"/instance/connectionState/{settings.evolution_instance}")
         r.raise_for_status()
-        return r.json()
+        est = r.json()
+    if (est.get("instance") or {}).get("state") == "open":
+        try:
+            est["perfil"] = perfil()
+        except Exception:  # noqa: BLE001
+            est["perfil"] = None
+    return est
+
+
+def perfil() -> dict | None:
+    """Número conectado na instância (fetchInstances): número, nome e foto.
+
+    Tolera os dois formatos da Evolution: v2 (campos na raiz: name/ownerJid/
+    profileName/profilePicUrl) e v1 (aninhado em "instance", campos
+    instanceName/owner/profilePictureUrl)."""
+    from .phone import formatar_internacional, normalizar
+
+    with _client() as c:
+        r = c.get("/instance/fetchInstances")
+        r.raise_for_status()
+        dados = r.json()
+    itens = dados if isinstance(dados, list) else [dados]
+    for item in itens:
+        info = item.get("instance", item) if isinstance(item, dict) else {}
+        nome_inst = info.get("name") or info.get("instanceName")
+        if nome_inst != settings.evolution_instance:
+            continue
+        jid = info.get("ownerJid") or info.get("owner") or ""
+        nome = (info.get("profileName") or "").strip()
+        return {
+            "numero": normalizar(jid),
+            "numero_fmt": formatar_internacional(jid),
+            "nome": "" if nome in {".", "-"} else nome,
+            "foto": info.get("profilePicUrl") or info.get("profilePictureUrl"),
+        }
+    return None
 
 
 def conectar() -> dict:
