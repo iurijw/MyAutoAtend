@@ -46,6 +46,20 @@ html[data-theme="dark"] #wa-qr{background:#fff;}
 
 *{box-sizing:border-box;}
 html{scroll-behavior:smooth;}
+
+/* ---------- scrollbars (papel e tinta, seguem o tema pelos tokens) ---------- */
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--line); border-radius:999px;
+  border:2px solid transparent; background-clip:padding-box;}
+::-webkit-scrollbar-thumb:hover{background:var(--gold-soft);
+  border:2px solid transparent; background-clip:padding-box;}
+::-webkit-scrollbar-corner{background:transparent;}
+/* Firefox (sem ::-webkit-scrollbar): versão fina colorida via scrollbar-color.
+   Não aplicar em Chromium — scrollbar-color desligaria as regras acima. */
+@supports not selector(::-webkit-scrollbar){
+  *{scrollbar-width:thin; scrollbar-color:var(--line) transparent;}
+}
 body{
   margin:0; color:var(--ink);
   font:16px/1.55 "Hanken Grotesk",system-ui,sans-serif;
