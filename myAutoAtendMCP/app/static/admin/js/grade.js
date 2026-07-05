@@ -96,6 +96,12 @@ function iniciar() {
   // em ajustes da montagem e persistiria um layout transitório errado)
   grid.on('dragstop resizestop', () => salvar());
 
+  // Ponto fixo: persiste UMA vez o layout já resolvido pela montagem. Se o
+  // salvo tinha sobreposição (herança de versões antigas), o engine empurra
+  // um card — sem gravar o resultado, TODO F5 repetiria o empurrão. Gravando,
+  // a tela atual == o que o próximo F5 carrega, e o layout estabiliza.
+  salvar();
+
   // gear.js avisa quando a lista de ocultos muda
   document.addEventListener('admin:cards-ocultos', e => {
     const ocultos = e.detail || [];
