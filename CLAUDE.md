@@ -21,11 +21,11 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/agente.py` | Agente pydantic-ai: tools, memória (SQLite), system prompt |
 | `myAutoAtendMCP/app/ia.py` | Provedores de IA (config no SQLite), transcrição, visão, listagem de modelos |
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
-| `myAutoAtendMCP/app/tools.py` | 13 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
+| `myAutoAtendMCP/app/tools.py` | 14 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
-| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head, header, stats, includes dos partials, ponte `window.__ADMIN__` |
-| `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `catalogo` · `horarios` · `config` |
-| `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
+| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), header, includes dos partials, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css) |
+| `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `conversas` · `proatividade` · `catalogo` · `horarios` · `config` |
+| `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) + `vendor/` (Gridstack v11) |
 
 ---
 
@@ -33,7 +33,11 @@ primeiro `docker compose up -d`.
 
 1. `POST /webhook/whatsapp/receberMensagem` — Evolution entrega `MESSAGES_UPSERT`
    (webhook configurado no startup pelo `evolution.garantir_instancia`).
-2. Filtra `fromMe`; marca como lida (falha não interrompe).
+2. Filtra `fromMe`; upsert do contato na tabela `Cliente` (pushName). Se
+   `bot_pausado` p/ o contato (e não é o dono): mídia ainda vira texto, a
+   mensagem é gravada na memória (`agente.registrar_na_memoria`) e o fluxo
+   PARA — sem marcar lida, sem debounce, sem resposta. Senão, marca como lida
+   (falha não interrompe).
 3. Mídia → texto: áudio = `POST {base}/audio/transcriptions` (whisper-1,
    multipart OpenAI); imagem = chat completions com `image_url` (data URL).
    Base64 vem do próprio webhook (`message.base64`, instância criada com
@@ -43,23 +47,35 @@ primeiro `docker compose up -d`.
 5. Agente (`agente.responder`): o remoteJid é gravado no contextvar
    `auth.solicitante_ctx` ANTES do run — `auth.requester()` ignora o que o
    modelo passar em `telefone_solicitante` (mesma regra de ouro de sempre).
-6. Resposta dividida em bolhas (`[quebrar]`, `[quebra]` e `\n+`); cada bolha
-   enviada via `sendText` com `delay` = digitação proporcional
-   (`min(0.4 + len*0.02, 4) + rand*0.7` s).
+6. Resposta passa por `agente.limpar_raciocinio` (modelos "reasoning" que
+   vazam `<think>`/`</answer>` no conteúdo) e é dividida em bolhas
+   (`[quebrar]`, `[quebra]` e `\n+`, com dedupe de bolhas consecutivas
+   idênticas); cada bolha enviada via `sendText` com `delay` = digitação
+   proporcional (`min(0.4 + len*0.02, 4) + rand*0.7` s).
 
 ## Agente (app/agente.py)
 
 - **pydantic-ai** (`pydantic-ai-slim[openai]`): `OpenAIChatModel` +
   `OpenAIProvider(base_url, api_key)` — qualquer provedor compatível.
 - Tools = funções originais de `app/tools.py` (o decorator FastMCP devolve a
-  função intacta) passadas em `Agent(tools=[...])`.
+  função intacta). **Toolset por remetente** (defesa em profundidade; o auth
+  fino continua em `auth.py`): `_TOOLS_CLIENTE` (6: listar_servicos, consultar,
+  agendar, meus_agendamentos, reagendar, cancelar) e `_TOOLS_DONO` (14 = as 6 +
+  gestão: fechar/abrir_data, bloquear_horario, remanejar_dia, criar/editar_
+  servico, ver_agenda_completa, pausar_bot). Agent montado a cada mensagem.
 - **Memória por contato**: tabela `Conversa` (SQLite), histórico serializado
   com `ModelMessagesTypeAdapter`, janela de 50 mensagens com corte só em
   fronteira de turno do usuário (não quebra par tool-call/tool-return).
+  `registrar_na_memoria(telefone, texto, papel)` anexa turno SEM rodar o
+  agente (pausa + envio manual do painel); `historico_para_bolhas` desserializa
+  p/ o modal de conversas; `limpar_raciocinio` remove `<think>`/`<answer>`
+  vazados por modelos reasoning (saída e leitura).
 - System prompt: prefixo de data/hora (gerado em Python, fuso da Config) +
-  instrução geral + bloco MCP — partes editáveis pelo painel (tabela `Prompt`,
-  chaves `geral`/`mcp`; defaults `PROMPT_GERAL_PADRAO`/`PROMPT_MCP_PADRAO` em
-  `agente.py`). Lido A CADA mensagem → salvar no painel aplica na hora.
+  instrução geral + bloco MCP **por perfil** — tabela `Prompt`, chaves `geral`,
+  `mcp_dono`, `mcp_cliente` (defaults `PROMPT_GERAL_PADRAO`/`PROMPT_MCP_DONO_
+  PADRAO`/`PROMPT_MCP_CLIENTE_PADRAO` em `agente.py`; a versão cliente não
+  menciona ações de gestão; chave legada `mcp` migrada por `db._migrar_prompts`).
+  Lido A CADA mensagem → salvar no painel aplica na hora.
 
 ## Provedores de IA (app/ia.py)
 
@@ -89,23 +105,41 @@ primeiro `docker compose up -d`.
   endpoint `/mcp/` (streamable-http) mantido p/ clients MCP externos
   (Claude etc.) — o agente interno NÃO passa por ele (chama as tools direto).
 - Persistência SQLite (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
-  Tabelas: Config, Prompt, ProvedorIA, Conversa, Servico, Bloqueio, Agendamento,
+  Tabelas: Config, Prompt, ProvedorIA, Conversa, Cliente (telefone E.164 PK,
+  nome do pushName, bot_pausado), Servico, Bloqueio, Agendamento,
   HorarioFuncionamento, Tarefa.
 - Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
 - Clients MCP externos identificam o solicitante via `?solicitante=` ou header
   `X-Solicitante-Telefone` (middleware em `main.py`).
-- **Pareamento WhatsApp no painel**: `GET /admin/whatsapp/estado`,
+- **Pareamento WhatsApp no painel**: `GET /admin/whatsapp/estado` (conectado →
+  agrega `perfil`: número canônico/nome/foto via `fetchInstances`),
   `GET /admin/whatsapp/qr`, `POST /admin/whatsapp/desconectar`.
 - **Avatar do cliente nos agendamentos**: `GET /admin/whatsapp/foto?numero=...`
   (`evolution.foto_perfil`, timeout 5s, cache 1h/5min vazio; fallback inicial).
+- **Checagem de número**: `GET /admin/whatsapp/checar?numero=` →
+  `evolution.checar_numero` (POST whatsappNumbers, cache 10min) devolve
+  {existe, numero (E.164 do jid — resolve o nono dígito), numero_fmt, foto};
+  usado pela máscara de telefone (`js/telefone.js`, inputs `data-telefone` no
+  modal de agendamento e no telefone do dono; envio sempre em dígitos canônicos).
+- **Conversas no painel** (card + modal, `js/conversas.js`): `GET
+  /admin/conversas` (lista com preview), `GET /admin/conversas/{tel}` (bolhas
+  cliente/bot/sistema), `POST /admin/conversas/{tel}/enviar` (manual, sem IA;
+  só grava na memória após sucesso; falha → 502), `POST
+  /admin/conversas/{tel}/pausa` (bot_pausado; dono nunca pausável — também na
+  tool `pausar_bot` [DONO]). Botão "Conversa" na listagem de agendamentos abre
+  o modal (`window.abrirConversa`).
 - **Provedores de IA no painel**: `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.
 - **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
-- **Cadastro manual de agendamento**: form no card "Agendamentos ativos" →
-  `POST /admin/agendamento` (telefone normalizado E.164; ignora horário de
-  funcionamento de propósito — override do dono, como o reagendar do painel;
-  conflito com agendamento/bloqueio → 409).
+- **Cadastro manual de agendamento**: botão "+ Novo agendamento" no card abre
+  MODAL (`js/agendamento.js`) com seletor de horário em quadrados — `GET
+  /admin/agenda/slots?data=&servico_id=` (mesma lógica da tool de consulta;
+  passo = duração do serviço; ocupado = conflito ou horário passado hoje) —
+  e telefone com máscara/checagem. Submissão → `POST /admin/agendamento`
+  (telefone normalizado E.164; slots do modal respeitam o expediente, mas o
+  endpoint em si não valida horário de funcionamento — override do dono, como
+  o reagendar do painel; conflito com agendamento/bloqueio → 409).
 - **Aviso ao dono** (`app/notificacoes.py`): WhatsApp do dono recebe template
   fixo (sem IA) quando o BOT agenda/reagenda/cancela. Liga/desliga só pelo
   painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em
@@ -149,6 +183,16 @@ primeiro `docker compose up -d`.
   `/admin/horarios/limpar`. Seed do padrão SÓ na criação da tabela (vazia ≠
   nova). Tools `consultar_horarios_disponiveis`/`agendar`/`reagendar`
   respeitam a grade; `Config.abertura/fechamento` viraram colunas órfãs.
+- **UI do painel**: grade Gridstack (`js/grade.js`, vendor local) — cards
+  ocupam a janela, drag pelo grip ⠿ + resize; layout por navegador em
+  localStorage `admin-grade-v1` (posição efetiva = salvo > `PADRAO` > linha
+  cheia; salva só em dragstop/resizestop + 1 save de ponto fixo pós-montagem;
+  card oculto NÃO participa da montagem — gear.js emite `admin:cards-ocultos`).
+  Tema claro/escuro por tokens (`data-theme`, default escuro, `js/tema.js`).
+  Toasts (`js/toast.js`) + interceptação de forms POST (`js/forms.js`,
+  opt-out `data-nativo`) + validação (`js/validar.js`) + máscara/checagem de
+  telefone (`js/telefone.js`). Cards sempre abertos (sem recolher). Modais
+  (conversas, agendamento) vivem FORA dos cards, realocados pro `body`.
 - Após mudar código: `docker compose up -d --build mcp-agendamentos`.
 
 ---
