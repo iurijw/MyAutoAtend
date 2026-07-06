@@ -174,6 +174,7 @@ docker compose up -d --build
 - [x] Separar o prompt do MCP do dono e do cliente (mesmo que o auth seja gerenciado pela lógica interna do sistema). Obs.: avaliar separar as tools do MCP de admin e cliente conforme o número do remetente.
 - [x] Avaliar a possibilidade de não passar as tools de admin para números que não são donos/não autorizados (clientes) — o agente nem enxergaria essas tools na conversa.
 - [x] Cards do painel em grade ocupando a janela inteira do browser, com drag e redimensionamento livres (Gridstack.js vendorado; layout por navegador em localStorage).
+- [x] Agendamento manual em modal (botão "+ Novo agendamento"), com seletor de horário em quadrados (verde livre / vermelho ocupado, passo = duração do serviço) e telefone com máscara + checagem do número no WhatsApp via Evolution (badge com foto; jid canônico resolve o nono dígito) — também no telefone do dono da Configuração.
 
 ### Todo avançado (mais adiante)
 

@@ -443,6 +443,74 @@ html[data-theme="dark"] .conv-pausa-pill.on{background:rgba(223,111,115,.16); co
   .toast.shown,.toast.saindo{transform:none;}
 }
 
+/* ===========================================================================
+   Novo agendamento — botão, modal e seletor de horário em quadradinhos.
+   O modal ecoa o de conversas; os slots são o elemento novo (verde = livre /
+   oxblood = ocupado, nos dois temas via os mesmos tokens da paleta).
+   =========================================================================== */
+.ag-toolbar{display:flex; justify-content:flex-end; margin:-4px 0 16px;}
+
+body.agm-aberto{overflow:hidden;}
+.agm-modal{position:fixed; inset:0; z-index:110; display:none; align-items:center; justify-content:center; padding:20px;}
+.agm-modal.open{display:flex;}
+.agm-backdrop{position:absolute; inset:0; background:rgba(33,28,22,.5); backdrop-filter:blur(2px);}
+html[data-theme="dark"] .agm-backdrop{background:rgba(0,0,0,.6);}
+.agm-card{position:relative; z-index:1; width:min(560px,100%); max-height:min(88vh,760px);
+  display:flex; flex-direction:column; overflow:hidden;
+  background:var(--card); border:1px solid var(--line); border-radius:18px;
+  box-shadow:0 30px 60px -24px var(--shadow-pop);}
+.agm-head{flex:none; display:flex; align-items:center; gap:12px; padding:16px 18px;
+  border-bottom:2px solid var(--paper-2);}
+.agm-titulo{font-family:"DM Serif Display",serif; font-weight:400; font-size:22px; line-height:1.1;
+  margin:0; margin-right:auto;}
+.agm-x{flex:none; padding:4px 9px; border:none; background:transparent; color:var(--ink-soft);
+  font-size:15px; line-height:1; border-radius:8px; cursor:pointer;}
+.agm-x:hover{background:var(--paper-2); color:var(--oxblood);}
+.agm-body{flex:1; min-height:0; overflow-y:auto; padding:2px 18px 18px;}
+
+.agm-slots{display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; min-height:52px; align-content:flex-start;}
+.agm-slots-dica{width:100%; margin:0; padding:14px 2px; color:var(--ink-soft); font-style:italic; font-size:13.5px;}
+.agm-slot{flex:none; width:64px; height:50px; padding:0; border-radius:10px;
+  font-family:"JetBrains Mono",monospace; font-weight:600; font-size:13.5px;
+  display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--green); color:var(--green); background:rgba(63,107,76,.08);
+  transition:background .12s, transform .08s, box-shadow .12s;}
+.agm-slot:hover{background:rgba(63,107,76,.18);}
+.agm-slot.sel{background:var(--green); color:var(--card); border-color:var(--green); font-weight:700;
+  box-shadow:0 6px 14px -8px var(--green);}
+.agm-slot.ocupado{border-color:transparent; color:var(--oxblood); background:rgba(138,42,47,.10);
+  cursor:not-allowed; opacity:.7;}
+.agm-slot.ocupado:hover{background:rgba(138,42,47,.10);}
+html[data-theme="dark"] .agm-slot{background:rgba(120,183,141,.12);}
+html[data-theme="dark"] .agm-slot:hover{background:rgba(120,183,141,.22);}
+html[data-theme="dark"] .agm-slot.sel{color:#12251a;}
+html[data-theme="dark"] .agm-slot.ocupado{color:var(--oxblood); background:rgba(223,111,115,.14);}
+
+.agm-legenda{display:flex; gap:16px; margin-top:12px; font-size:12px; color:var(--ink-soft);}
+.agm-leg-item{display:flex; align-items:center; gap:6px;}
+.agm-leg-quad{width:13px; height:13px; border-radius:4px; flex:none;}
+.agm-leg-quad.livre{border:1px solid var(--green); background:rgba(63,107,76,.18);}
+.agm-leg-quad.ocupado{background:rgba(138,42,47,.28);}
+html[data-theme="dark"] .agm-leg-quad.livre{background:rgba(120,183,141,.22);}
+html[data-theme="dark"] .agm-leg-quad.ocupado{background:rgba(223,111,115,.3);}
+
+.agm-acoes{display:flex; gap:10px; justify-content:flex-end; margin-top:22px;
+  border-top:2px solid var(--paper-2); padding-top:16px;}
+
+@media(max-width:600px){
+  .agm-modal{padding:0;}
+  .agm-card{width:100%; height:100%; max-height:none; border-radius:0;}
+}
+
+/* Badge de checagem de WhatsApp ao lado do campo de telefone (data-telefone). */
+.tel-badge{display:inline-flex; align-items:center; gap:7px; margin-top:8px;
+  padding:4px 11px 4px 5px; border-radius:999px; font-size:12px; font-weight:600;}
+.tel-badge.ok{background:rgba(63,107,76,.14); color:var(--green);}
+.tel-badge.no{padding:5px 11px; background:rgba(138,42,47,.12); color:var(--oxblood);}
+.tel-badge-ava{width:22px; height:22px; font-size:10px;}
+html[data-theme="dark"] .tel-badge.ok{background:rgba(120,183,141,.16);}
+html[data-theme="dark"] .tel-badge.no{background:rgba(223,111,115,.16); color:var(--oxblood);}
+
 /* ---------- campos com erro de validação (client-side) ---------- */
 .campo-erro{border-color:var(--oxblood) !important; box-shadow:0 0 0 3px rgba(138,42,47,.14);}
 .campo-erro-msg{margin:6px 0 0; font-size:12.5px; font-weight:600; color:var(--oxblood);}

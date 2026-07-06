@@ -10,7 +10,7 @@ PARA EVOLUÇÃO FUTURA: trocar Basic por login de sessão com senha em hash
 
 import re
 import secrets
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import agente, db, evolution, ia, tarefas
 from .config import settings
-from .phone import mesmo_numero, normalizar
+from .phone import formatar_internacional, mesmo_numero, normalizar
 from .tools import _agora_local
 
 router = APIRouter()
@@ -104,6 +104,41 @@ def whatsapp_foto(numero: str, _: str = Depends(autenticar)):
         return {"url": evolution.foto_perfil(numero)}
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
+
+
+@router.get("/admin/whatsapp/checar")
+def whatsapp_checar(numero: str, _: str = Depends(autenticar)):
+    """Confere se um número tem WhatsApp — cortesia dos campos de telefone.
+
+    Devolve o número canônico do `jid` retornado pela Evolution (resolve o
+    nono dígito: o jid é a forma que o WhatsApp reconhece) e a foto de perfil
+    (tolerante a falha → None). Instância desconectada / erro na Evolution → 502
+    (o front trata como checagem indisponível, sem barrar o cadastro)."""
+    try:
+        item = evolution.checar_numero(numero)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse(
+            {
+                "erro": "Não foi possível checar o número no WhatsApp. "
+                "Confira se a conexão está ativa no card Conexão WhatsApp."
+            },
+            status_code=502,
+        )
+    existe = bool(item and item.get("exists"))
+    jid = (item or {}).get("jid") or ""
+    canon = normalizar(jid) or normalizar(numero)
+    foto = None
+    if existe and canon:
+        try:
+            foto = evolution.foto_perfil(canon)
+        except Exception:  # noqa: BLE001 — foto é opcional
+            foto = None
+    return {
+        "existe": existe,
+        "numero": canon,
+        "numero_fmt": formatar_internacional(canon or numero),
+        "foto": foto,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +382,48 @@ def excluir_servico(servico_id: int, _: str = Depends(autenticar)):
 # ---------------------------------------------------------------------------
 # Agendamentos
 # ---------------------------------------------------------------------------
+
+
+@router.get("/admin/agenda/slots")
+def agenda_slots(data: str, servico_id: int, _: str = Depends(autenticar)):
+    """Grade de horários de um dia para um serviço (seletor visual do painel).
+
+    Mesma lógica da tool `consultar_horarios_disponiveis`: varre os intervalos
+    de funcionamento do dia da semana com passo = duração do serviço.
+    `estado` = "ocupado" quando o slot colide com agendamento ativo ou bloqueio
+    (via `db.horario_disponivel`); no dia de hoje, horários que já passaram
+    também entram como "ocupado". Dias futuros não filtram passado.
+    `fechado` = True quando o dia não tem expediente na grade."""
+    servico = db.get_servico(servico_id)
+    if not servico:
+        raise HTTPException(status_code=404, detail="Serviço não encontrado.")
+    try:
+        dia = date.fromisoformat(data)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Data inválida. Use YYYY-MM-DD.")
+
+    intervalos = db.horarios_do_dia(dia.weekday())
+    if not intervalos:
+        return {"slots": [], "fechado": True}
+
+    agora = _agora_local()
+    passo = timedelta(minutes=servico.duracao_min)
+    slots: list[dict] = []
+    for janela in intervalos:
+        atual = datetime.fromisoformat(f"{data}T{janela.inicio}")
+        limite = datetime.fromisoformat(f"{data}T{janela.fim}")
+        while atual + passo <= limite:
+            ini = atual.isoformat(timespec="minutes")
+            fim = (atual + passo).isoformat(timespec="minutes")
+            livre = atual >= agora and db.horario_disponivel(ini, fim)
+            slots.append(
+                {
+                    "inicio": atual.strftime("%H:%M"),
+                    "estado": "livre" if livre else "ocupado",
+                }
+            )
+            atual += passo
+    return {"slots": slots, "fechado": False}
 
 
 @router.post("/admin/agendamento")

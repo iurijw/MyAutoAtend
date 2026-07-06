@@ -31,6 +31,12 @@ _FOTO_TTL_S = 3600.0
 _FOTO_TTL_VAZIO_S = 300.0
 _foto_cache: dict[str, tuple[float, str | None]] = {}
 
+# Checagem "esse número tem WhatsApp?" também é cacheada (a resposta muda
+# raramente e a digitação no painel dispararia várias chamadas iguais).
+# digitos → (expira_em, item|None), onde item é o dict da Evolution.
+_NUMERO_TTL_S = 600.0
+_numero_cache: dict[str, tuple[float, dict | None]] = {}
+
 
 def _client() -> httpx.Client:
     return httpx.Client(
@@ -134,6 +140,41 @@ def foto_perfil(numero: str) -> str | None:
     ttl = _FOTO_TTL_S if url else _FOTO_TTL_VAZIO_S
     _foto_cache[digitos] = (agora + ttl, url)
     return url
+
+
+def checar_numero(numero: str) -> dict | None:
+    """Consulta se um número existe no WhatsApp (POST whatsappNumbers).
+
+    A Evolution devolve uma lista de `{exists, jid, number}` — como enviamos um
+    número só, o item correspondente é o primeiro. Devolve esse item (None se a
+    resposta veio vazia). O `jid` retornado é a forma canônica do WhatsApp,
+    útil para resolver a ambiguidade do nono dígito. Cache de 10min.
+
+    Instância desconectada / erro de rede PROPAGAM exceção: a checagem é
+    cortesia e quem chama decide como reagir (o painel vira isso em 502)."""
+    digitos = re.sub(r"\D", "", numero or "")
+    if not digitos:
+        return None
+
+    agora = time.monotonic()
+    em_cache = _numero_cache.get(digitos)
+    if em_cache and em_cache[0] > agora:
+        return em_cache[1]
+
+    with _client() as c:
+        r = c.post(
+            f"/chat/whatsappNumbers/{settings.evolution_instance}",
+            json={"numbers": [digitos]},
+            timeout=8.0,
+        )
+        r.raise_for_status()
+        dados = r.json()
+
+    item = None
+    if isinstance(dados, list):
+        item = next((d for d in dados if isinstance(d, dict)), None)
+    _numero_cache[digitos] = (agora + _NUMERO_TTL_S, item)
+    return item
 
 
 # ---------------------------------------------------------------------------

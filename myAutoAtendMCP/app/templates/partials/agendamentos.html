@@ -1,6 +1,9 @@
 <!-- ============ AGENDAMENTOS ============ -->
 <div class="card drag-sec" data-sec="agendamentos">
   <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
+  <div class="ag-toolbar">
+    <button type="button" class="btn-primary btn-sm" id="ag-novo-abrir">+ Novo agendamento</button>
+  </div>
   <table class="tbl">
     <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Quando</th><th></th></tr></thead>
     <tbody>
@@ -43,25 +46,55 @@
     {% endfor %}
     </tbody>
   </table>
+</div>
 
-  <form method="post" action="/admin/agendamento" style="margin-top:22px; border-top:2px solid var(--paper-2); padding-top:18px;">
-    <div class="row">
-      <div><label>Cliente</label><input name="nome_cliente" required placeholder="Nome"></div>
-      <div><label>Telefone (WhatsApp)</label><input name="telefone_cliente" required placeholder="5545999999999" data-valida="telefone" inputmode="tel"></div>
-    </div>
-    <div class="row">
-      <div><label>Serviço</label>
-        <select name="servico_id" required>
-          {% for s in servicos if s.ativo %}
-          <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
-          {% else %}
-          <option value="" disabled>Nenhum serviço ativo — cadastre no catálogo</option>
-          {% endfor %}
-        </select>
+<!-- Modal "Novo agendamento": fora do card p/ sobreviver a ocultar/arrastar
+     (realocado pro body via JS, mesmo padrão do modal de conversas). -->
+<div class="agm-modal" id="agm-modal" role="dialog" aria-modal="true" aria-labelledby="agm-titulo">
+  <div class="agm-backdrop" data-fechar></div>
+  <div class="agm-card">
+    <header class="agm-head">
+      <h2 class="agm-titulo" id="agm-titulo">Novo agendamento</h2>
+      <button type="button" class="agm-x" id="agm-x" aria-label="Fechar">✕</button>
+    </header>
+    <form class="agm-body" id="agm-form" action="/admin/agendamento" data-nativo autocomplete="off">
+      <div class="row">
+        <div><label>Cliente</label><input name="nome_cliente" required placeholder="Nome"></div>
+        <div>
+          <label>Telefone (WhatsApp)</label>
+          <input name="telefone_cliente" required placeholder="+55 (45) 99999-9999" data-telefone inputmode="tel">
+        </div>
       </div>
-      <div><label>Início</label><input name="inicio" type="datetime-local" required></div>
-    </div>
-    <label>Observações <span style="text-transform:none;font-weight:400">(opcional)</span></label><input name="observacoes" placeholder="Detalhes do cliente">
-    <button class="btn-primary">+ Agendar manualmente</button>
-  </form>
+      <div class="row">
+        <div><label>Serviço</label>
+          <select name="servico_id" id="agm-servico" required>
+            {% for s in servicos if s.ativo %}
+            <option value="{{ s.id }}">{{ s.nome }} ({{ s.duracao_min }}min)</option>
+            {% else %}
+            <option value="" disabled>Nenhum serviço ativo — cadastre no catálogo</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div><label>Data</label><input id="agm-data" type="date" required></div>
+      </div>
+
+      <label>Horário</label>
+      <div class="agm-slots" id="agm-slots" aria-live="polite">
+        <p class="agm-slots-dica">Escolha o serviço e a data para ver os horários.</p>
+      </div>
+      <div class="agm-legenda" id="agm-legenda" hidden>
+        <span class="agm-leg-item"><span class="agm-leg-quad livre"></span>Livre</span>
+        <span class="agm-leg-item"><span class="agm-leg-quad ocupado"></span>Ocupado</span>
+      </div>
+      <input type="hidden" name="inicio" id="agm-inicio">
+
+      <label>Observações <span style="text-transform:none;font-weight:400">(opcional)</span></label>
+      <input name="observacoes" placeholder="Detalhes do cliente">
+
+      <div class="agm-acoes">
+        <button type="button" class="btn-ghost btn-sm" id="agm-cancelar">Cancelar</button>
+        <button type="submit" class="btn-primary btn-sm" id="agm-salvar">Agendar</button>
+      </div>
+    </form>
+  </div>
 </div>
