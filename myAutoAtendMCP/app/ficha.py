@@ -18,7 +18,7 @@ import unicodedata
 from datetime import date, datetime
 
 from . import db
-from .phone import formatar_internacional, normalizar
+from .phone import formatar_internacional, normalizar, plausivel
 
 # Tipos suportados: chave → (rótulo no painel, dica de formato p/ o agente).
 TIPOS: dict[str, dict[str, str]] = {
@@ -126,10 +126,9 @@ def normalizar_valor(campo, bruto: str) -> str:
     if tipo == "hora":
         return _normalizar_hora(texto)
     if tipo == "telefone":
-        num = normalizar(texto)
-        if not num:
+        if not plausivel(texto):
             raise ValueError("Telefone inválido — informe com DDD.")
-        return num
+        return normalizar(texto)
     if tipo == "email":
         if not _RE_EMAIL.match(texto):
             raise ValueError("E-mail inválido.")
@@ -215,12 +214,14 @@ def ficha_de(telefone: str, apenas_ativos: bool = True) -> dict:
     }
 
 
-def preencher(telefone: str, dados: dict[str, str], origem: str) -> dict:
-    """Grava vários campos de uma vez. Chaves desconhecidas e valores fora do
-    formato NÃO derrubam o lote: voltam em `erros` para quem chamou decidir
-    (o agente pergunta de novo; o painel mostra o aviso)."""
-    chave = normalizar(telefone) or telefone
-    salvos: dict[str, str] = {}
+def validar(dados: dict[str, str]) -> tuple[list[tuple], dict[str, str]]:
+    """Confere um lote SEM gravar: ([(campo, valor canônico)], {chave: erro}).
+
+    Separado de `preencher` porque o cadastro manual precisa validar tudo
+    ANTES de criar o contato — não faz sentido criar o cliente e só então
+    descobrir que a data de nascimento estava fora do formato.
+    """
+    prontos: list[tuple] = []
     erros: dict[str, str] = {}
     for nome_campo, bruto in (dados or {}).items():
         campo = db.get_campo_ficha_por_chave(nome_campo)
@@ -228,10 +229,22 @@ def preencher(telefone: str, dados: dict[str, str], origem: str) -> dict:
             erros[nome_campo] = "Campo inexistente na ficha."
             continue
         try:
-            valor = normalizar_valor(campo, str(bruto) if bruto is not None else "")
+            prontos.append(
+                (campo, normalizar_valor(campo, str(bruto) if bruto is not None else ""))
+            )
         except ValueError as e:
             erros[campo.chave] = str(e)
-            continue
+    return prontos, erros
+
+
+def preencher(telefone: str, dados: dict[str, str], origem: str) -> dict:
+    """Grava vários campos de uma vez. Chaves desconhecidas e valores fora do
+    formato NÃO derrubam o lote: voltam em `erros` para quem chamou decidir
+    (o agente pergunta de novo; o painel mostra o aviso)."""
+    chave = normalizar(telefone) or telefone
+    prontos, erros = validar(dados)
+    salvos: dict[str, str] = {}
+    for campo, valor in prontos:
         db.set_valor_ficha(chave, campo.id, valor, origem=origem)
         salvos[campo.chave] = valor
     return {"salvos": salvos, "erros": erros}

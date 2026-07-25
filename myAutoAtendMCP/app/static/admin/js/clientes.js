@@ -3,6 +3,7 @@
    conversas) e os atalhos para a conversa e para um novo agendamento. */
 
 import { toast } from './toast.js';
+import { montarCampos, marcarErros } from './ficha.js';
 
 const card = document.getElementById('clientes-card');
 if (card) {
@@ -70,5 +71,84 @@ if (card) {
         telefone: agendar.dataset.agendar,
       });
     }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cadastro manual de cliente (modal). Nome + telefone e, com a ficha ligada,
+// os campos dela — montados por ficha.js para não haver dois jeitos de
+// desenhar o mesmo campo. O servidor valida a ficha ANTES de criar o contato.
+// ---------------------------------------------------------------------------
+
+const modal = document.getElementById('cli-modal');
+if (modal) {
+  document.body.appendChild(modal);   // sai da view (display:none) p/ o body
+
+  const form = document.getElementById('cli-form');
+  const caixaFicha = document.getElementById('cli-ficha');
+  const btnSalvar = document.getElementById('cli-salvar');
+
+  let campos = null;   // definição da ficha, buscada uma vez por página
+
+  async function carregarCampos() {
+    if (campos) return campos;
+    try {
+      const r = await fetch('/admin/ficha/campos', { headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error(r.status);
+      const d = await r.json();
+      campos = d.ativa ? (d.campos || []) : [];
+    } catch (_) {
+      campos = [];   // ficha indisponível não impede cadastrar o contato
+    }
+    return campos;
+  }
+
+  async function abrir() {
+    form.reset();
+    caixaFicha.innerHTML = '';
+    modal.classList.add('open');
+    document.body.classList.add('cli-aberto');
+    document.getElementById('cli-nome').focus();
+    const lista = await carregarCampos();
+    if (lista.length) montarCampos(caixaFicha, lista);
+  }
+
+  function fechar() {
+    modal.classList.remove('open');
+    document.body.classList.remove('cli-aberto');
+  }
+
+  document.getElementById('cli-novo-abrir')?.addEventListener('click', abrir);
+  document.getElementById('cli-x').addEventListener('click', fechar);
+  document.getElementById('cli-cancelar').addEventListener('click', fechar);
+  modal.querySelector('.cli-backdrop').addEventListener('click', fechar);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) fechar();
+  });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    marcarErros(caixaFicha, {});
+    btnSalvar.disabled = true;
+    try {
+      const r = await fetch(form.action, {
+        method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        toast('ok', 'Cliente cadastrado.');
+        location.reload();
+        return;
+      }
+      if (d.erros) {
+        marcarErros(caixaFicha, d.erros);
+        toast('erro', 'Confira os campos marcados.');
+      } else {
+        toast('erro', d.detail || 'Não foi possível cadastrar o cliente.');
+      }
+    } catch (_) {
+      toast('erro', 'Falha de conexão ao cadastrar o cliente.');
+    }
+    btnSalvar.disabled = false;
   });
 }

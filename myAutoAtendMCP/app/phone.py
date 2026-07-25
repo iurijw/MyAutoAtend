@@ -52,6 +52,29 @@ def normalizar(telefone: str | None) -> str:
     return digitos
 
 
+def plausivel(telefone: str | None) -> bool:
+    """Filtro para número DIGITADO à mão (cadastro de cliente, campo de ficha).
+
+    `normalizar` nunca descarta nada — devolve os dígitos crus quando não
+    valida, porque no pipeline do WhatsApp perder o contato é pior que aceitar
+    um formato estranho. No painel a régua é outra: "123" não é telefone.
+    Aceita o que a biblioteca valida e, como rede, qualquer coisa entre 10 e
+    15 dígitos (números que a base do phonenumbers ainda não reconhece).
+    """
+    if not telefone:
+        return False
+    digitos = re.sub(r"\D", "", telefone.split("@")[0])
+    if not digitos:
+        return False
+    try:
+        num = phonenumbers.parse("+" + digitos, None)
+        if phonenumbers.is_valid_number(num):
+            return True
+    except phonenumbers.NumberParseException:
+        pass
+    return 10 <= len(digitos) <= 15
+
+
 def formatar_internacional(telefone: str | None) -> str:
     """Forma legível p/ exibição ("+55 45 99999-0000"). Aceita jid/E.164/dígitos;
     devolve o que recebeu (sem sufixo @) se não der para parsear."""

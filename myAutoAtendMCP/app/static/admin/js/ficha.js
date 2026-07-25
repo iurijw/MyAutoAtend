@@ -30,6 +30,104 @@ if (tipoSel && opcoesWrap) {
 // Modal da ficha de um contato
 // ---------------------------------------------------------------------------
 
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+const ORIGEM = { agente: 'preenchido pelo agente', painel: 'preenchido por você' };
+
+// Um input por tipo — o navegador já valida data/hora/número no formato certo.
+function controle(campo) {
+  const nome = 'campo_' + campo.chave;
+  if (campo.tipo === 'texto_longo') {
+    const t = document.createElement('textarea');
+    t.name = nome;
+    t.value = campo.valor;
+    t.rows = 3;
+    return t;
+  }
+  if (campo.tipo === 'selecao' || campo.tipo === 'booleano') {
+    const s = document.createElement('select');
+    s.name = nome;
+    const alternativas = campo.tipo === 'booleano'
+      ? [['sim', 'Sim'], ['nao', 'Não']]
+      : (campo.opcoes || []).map(o => [o, o]);
+    s.innerHTML = '<option value="">— não informado —</option>' +
+      alternativas.map(([v, r]) =>
+        `<option value="${esc(v)}"${campo.valor === v ? ' selected' : ''}>${esc(r)}</option>`).join('');
+    return s;
+  }
+  const i = document.createElement('input');
+  i.name = nome;
+  i.value = campo.valor;
+  if (campo.tipo === 'numero') { i.type = 'number'; i.step = 'any'; }
+  else if (campo.tipo === 'data') i.type = 'date';
+  else if (campo.tipo === 'hora') i.type = 'time';
+  else if (campo.tipo === 'email') i.type = 'email';
+  else if (campo.tipo === 'telefone') { i.type = 'tel'; i.setAttribute('data-telefone', ''); i.inputMode = 'tel'; }
+  else i.type = 'text';
+  if (campo.descricao) i.placeholder = campo.descricao;
+  return i;
+}
+
+function linha(campo) {
+  const bloco = document.createElement('div');
+  bloco.className = 'fic-campo';
+  bloco.dataset.chave = campo.chave;
+
+  const rot = document.createElement('label');
+  rot.textContent = campo.rotulo;
+  if (campo.obrigatorio) {
+    const marca = document.createElement('span');
+    marca.className = 'fic-obrigatorio';
+    marca.textContent = 'obrigatório';
+    rot.appendChild(marca);
+  }
+  bloco.appendChild(rot);
+  bloco.appendChild(controle(campo));
+
+  const rodape = [];
+  if (campo.descricao && campo.tipo === 'texto_longo') rodape.push(campo.descricao);
+  if (campo.valor && campo.origem) {
+    rodape.push((ORIGEM[campo.origem] || campo.origem) +
+      (campo.atualizado_em ? ' · ' + campo.atualizado_em.replace('T', ' ').slice(0, 16) : ''));
+  }
+  if (rodape.length) {
+    const p = document.createElement('p');
+    p.className = 'fic-rodape';
+    p.textContent = rodape.join(' — ');
+    bloco.appendChild(p);
+  }
+  return bloco;
+}
+
+/* Monta os campos da ficha dentro de um contêiner. Usado pelo modal da ficha
+   e pelo cadastro manual de cliente (js/clientes.js) — mesmo input por tipo,
+   mesmos nomes `campo_<chave>` que o servidor espera. */
+export function montarCampos(container, campos) {
+  container.innerHTML = '';
+  campos.forEach(c => container.appendChild(linha(c)));
+  // máscara + checagem de WhatsApp nos campos de telefone recém-criados
+  container.querySelectorAll('input[data-telefone]').forEach(ligarTelefone);
+}
+
+/* Marca no formulário os campos recusados pelo servidor ({chave: motivo}). */
+export function marcarErros(container, erros) {
+  container.querySelectorAll('.campo-erro').forEach(el => el.classList.remove('campo-erro'));
+  container.querySelectorAll('.campo-erro-msg').forEach(el => el.remove());
+  Object.entries(erros || {}).forEach(([chave, msg]) => {
+    const bloco = container.querySelector(`.fic-campo[data-chave="${CSS.escape(chave)}"]`);
+    if (!bloco) return;
+    bloco.querySelector('input, select, textarea')?.classList.add('campo-erro');
+    const p = document.createElement('p');
+    p.className = 'campo-erro-msg';
+    p.textContent = msg;
+    bloco.appendChild(p);
+  });
+}
+
 const modal = document.getElementById('fic-modal');
 if (modal) {
   document.body.appendChild(modal);   // sai da view (display:none) p/ o body
@@ -45,79 +143,6 @@ if (modal) {
 
   let alvo = null;
 
-  const esc = (s) => {
-    const d = document.createElement('div');
-    d.textContent = s == null ? '' : String(s);
-    return d.innerHTML;
-  };
-
-  const ORIGEM = { agente: 'preenchido pelo agente', painel: 'preenchido por você' };
-
-  // Um input por tipo — o navegador já valida data/hora/número no formato certo.
-  function controle(campo) {
-    const nome = 'campo_' + campo.chave;
-    if (campo.tipo === 'texto_longo') {
-      const t = document.createElement('textarea');
-      t.name = nome;
-      t.value = campo.valor;
-      t.rows = 3;
-      return t;
-    }
-    if (campo.tipo === 'selecao' || campo.tipo === 'booleano') {
-      const s = document.createElement('select');
-      s.name = nome;
-      const alternativas = campo.tipo === 'booleano'
-        ? [['sim', 'Sim'], ['nao', 'Não']]
-        : (campo.opcoes || []).map(o => [o, o]);
-      s.innerHTML = '<option value="">— não informado —</option>' +
-        alternativas.map(([v, r]) =>
-          `<option value="${esc(v)}"${campo.valor === v ? ' selected' : ''}>${esc(r)}</option>`).join('');
-      return s;
-    }
-    const i = document.createElement('input');
-    i.name = nome;
-    i.value = campo.valor;
-    if (campo.tipo === 'numero') { i.type = 'number'; i.step = 'any'; }
-    else if (campo.tipo === 'data') i.type = 'date';
-    else if (campo.tipo === 'hora') i.type = 'time';
-    else if (campo.tipo === 'email') i.type = 'email';
-    else if (campo.tipo === 'telefone') { i.type = 'tel'; i.setAttribute('data-telefone', ''); i.inputMode = 'tel'; }
-    else i.type = 'text';
-    if (campo.descricao) i.placeholder = campo.descricao;
-    return i;
-  }
-
-  function linha(campo) {
-    const bloco = document.createElement('div');
-    bloco.className = 'fic-campo';
-    bloco.dataset.chave = campo.chave;
-
-    const rot = document.createElement('label');
-    rot.textContent = campo.rotulo;
-    if (campo.obrigatorio) {
-      const marca = document.createElement('span');
-      marca.className = 'fic-obrigatorio';
-      marca.textContent = 'obrigatório';
-      rot.appendChild(marca);
-    }
-    bloco.appendChild(rot);
-    bloco.appendChild(controle(campo));
-
-    const rodape = [];
-    if (campo.descricao && campo.tipo === 'texto_longo') rodape.push(campo.descricao);
-    if (campo.valor && campo.origem) {
-      rodape.push((ORIGEM[campo.origem] || campo.origem) +
-        (campo.atualizado_em ? ' · ' + campo.atualizado_em.replace('T', ' ').slice(0, 16) : ''));
-    }
-    if (rodape.length) {
-      const p = document.createElement('p');
-      p.className = 'fic-rodape';
-      p.textContent = rodape.join(' — ');
-      bloco.appendChild(p);
-    }
-    return bloco;
-  }
-
   function pintar(dados) {
     elNome.textContent = dados.nome || dados.telefone_fmt || dados.telefone;
     elTel.textContent = dados.telefone_fmt || dados.telefone;
@@ -126,16 +151,13 @@ if (modal) {
       ? `${dados.preenchidos} de ${dados.total}`
       : 'sem campos';
 
-    elCampos.innerHTML = '';
     if (!dados.campos.length) {
       elCampos.innerHTML = '<p class="fic-vazio">Nenhum campo ativo na ficha. Crie campos na seção <b>Ficha de cadastro</b>.</p>';
       btnSalvar.disabled = true;
       return;
     }
     btnSalvar.disabled = false;
-    dados.campos.forEach(c => elCampos.appendChild(linha(c)));
-    // máscara + checagem de WhatsApp nos campos de telefone recém-criados
-    elCampos.querySelectorAll('input[data-telefone]').forEach(ligarTelefone);
+    montarCampos(elCampos, dados.campos);
   }
 
   async function carregar() {
@@ -182,8 +204,7 @@ if (modal) {
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (!alvo) return;
-    elCampos.querySelectorAll('.campo-erro').forEach(el => el.classList.remove('campo-erro'));
-    elCampos.querySelectorAll('.campo-erro-msg').forEach(el => el.remove());
+    marcarErros(elCampos, {});
     btnSalvar.disabled = true;
     try {
       const r = await fetch('/admin/ficha/cliente/' + encodeURIComponent(alvo), {
@@ -194,16 +215,7 @@ if (modal) {
         toast('ok', 'Ficha salva.');
         pintar(d);
       } else if (d.erros) {
-        Object.entries(d.erros).forEach(([chave, msg]) => {
-          const bloco = elCampos.querySelector(`.fic-campo[data-chave="${CSS.escape(chave)}"]`);
-          if (!bloco) return;
-          const campo = bloco.querySelector('input, select, textarea');
-          campo?.classList.add('campo-erro');
-          const p = document.createElement('p');
-          p.className = 'campo-erro-msg';
-          p.textContent = msg;
-          bloco.appendChild(p);
-        });
+        marcarErros(elCampos, d.erros);
         toast('erro', 'Confira os campos marcados.');
       } else {
         toast('erro', d.detail || 'Não foi possível salvar a ficha.');

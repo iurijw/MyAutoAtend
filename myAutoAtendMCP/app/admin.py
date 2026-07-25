@@ -19,7 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import agente, db, evolution, ficha, ia, tarefas
 from .config import settings
-from .phone import formatar_internacional, mesmo_numero, normalizar
+from .phone import formatar_internacional, mesmo_numero, normalizar, plausivel
 from .tools import _agora_local
 
 router = APIRouter()
@@ -698,6 +698,52 @@ async def conversa_enviar(
 
 
 # ---------------------------------------------------------------------------
+# Clientes (cadastro manual pelo painel)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/cliente")
+async def novo_cliente(request: Request, _: str = Depends(autenticar)):
+    """Cadastra um contato à mão, com os campos da ficha quando ela existe.
+
+    A ficha é validada ANTES de criar o contato (campos chegam como
+    `campo_<chave>`) — assim um valor fora do formato não deixa um cliente
+    meio cadastrado para trás. Número já conhecido → 409, porque o caminho
+    certo é abrir a ficha dele na lista, não recadastrar por cima.
+    """
+    form = await request.form()
+    nome = str(form.get("nome") or "").strip()
+    telefone = str(form.get("telefone") or "").strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Informe o nome do cliente.")
+    if not plausivel(telefone):
+        raise HTTPException(
+            status_code=400, detail="Telefone inválido — informe com DDD."
+        )
+    tel = normalizar(telefone)
+    if db.get_cliente(tel):
+        raise HTTPException(
+            status_code=409,
+            detail="Esse número já está na lista de clientes. "
+            "Abra a ficha dele para editar.",
+        )
+
+    dados = {
+        k[len("campo_"):]: str(v) for k, v in form.items() if k.startswith("campo_")
+    }
+    prontos: list[tuple] = []
+    if dados and ficha.ativa():
+        prontos, erros = ficha.validar(dados)
+        if erros:
+            return JSONResponse({"ok": False, "erros": erros}, status_code=400)
+
+    db.upsert_cliente(tel, nome)
+    for campo, valor in prontos:
+        db.set_valor_ficha(tel, campo.id, valor, origem="painel")
+    return {"ok": True, "telefone": tel}
+
+
+# ---------------------------------------------------------------------------
 # Ficha de cadastro (feature opcional). O dono define os campos aqui; o agente
 # preenche durante a conversa (tools ver_ficha / preencher_ficha) e o painel
 # preenche pelo modal. Validação de valor mora em app/ficha.py — mesma para
@@ -773,6 +819,28 @@ def ficha_mover_campo(
         raise HTTPException(status_code=400, detail="Direção inválida.")
     db.mover_campo_ficha(campo_id, para_cima=direcao == "cima")
     return RedirectResponse("/admin", status_code=303)
+
+
+@router.get("/admin/ficha/campos")
+def ficha_campos(_: str = Depends(autenticar)):
+    """Definição dos campos ativos (sem valores) — monta o formulário de
+    cadastro manual de cliente com os mesmos inputs do modal da ficha."""
+    campos = [
+        {
+            "id": c.id,
+            "chave": c.chave,
+            "rotulo": c.rotulo,
+            "tipo": c.tipo,
+            "opcoes": ficha.opcoes_de(c),
+            "descricao": c.descricao,
+            "obrigatorio": c.obrigatorio,
+            "valor": "",
+            "origem": "",
+            "atualizado_em": "",
+        }
+        for c in db.listar_campos_ficha(apenas_ativos=True)
+    ]
+    return {"ativa": ficha.ativa(), "campos": campos}
 
 
 @router.get("/admin/ficha/cliente/{telefone}")

@@ -210,6 +210,9 @@ primeiro `docker compose up -d`.
     feature ligada) — `GET/POST /admin/ficha/cliente/{tel}`, input por tipo,
     erro por campo, botão **Abrir conversa** (`window.abrirConversa`).
     Excluir campo apaga os valores dele em todos os clientes (confirm no form).
+  - `js/ficha.js` exporta `montarCampos(container, campos)` e
+    `marcarErros(container, erros)` — o cadastro manual de cliente reusa os
+    MESMOS inputs (`GET /admin/ficha/campos` devolve a definição sem valores).
 - **Clientes** (seção própria): agenda de contatos renderizada pelo servidor
   (`admin._fichas_clientes` junta tabela `Cliente` + telefones que só existem
   em agendamentos antigos; `dono` marcado por `mesmo_numero`). `js/clientes.js`
@@ -218,6 +221,12 @@ primeiro `docker compose up -d`.
   e "Agendar" (`window.abrirNovoAgendamento({nome, telefone})` — abre o modal já
   preenchido). Cadastro manual de agendamento faz `db.upsert_cliente`, então o
   contato entra na agenda sem precisar mandar mensagem antes.
+  **"+ Novo cliente"** abre modal com nome + telefone e, se a ficha estiver
+  ligada, os campos dela (`POST /admin/cliente`): a ficha é validada ANTES de
+  criar o contato (nada de cliente meio cadastrado), número repetido → 409
+  apontando para a ficha existente. Telefone digitado à mão passa por
+  `phone.plausivel` (E.164 válido ou 10–15 dígitos) — `normalizar` sozinho
+  aceita qualquer dígito de propósito, para o pipeline nunca perder contato.
 - **UI do painel**: barra lateral fixa + área de conteúdo (sem grade
   arrastável — Gridstack/`grade.js`/`gear.js` removidos). Conteúdo **sem caixa
   interna**: `.card` é só bloco de espaçamento (nada de borda/fundo/sombra) —
