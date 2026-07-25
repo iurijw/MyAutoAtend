@@ -21,10 +21,11 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/agente.py` | Agente pydantic-ai: tools, memória (SQLite), system prompt |
 | `myAutoAtendMCP/app/ia.py` | Provedores de IA (config no SQLite), transcrição, visão, listagem de modelos |
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
-| `myAutoAtendMCP/app/tools.py` | 14 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
+| `myAutoAtendMCP/app/tools.py` | 16 tools (FastMCP): 14 de agendamento + 2 da ficha de cadastro — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
+| `myAutoAtendMCP/app/ficha.py` | Ficha de cadastro: tipos de campo, validação/normalização por tipo, montagem da ficha de um contato |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css) |
-| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) |
+| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
@@ -63,6 +64,8 @@ primeiro `docker compose up -d`.
   agendar, meus_agendamentos, reagendar, cancelar) e `_TOOLS_DONO` (14 = as 6 +
   gestão: fechar/abrir_data, bloquear_horario, remanejar_dia, criar/editar_
   servico, ver_agenda_completa, pausar_bot). Agent montado a cada mensagem.
+  `_TOOLS_FICHA` (ver_ficha, preencher_ficha) entra nos DOIS perfis, mas só
+  com `Config.ficha_ativa` — desligada, o modelo nem vê que a ficha existe.
 - **Memória por contato**: tabela `Conversa` (SQLite), histórico serializado
   com `ModelMessagesTypeAdapter`, janela de 50 mensagens com corte só em
   fronteira de turno do usuário (não quebra par tool-call/tool-return).
@@ -75,6 +78,10 @@ primeiro `docker compose up -d`.
   `mcp_dono`, `mcp_cliente` (defaults `PROMPT_GERAL_PADRAO`/`PROMPT_MCP_DONO_
   PADRAO`/`PROMPT_MCP_CLIENTE_PADRAO` em `agente.py`; a versão cliente não
   menciona ações de gestão; chave legada `mcp` migrada por `db._migrar_prompts`).
+  Com a ficha ligada, `agente.prompt_ficha()` anexa mais um bloco: parte
+  técnica fixa (`PROMPT_FICHA_PADRAO` — contrato das tools, nunca inventar
+  dado, no máximo 1–2 perguntas por mensagem) + instrução do dono (`Prompt`
+  chave `ficha`, default `PROMPT_FICHA_INSTRUCAO_PADRAO`).
   Lido A CADA mensagem → salvar no painel aplica na hora.
 
 ## Provedores de IA (app/ia.py)
@@ -107,7 +114,8 @@ primeiro `docker compose up -d`.
 - Persistência SQLite (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
   Tabelas: Config, Prompt, ProvedorIA, Conversa, Cliente (telefone E.164 PK,
   nome do pushName, bot_pausado), Servico, Bloqueio, Agendamento,
-  HorarioFuncionamento, Tarefa.
+  HorarioFuncionamento, Tarefa, CampoFicha, ValorFicha (PK composta
+  telefone+campo_id).
 - Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
 - Clients MCP externos identificam o solicitante via `?solicitante=` ou header
   `X-Solicitante-Telefone` (middleware em `main.py`).
@@ -183,6 +191,25 @@ primeiro `docker compose up -d`.
   `/admin/horarios/limpar`. Seed do padrão SÓ na criação da tabela (vazia ≠
   nova). Tools `consultar_horarios_disponiveis`/`agendar`/`reagendar`
   respeitam a grade; `Config.abertura/fechamento` viraram colunas órfãs.
+- **Ficha de cadastro** (feature OPCIONAL, `Config.ficha_ativa`, ALTER em
+  `_migrar`): cadastro por contato com campos definidos pelo dono. `CampoFicha`
+  (chave slug estável + rótulo + tipo + dica p/ o agente + obrigatorio + ordem
+  + ativo) e `ValorFicha` (valor já normalizado + `origem` "agente"/"painel" +
+  atualizado_em). Tipos e validação em `app/ficha.py` (texto, texto_longo,
+  numero, data, hora, telefone, email, booleano, selecao) — a MESMA para o
+  painel e para o agente: data vira YYYY-MM-DD, seleção casa a opção
+  canônica, telefone vira E.164. `ficha.preencher` é parcial: campo recusado
+  volta em `erros` sem derrubar o resto do lote.
+  - Tools `ver_ficha` / `preencher_ficha({chave: valor})`: cliente só mexe na
+    própria; dono passa `telefone_cliente` p/ a de outro. Desligada → as duas
+    recusam com aviso. Escrita pelas tools sempre grava origem "agente".
+  - Painel: seção "Ficha de cadastro" (`partials/ficha.html` + `js/ficha.js`) —
+    liga/desliga + instrução de coleta (`POST /admin/ficha/ajustes`), CRUD de
+    campos (`/admin/ficha/campo`, `/{id}/toggle|excluir|mover`). A ficha de um
+    contato abre em MODAL pela lista de Clientes (botão "Ficha", só com a
+    feature ligada) — `GET/POST /admin/ficha/cliente/{tel}`, input por tipo,
+    erro por campo, botão **Abrir conversa** (`window.abrirConversa`).
+    Excluir campo apaga os valores dele em todos os clientes (confirm no form).
 - **Clientes** (seção própria): agenda de contatos renderizada pelo servidor
   (`admin._fichas_clientes` junta tabela `Cliente` + telefones que só existem
   em agendamentos antigos; `dono` marcado por `mesmo_numero`). `js/clientes.js`

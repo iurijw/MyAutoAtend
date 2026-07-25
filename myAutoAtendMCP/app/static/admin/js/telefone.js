@@ -165,4 +165,4 @@ document.addEventListener('reset', (e) => {
   });
 }, true);
 
-export { formatar as formatarTelefone, soDigitos };
+export { formatar as formatarTelefone, ligar as ligarTelefone, soDigitos };

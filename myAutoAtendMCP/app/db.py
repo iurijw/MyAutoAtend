@@ -36,6 +36,7 @@ class Config(SQLModel, table=True):
     telefone_dono: str = settings.owner_phone
     fuso: str = settings.timezone
     avisar_dono: bool = True  # aviso no WhatsApp do dono a cada ação do bot
+    ficha_ativa: bool = False  # ficha de cadastro do cliente (feature opcional)
 
 
 class HorarioFuncionamento(SQLModel, table=True):
@@ -109,6 +110,41 @@ class Cliente(SQLModel, table=True):
     telefone: str = Field(primary_key=True)  # E.164 normalizado
     nome: str = ""
     bot_pausado: bool = False
+
+
+class CampoFicha(SQLModel, table=True):
+    """Campo da ficha de cadastro do cliente — definido pelo dono no painel.
+
+    `chave` é o identificador estável usado pelo agente (slug do rótulo na
+    criação); renomear o rótulo não muda a chave, então valores já gravados
+    continuam válidos. `tipo` decide a validação (ver app/ficha.py) e o input
+    do painel. `descricao` é a dica que o agente lê para saber o que coletar.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    chave: str = Field(index=True)
+    rotulo: str
+    tipo: str = "texto"  # ver ficha.TIPOS
+    opcoes: str = ""  # tipo "selecao": alternativas separadas por ;
+    descricao: str = ""  # dica p/ o agente ("como o cliente prefere ser chamado")
+    obrigatorio: bool = False
+    ordem: int = 0
+    ativo: bool = True
+
+
+class ValorFicha(SQLModel, table=True):
+    """Valor de um campo da ficha para um contato (telefone E.164 + campo).
+
+    Guardado sempre como texto já normalizado pelo tipo (app/ficha.py) — a
+    conversão para exibição/uso fica na borda. `origem` registra quem
+    preencheu: "agente" (durante a conversa) ou "painel" (o dono).
+    """
+
+    telefone: str = Field(primary_key=True)
+    campo_id: int = Field(primary_key=True)
+    valor: str = ""
+    origem: str = "painel"
+    atualizado_em: str = ""
 
 
 class Servico(SQLModel, table=True):
@@ -216,6 +252,11 @@ def _migrar() -> None:
         if cols and "avisar_dono" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE config ADD COLUMN avisar_dono BOOLEAN NOT NULL DEFAULT 1"
+            )
+            conn.commit()
+        if cols and "ficha_ativa" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE config ADD COLUMN ficha_ativa BOOLEAN NOT NULL DEFAULT 0"
             )
             conn.commit()
 
@@ -612,6 +653,150 @@ def cliente_pausado(telefone: str) -> bool:
     """True se o bot está pausado para este contato."""
     c = get_cliente(telefone)
     return bool(c and c.bot_pausado)
+
+
+# ---------------------------------------------------------------------------
+# Ficha de cadastro (campos definidos pelo dono + valores por contato)
+# ---------------------------------------------------------------------------
+
+
+def listar_campos_ficha(apenas_ativos: bool = False) -> list[CampoFicha]:
+    with _session() as s:
+        campos = list(s.exec(select(CampoFicha)).all())
+    if apenas_ativos:
+        campos = [c for c in campos if c.ativo]
+    campos.sort(key=lambda c: (c.ordem, c.id or 0))
+    return campos
+
+
+def get_campo_ficha(campo_id: int) -> CampoFicha | None:
+    with _session() as s:
+        return s.get(CampoFicha, campo_id)
+
+
+def get_campo_ficha_por_chave(chave: str) -> CampoFicha | None:
+    alvo = (chave or "").strip().lower()
+    if not alvo:
+        return None
+    with _session() as s:
+        campos = list(s.exec(select(CampoFicha).where(CampoFicha.chave == alvo)).all())
+    return campos[0] if campos else None
+
+
+def criar_campo_ficha(
+    chave: str,
+    rotulo: str,
+    tipo: str,
+    opcoes: str = "",
+    descricao: str = "",
+    obrigatorio: bool = False,
+) -> CampoFicha:
+    """Cria um campo no fim da ordem. A chave já vem única (ver app/ficha.py)."""
+    with _lock, _session() as s:
+        ultima = max(
+            (c.ordem for c in s.exec(select(CampoFicha)).all()), default=-1
+        )
+        c = CampoFicha(
+            chave=chave,
+            rotulo=rotulo,
+            tipo=tipo,
+            opcoes=opcoes,
+            descricao=descricao,
+            obrigatorio=obrigatorio,
+            ordem=ultima + 1,
+        )
+        s.add(c)
+        s.commit()
+        return c
+
+
+def editar_campo_ficha(campo_id: int, **campos) -> CampoFicha | None:
+    with _lock, _session() as s:
+        c = s.get(CampoFicha, campo_id)
+        if not c:
+            return None
+        for k, v in campos.items():
+            if v is not None and hasattr(c, k):
+                setattr(c, k, v)
+        s.add(c)
+        s.commit()
+        return c
+
+
+def deletar_campo_ficha(campo_id: int) -> bool:
+    """Remove o campo E os valores já preenchidos dele (não sobra órfão)."""
+    with _lock, _session() as s:
+        c = s.get(CampoFicha, campo_id)
+        if not c:
+            return False
+        for v in s.exec(select(ValorFicha).where(ValorFicha.campo_id == campo_id)).all():
+            s.delete(v)
+        s.delete(c)
+        s.commit()
+        return True
+
+
+def mover_campo_ficha(campo_id: int, para_cima: bool) -> bool:
+    """Troca a ordem com o vizinho — reordenação do painel (setas ↑ ↓)."""
+    with _lock, _session() as s:
+        campos = sorted(
+            s.exec(select(CampoFicha)).all(), key=lambda c: (c.ordem, c.id or 0)
+        )
+        pos = next((i for i, c in enumerate(campos) if c.id == campo_id), None)
+        if pos is None:
+            return False
+        vizinho = pos - 1 if para_cima else pos + 1
+        if not 0 <= vizinho < len(campos):
+            return False
+        # Reescreve a ordem inteira: bancos antigos podem ter empates em 0.
+        campos[pos], campos[vizinho] = campos[vizinho], campos[pos]
+        for i, c in enumerate(campos):
+            c.ordem = i
+            s.add(c)
+        s.commit()
+        return True
+
+
+def valores_ficha(telefone: str) -> dict[int, ValorFicha]:
+    """Valores de um contato indexados por campo_id."""
+    chave = normalizar(telefone) or telefone
+    with _session() as s:
+        linhas = s.exec(select(ValorFicha).where(ValorFicha.telefone == chave)).all()
+    return {v.campo_id: v for v in linhas}
+
+
+def set_valor_ficha(
+    telefone: str, campo_id: int, valor: str, origem: str = "painel"
+) -> ValorFicha | None:
+    """Grava (ou apaga, se `valor` vier vazio) o valor de um campo do contato."""
+    chave = normalizar(telefone) or telefone
+    with _lock, _session() as s:
+        atual = s.get(ValorFicha, (chave, campo_id))
+        if not (valor or "").strip():
+            if atual:
+                s.delete(atual)
+                s.commit()
+            return None
+        if atual is None:
+            atual = ValorFicha(telefone=chave, campo_id=campo_id)
+        atual.valor = valor
+        atual.origem = origem
+        atual.atualizado_em = datetime.now().isoformat(timespec="seconds")
+        s.add(atual)
+        s.commit()
+        return atual
+
+
+def preenchimento_fichas() -> dict[str, int]:
+    """Quantos campos cada contato tem preenchidos — coluna da lista de clientes."""
+    with _session() as s:
+        linhas = s.exec(select(ValorFicha)).all()
+    ativos = {c.id for c in listar_campos_ficha(apenas_ativos=True)}
+    contagem: dict[str, int] = {}
+    for v in linhas:
+        if v.campo_id in ativos and (v.valor or "").strip():
+            contagem[v.telefone] = contagem.get(v.telefone, 0) + 1
+    return contagem
 
 
 # ---------------------------------------------------------------------------

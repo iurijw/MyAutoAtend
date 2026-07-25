@@ -1,0 +1,123 @@
+<!-- ============ FICHA DE CADASTRO (feature opcional) ============ -->
+<div class="card">
+  <div class="card-head">
+    <h2>Ficha de cadastro</h2>
+    <span class="pill {{ 'on' if config.ficha_ativa else 'off' }}">{{ 'ativa' if config.ficha_ativa else 'desligada' }}</span>
+  </div>
+  <p class="card-sub">Um cadastro por contato, com os campos que você quiser. Ligada, a ficha aparece em cada cliente e o agente pode preenchê-la durante a conversa — seguindo a instrução abaixo.</p>
+  <form method="post" action="/admin/ficha/ajustes">
+    <label class="check-linha">
+      <input type="checkbox" name="ativa" value="true" {% if config.ficha_ativa %}checked{% endif %}>
+      Usar ficha de cadastro (libera o botão “Ficha” nos clientes e as ferramentas do agente)
+    </label>
+    <label>Instrução de coleta <span style="text-transform:none;font-weight:400">(como o agente deve pedir os dados)</span></label>
+    <textarea name="instrucao" id="ficha-instrucao" placeholder="Ex.: peça o e-mail logo depois de confirmar o agendamento.">{{ ficha_instrucao }}</textarea>
+    <p class="ia-note">O agente sempre consulta a ficha antes de perguntar, nunca inventa dado e não trava o atendimento se o cliente não quiser responder — isso é fixo. Aqui você diz <b>quando</b> e <b>o que</b> priorizar.</p>
+    <button class="btn-acento">Salvar ajustes</button>
+  </form>
+</div>
+
+<div class="col2">
+  <div class="card">
+    <div class="card-head">
+      <h2>Campos</h2>
+      <span class="tag">{{ campos_ficha|length }} campo{{ '' if campos_ficha|length == 1 else 's' }}</span>
+    </div>
+    <div class="tbl-rolagem">
+    <table class="tbl" id="ficha-lista">
+      <thead><tr><th></th><th>Campo</th><th>Tipo</th><th></th></tr></thead>
+      <tbody>
+      {% for c in campos_ficha %}
+        <tr>
+          <td class="ficha-setas">
+            <form method="post" action="/admin/ficha/campo/{{ c.id }}/mover">
+              <input type="hidden" name="direcao" value="cima">
+              <button class="btn-ordem" title="Subir" aria-label="Subir campo">↑</button>
+            </form>
+            <form method="post" action="/admin/ficha/campo/{{ c.id }}/mover">
+              <input type="hidden" name="direcao" value="baixo">
+              <button class="btn-ordem" title="Descer" aria-label="Descer campo">↓</button>
+            </form>
+          </td>
+          <td>
+            <div class="who">
+              {{ c.rotulo }}
+              {% if c.obrigatorio %}<span class="tag-dono">obrigatório</span>{% endif %}
+              {% if not c.ativo %}<span class="pill off">pausado</span>{% endif %}
+            </div>
+            <div class="meta">{{ c.chave }}</div>
+            {% if c.descricao %}<div class="ficha-dica">{{ c.descricao }}</div>{% endif %}
+          </td>
+          <td>
+            {{ ficha_tipos[c.tipo].rotulo if c.tipo in ficha_tipos else c.tipo }}
+            {% if c.tipo == 'selecao' and c.opcoes %}<div class="meta">{{ c.opcoes.replace(';', ' · ') }}</div>{% endif %}
+          </td>
+          <td>
+            <div class="acts">
+              <form method="post" action="/admin/ficha/campo/{{ c.id }}/toggle">
+                <button class="btn-sm btn-ghost">{{ 'Pausar' if c.ativo else 'Ativar' }}</button>
+              </form>
+              <form method="post" action="/admin/ficha/campo/{{ c.id }}/excluir"
+                    onsubmit="return confirm('Excluir o campo &quot;{{ c.rotulo }}&quot;? O que já foi preenchido nele em todos os clientes será apagado.')">
+                <button class="btn-sm btn-danger">Excluir</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">Nenhum campo ainda. Crie o primeiro ao lado.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Novo campo</h2></div>
+    <p class="card-sub">O tipo define o que é aceito — data vira YYYY-MM-DD, seleção só aceita as opções da lista.</p>
+    <form method="post" action="/admin/ficha/campo" id="ficha-campo-form">
+      <label>Nome do campo</label>
+      <input name="rotulo" required placeholder="Ex.: Data de nascimento">
+      <label>Tipo</label>
+      <select name="tipo" id="ficha-tipo">
+        {% for chave, t in ficha_tipos.items() %}
+        <option value="{{ chave }}">{{ t.rotulo }}</option>
+        {% endfor %}
+      </select>
+      <div id="ficha-opcoes-wrap" hidden>
+        <label>Opções <span style="text-transform:none;font-weight:400">(separe por ponto e vírgula)</span></label>
+        <input name="opcoes" id="ficha-opcoes" placeholder="Cabelo liso; Cacheado; Crespo">
+      </div>
+      <label>Dica para o agente <span style="text-transform:none;font-weight:400">(opcional)</span></label>
+      <input name="descricao" placeholder="O que perguntar para preencher este campo">
+      <label class="check-linha">
+        <input type="checkbox" name="obrigatorio" value="true">
+        Campo obrigatório — o agente prioriza a coleta dele
+      </label>
+      <button class="btn-acento">+ Adicionar campo</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal da ficha de um contato: realocado pro body via JS. -->
+<div class="fic-modal" id="fic-modal" role="dialog" aria-modal="true" aria-labelledby="fic-nome">
+  <div class="fic-backdrop" data-fechar></div>
+  <div class="fic-card" data-accent="mare">
+    <header class="fic-head">
+      <div class="ava fic-ava" id="fic-ava">?</div>
+      <div class="fic-id">
+        <div class="fic-nome" id="fic-nome">—</div>
+        <div class="fic-tel meta" id="fic-tel"></div>
+      </div>
+      <span class="tag" id="fic-progresso"></span>
+      <button type="button" class="fic-x" id="fic-x" aria-label="Fechar ficha">✕</button>
+    </header>
+    <form class="fic-body" id="fic-form" data-nativo autocomplete="off">
+      <div id="fic-campos" aria-live="polite"></div>
+    </form>
+    <footer class="fic-pe">
+      <button type="button" class="btn-ghost btn-sm" id="fic-conversa">Abrir conversa</button>
+      <button type="submit" form="fic-form" class="btn-acento btn-sm" id="fic-salvar">Salvar ficha</button>
+    </footer>
+  </div>
+</div>

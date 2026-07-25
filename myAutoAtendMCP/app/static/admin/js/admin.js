@@ -11,6 +11,7 @@ import './horarios.js';
 import './proatividade.js';
 import './conversas.js';
 import './clientes.js';
+import './ficha.js';
 import './telefone.js';
 import './agendamento.js';
 import './avatars.js';

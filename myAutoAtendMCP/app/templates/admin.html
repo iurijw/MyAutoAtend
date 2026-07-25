@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/admin/admin.css?v=8">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=9">
 </head>
 <body>
   {% include "partials/icones.html" %}
@@ -50,6 +50,11 @@
           <svg class="nav-icone" aria-hidden="true"><use href="#i-clientes"></use></svg>
           <span class="nav-rotulo">Clientes</span>
           {% if clientes %}<span class="nav-badge">{{ clientes|length }}</span>{% endif %}
+        </a>
+        <a class="nav-item" href="#ficha" data-accent="mare">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-ficha"></use></svg>
+          <span class="nav-rotulo">Ficha de cadastro</span>
+          {% if config.ficha_ativa and campos_ficha %}<span class="nav-badge">{{ ficha_total }}</span>{% endif %}
         </a>
 
         <p class="nav-grupo">Agenda</p>
@@ -134,6 +139,12 @@
                  data-titulo="Clientes"
                  data-desc="Todo contato que o bot já conheceu.">
           {% include "partials/clientes.html" %}
+        </section>
+
+        <section class="view" id="view-ficha" data-accent="mare" data-grupo="Atendimento"
+                 data-titulo="Ficha de cadastro"
+                 data-desc="Os campos que você quer saber de cada cliente.">
+          {% include "partials/ficha.html" %}
         </section>
 
         <section class="view" id="view-servicos" data-accent="ouro" data-grupo="Agenda"

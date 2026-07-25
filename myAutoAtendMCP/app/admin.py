@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import agente, db, evolution, ia, tarefas
+from . import agente, db, evolution, ficha, ia, tarefas
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar
 from .tools import _agora_local
@@ -53,6 +53,7 @@ def _fichas_clientes(agendamentos: list) -> list[dict]:
             nome_do_agendamento[tel] = a.nome_cliente
 
     dono = db.get_config().telefone_dono
+    preenchidos = db.preenchimento_fichas()
     fichas: dict[str, dict] = {}
     for c in db.listar_clientes():
         fichas[c.telefone] = {
@@ -68,6 +69,7 @@ def _fichas_clientes(agendamentos: list) -> list[dict]:
         f["telefone_fmt"] = formatar_internacional(tel) or tel
         f["agendamentos"] = marcados.get(tel, 0)
         f["dono"] = mesmo_numero(tel, dono)
+        f["ficha_preenchidos"] = preenchidos.get(tel, 0)
         lista.append(f)
     # Com nome primeiro (ordem alfabética); os sem nome fecham a lista.
     lista.sort(key=lambda f: (not f["nome"], (f["nome"] or f["telefone"]).lower()))
@@ -86,6 +88,8 @@ def painel(request: Request, _: str = Depends(autenticar)):
         if 0 <= h.dia_semana <= 6:
             horarios_por_dia[h.dia_semana].append(h)
     clientes = _fichas_clientes(agendamentos)
+    campos_ficha = db.listar_campos_ficha()
+    instrucao_ficha = db.get_prompt("ficha")
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -101,6 +105,14 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "n_horarios": len(horarios),
             "evolution_url": settings.evolution_external_url,
             "provedores_ia": ia.PROVEDORES,
+            "campos_ficha": campos_ficha,
+            "ficha_tipos": ficha.TIPOS,
+            "ficha_total": sum(1 for c in campos_ficha if c.ativo),
+            "ficha_instrucao": (
+                instrucao_ficha
+                if instrucao_ficha is not None
+                else agente.PROMPT_FICHA_INSTRUCAO_PADRAO
+            ),
         },
     )
 
@@ -683,6 +695,114 @@ async def conversa_enviar(
         ) from e
     agente.registrar_na_memoria(db.resolver_chave_conversa(telefone), msg, "bot")
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Ficha de cadastro (feature opcional). O dono define os campos aqui; o agente
+# preenche durante a conversa (tools ver_ficha / preencher_ficha) e o painel
+# preenche pelo modal. Validação de valor mora em app/ficha.py — mesma para
+# os dois caminhos.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/ficha/ajustes")
+def ficha_ajustes(
+    _: str = Depends(autenticar),
+    ativa: bool = Form(False),  # checkbox desmarcado não envia o campo
+    instrucao: str = Form(""),
+):
+    db.update_config(ficha_ativa=ativa)
+    db.set_prompt("ficha", instrucao.strip())
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/ficha/campo")
+def ficha_novo_campo(
+    _: str = Depends(autenticar),
+    rotulo: str = Form(...),
+    tipo: str = Form(...),
+    opcoes: str = Form(""),
+    descricao: str = Form(""),
+    obrigatorio: bool = Form(False),
+):
+    nome = rotulo.strip()
+    if not nome:
+        raise HTTPException(status_code=400, detail="Informe o nome do campo.")
+    if tipo not in ficha.TIPOS:
+        raise HTTPException(status_code=400, detail="Tipo de campo inválido.")
+    alternativas = [o.strip() for o in opcoes.replace("\n", ";").split(";") if o.strip()]
+    if tipo == "selecao" and len(alternativas) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Campo de seleção precisa de pelo menos duas opções "
+            "(separe por ponto e vírgula).",
+        )
+    db.criar_campo_ficha(
+        chave=ficha.chave_livre(nome),
+        rotulo=nome,
+        tipo=tipo,
+        opcoes=";".join(alternativas),
+        descricao=descricao.strip(),
+        obrigatorio=obrigatorio,
+    )
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/ficha/campo/{campo_id}/toggle")
+def ficha_alternar_campo(campo_id: int, _: str = Depends(autenticar)):
+    campo = db.get_campo_ficha(campo_id)
+    if not campo:
+        raise HTTPException(status_code=404, detail="Campo não encontrado.")
+    db.editar_campo_ficha(campo_id, ativo=not campo.ativo)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/ficha/campo/{campo_id}/excluir")
+def ficha_excluir_campo(campo_id: int, _: str = Depends(autenticar)):
+    """Apaga o campo e TODOS os valores já preenchidos dele."""
+    if not db.deletar_campo_ficha(campo_id):
+        raise HTTPException(status_code=404, detail="Campo não encontrado.")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/ficha/campo/{campo_id}/mover")
+def ficha_mover_campo(
+    campo_id: int, _: str = Depends(autenticar), direcao: str = Form(...)
+):
+    if direcao not in ("cima", "baixo"):
+        raise HTTPException(status_code=400, detail="Direção inválida.")
+    db.mover_campo_ficha(campo_id, para_cima=direcao == "cima")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.get("/admin/ficha/cliente/{telefone}")
+def ficha_do_cliente(telefone: str, _: str = Depends(autenticar)):
+    """Ficha de um contato para o modal (mesma montagem que o agente enxerga)."""
+    dados = ficha.ficha_de(telefone)
+    dados["ativa"] = ficha.ativa()
+    return dados
+
+
+@router.post("/admin/ficha/cliente/{telefone}")
+async def ficha_salvar_cliente(
+    request: Request, telefone: str, _: str = Depends(autenticar)
+):
+    """Salva a ficha pelo painel. Campos chegam como `campo_<chave>`; valor
+    fora do formato do tipo volta em `erros` (o modal marca o campo)."""
+    form = await request.form()
+    dados = {
+        k[len("campo_"):]: str(v)
+        for k, v in form.items()
+        if k.startswith("campo_")
+    }
+    if not dados:
+        raise HTTPException(status_code=400, detail="Nenhum campo enviado.")
+    resultado = ficha.preencher(telefone, dados, origem="painel")
+    if resultado["erros"]:
+        return JSONResponse(
+            {"ok": False, "erros": resultado["erros"]}, status_code=400
+        )
+    return {"ok": True, **ficha.ficha_de(telefone)}
 
 
 # ---------------------------------------------------------------------------

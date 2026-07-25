@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from . import auth, db, notificacoes
+from . import auth, db, ficha, notificacoes
 from .phone import mesmo_numero, normalizar
 
 # A porta MCP só é exposta em localhost e na rede interna do Docker (clients
@@ -283,6 +283,92 @@ def cancelar(
     ):
         resultado["cliente_sera_avisado"] = True
     return resultado
+
+
+# ---------------------------------------------------------------------------
+# Ficha de cadastro (feature opcional — só existe com Config.ficha_ativa)
+# ---------------------------------------------------------------------------
+
+
+def _alvo_da_ficha(
+    telefone_cliente: str | None, telefone_solicitante: str | None
+) -> tuple[str | None, dict | None]:
+    """(telefone da ficha, erro). Cliente só mexe na própria; o dono pode
+    informar `telefone_cliente` para ver/preencher a ficha de outra pessoa."""
+    tel = auth.requester(telefone_solicitante)
+    if not tel:
+        return None, auth.NEGADO_SEM_SOLICITANTE
+    alvo = (telefone_cliente or "").strip()
+    if not alvo:
+        return normalizar(tel) or tel, None
+    if not auth.eh_dono(telefone_solicitante):
+        return None, {
+            "erro": "Você só pode ver ou preencher a sua própria ficha. "
+            "Não informe telefone_cliente."
+        }
+    return normalizar(alvo) or alvo, None
+
+
+@mcp.tool()
+def ver_ficha(
+    telefone_cliente: str | None = None,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """Ficha de cadastro do cliente: campos, o que já está preenchido e o que falta.
+
+    Cada campo traz `chave` (use exatamente essa em preencher_ficha), `rotulo`,
+    `tipo`, `descricao` (o que coletar), `obrigatorio` e `valor` atual.
+    O cliente vê a própria ficha; o dono pode passar `telefone_cliente` para
+    ver a de outra pessoa. Consulte ANTES de perguntar qualquer coisa ao
+    cliente — assim você não repete o que já está preenchido.
+    """
+    if not ficha.ativa():
+        return {"erro": "A ficha de cadastro está desativada neste estabelecimento."}
+    alvo, erro = _alvo_da_ficha(telefone_cliente, telefone_solicitante)
+    if erro:
+        return erro
+    dados = ficha.ficha_de(alvo)
+    dados["faltando"] = [
+        c["chave"] for c in dados["campos"] if c["obrigatorio"] and not c["valor"]
+    ]
+    return dados
+
+
+@mcp.tool()
+def preencher_ficha(
+    campos: dict[str, str],
+    telefone_cliente: str | None = None,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """Grava valores na ficha de cadastro. `campos` = {chave: valor}.
+
+    Use as CHAVES exatas devolvidas por ver_ficha e respeite o formato do tipo
+    (data YYYY-MM-DD, hora HH:MM, "sim"/"nao" em campos de sim ou não, uma das
+    opções listadas em campos de seleção). Preencha só o que o cliente
+    realmente informou — nunca invente nem deduza. Valor vazio apaga o campo.
+    Campos recusados voltam em `erros` com o motivo: corrija ou pergunte de
+    novo ao cliente. O cliente preenche a própria ficha; o dono pode passar
+    `telefone_cliente` para preencher a de outra pessoa.
+    """
+    if not ficha.ativa():
+        return {"erro": "A ficha de cadastro está desativada neste estabelecimento."}
+    alvo, erro = _alvo_da_ficha(telefone_cliente, telefone_solicitante)
+    if erro:
+        return erro
+    if not campos:
+        return {"erro": "Nenhum campo informado."}
+    # Quem escreve é o agente, mesmo quando o dono pede pela conversa — a
+    # origem "painel" fica reservada ao formulário do /admin.
+    resultado = ficha.preencher(alvo, campos, origem="agente")
+    atual = ficha.ficha_de(alvo)
+    return {
+        "ok": not resultado["erros"],
+        "salvos": resultado["salvos"],
+        "erros": resultado["erros"],
+        "faltando": [
+            c["chave"] for c in atual["campos"] if c["obrigatorio"] and not c["valor"]
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

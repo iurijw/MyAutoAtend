@@ -537,6 +537,56 @@ html[data-theme="dark"] .agm-leg-quad.ocupado{background:rgba(223,111,115,.3);}
   border-top:1px solid var(--line); padding-top:16px;}
 
 /* ===========================================================================
+   Ficha de cadastro — dica do campo na listagem e modal por contato
+   =========================================================================== */
+.ficha-dica{margin-top:4px; font-size:13px; color:var(--ink-soft); max-width:46ch;}
+.tbl td.ficha-setas{width:1%; padding-right:0; white-space:nowrap; line-height:0;}
+.btn-ordem{padding:2px 7px; font-size:13px; line-height:1.3; margin:0; background:transparent;
+  border-color:var(--line); color:var(--ink-soft);}
+.btn-ordem:hover{border-color:var(--accent); color:var(--accent);}
+.ficha-setas form{display:block;}
+.ficha-setas form + form{margin-top:4px;}
+/* rótulo do campo: chips (obrigatório / pausado) na mesma linha do nome */
+#ficha-lista .who{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+/* Pausar + Excluir lado a lado: empilhados dobravam a altura de cada linha.
+   Se faltar largura, quem rola é o .tbl-rolagem. */
+#ficha-lista .acts{flex-wrap:nowrap;}
+#ficha-lista{min-width:520px;}
+
+body.fic-aberto{overflow:hidden;}
+.fic-modal{position:fixed; inset:0; z-index:110; display:none; align-items:center; justify-content:center; padding:20px;}
+.fic-modal.open{display:flex;}
+.fic-backdrop{position:absolute; inset:0; background:rgba(33,28,22,.5); backdrop-filter:blur(2px);}
+html[data-theme="dark"] .fic-backdrop{background:rgba(0,0,0,.6);}
+.fic-card{position:relative; z-index:1; width:min(560px,100%); max-height:min(88vh,760px);
+  display:flex; flex-direction:column; overflow:hidden;
+  background:var(--card); border:1px solid var(--line); border-radius:18px;
+  box-shadow:0 30px 60px -24px var(--shadow-pop);}
+.fic-head{flex:none; display:flex; align-items:center; gap:12px; padding:16px 18px;
+  border-bottom:1px solid var(--line);}
+.fic-ava{flex:none; width:42px; height:42px;}
+.fic-id{min-width:0; margin-right:auto;}
+.fic-nome{font-family:"DM Serif Display",serif; font-size:20px; line-height:1.1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.fic-tel{font-size:12px;}
+.fic-x{flex:none; padding:4px 9px; border:none; background:transparent; color:var(--ink-soft);
+  font-size:15px; line-height:1; border-radius:8px; cursor:pointer;}
+.fic-x:hover{background:var(--paper-2); color:var(--accent);}
+.fic-body{flex:1; min-height:0; overflow-y:auto; padding:4px 18px 18px;}
+.fic-campo{padding-top:6px;}
+.fic-campo + .fic-campo{margin-top:4px;}
+.fic-campo label{display:flex; align-items:center; gap:8px;}
+.fic-obrigatorio{padding:2px 7px; border-radius:999px; letter-spacing:.12em;
+  font:700 9.5px/1.5 "Hanken Grotesk"; text-transform:uppercase;
+  color:var(--accent); background:color-mix(in srgb, var(--accent) 14%, transparent);}
+.fic-rodape{margin:6px 0 0; font-family:"JetBrains Mono",monospace; font-size:11.5px;
+  color:var(--ink-soft);}
+.fic-vazio{padding:26px 2px; text-align:center; color:var(--ink-soft); font-style:italic;}
+.fic-pe{flex:none; display:flex; gap:10px; align-items:center; padding:14px 18px;
+  border-top:1px solid var(--line);}
+.fic-pe .btn-acento{margin:0 0 0 auto;}
+
+/* ===========================================================================
    Toasts, badge de telefone e erros de validação
    =========================================================================== */
 .toast-wrap{position:fixed; right:22px; bottom:22px; z-index:120;
@@ -607,9 +657,9 @@ html[data-theme="dark"] .tel-badge.no{background:rgba(223,111,115,.16); color:va
   .tbl{min-width:560px;}
 }
 @media(max-width:600px){
-  .conv-modal,.agm-modal{padding:0;}
+  .conv-modal,.agm-modal,.fic-modal{padding:0;}
   .conv-modal-card{width:100%; height:100%; border-radius:0;}
-  .agm-card{width:100%; height:100%; max-height:none; border-radius:0;}
+  .agm-card,.fic-card{width:100%; height:100%; max-height:none; border-radius:0;}
   .toast-wrap{left:22px; right:22px; width:auto;}
 }
 @media(prefers-reduced-motion: reduce){

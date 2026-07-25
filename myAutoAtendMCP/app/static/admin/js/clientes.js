@@ -57,6 +57,9 @@ if (card) {
     const pausa = e.target.closest('[data-pausa]');
     if (pausa) { alternarPausa(pausa); return; }
 
+    const fichaBtn = e.target.closest('[data-ficha]');
+    if (fichaBtn && window.abrirFicha) { window.abrirFicha(fichaBtn.dataset.ficha); return; }
+
     const conversa = e.target.closest('[data-conversa]');
     if (conversa && window.abrirConversa) { window.abrirConversa(conversa.dataset.conversa); return; }
 

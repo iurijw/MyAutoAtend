@@ -43,6 +43,7 @@ _DIAS_SEMANA = [
 # Cabeçalhos usados p/ separar o prompt em partes editáveis pelo painel.
 _SECAO_MCP = "## Ferramentas (MCP Agendamentos)"
 _SECAO_FORMATACAO = "## Formatação"
+_SECAO_FICHA = "## Ficha de cadastro"
 
 # Bloco "infra" do prompt: tools + formatação das mensagens. Editável pelo
 # painel (seção avançada, com aviso), restaurável a este padrão. Deve refletir
@@ -105,6 +106,20 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações. Emojis com moderação.
 - Seja breve, como numa conversa real de WhatsApp. Evite listas formais e linguagem corporativa."""
 
+# Bloco da ficha de cadastro — entra no prompt SÓ com Config.ficha_ativa (a
+# feature é opcional). A parte técnica é fixa (contrato das duas tools); o que
+# o dono escreve no painel — quando pedir cada dado, o que priorizar — vem da
+# tabela Prompt, chave "ficha", e é anexado no fim.
+PROMPT_FICHA_PADRAO = f"""{_SECAO_FICHA}
+O estabelecimento mantém uma ficha de cadastro do cliente, com campos definidos pelo dono.
+- ver_ficha: lista os campos (chave, rótulo, tipo, descrição, se é obrigatório) e o que já está preenchido. Consulte ANTES de perguntar — nunca peça de novo um dado que já está na ficha.
+- preencher_ficha({{"chave": "valor"}}): grava o que o cliente informou. Use a chave EXATA de ver_ficha e o formato do tipo (data YYYY-MM-DD, hora HH:MM, "sim"/"nao", ou uma das opções listadas). Grave assim que o cliente disser o dado, sem esperar o fim da conversa.
+- Nunca invente, deduza ou complete um dado que o cliente não disse. Se ele não quiser responder, siga normalmente — a ficha nunca bloqueia agendamento nem atendimento.
+- No máximo uma ou duas perguntas de cadastro por mensagem, encaixadas no assunto da conversa: cadastro é conversa, não formulário."""
+
+# Instrução editável do dono (chave "ficha"): quando e como coletar.
+PROMPT_FICHA_INSTRUCAO_PADRAO = """Peça os dados da ficha aos poucos, no meio da conversa, começando pelos campos obrigatórios. Um bom momento é logo depois de confirmar um agendamento."""
+
 # Tools expostas ao agente — funções originais de app/tools.py, montadas por
 # remetente. Defesa em profundidade: a autorização fina continua em auth.py,
 # mas as tools exclusivas do dono nem entram na lista do cliente (o modelo não
@@ -130,6 +145,10 @@ _TOOLS_DONO = _TOOLS_CLIENTE + [
     tools.ver_agenda_completa,
     tools.pausar_bot,
 ]
+
+# Ficha de cadastro: entram (para os dois perfis) só com a feature ligada —
+# desligada, o modelo nem vê que existe.
+_TOOLS_FICHA = [tools.ver_ficha, tools.preencher_ficha]
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +193,24 @@ def prompt_atual(dono: bool) -> tuple[str, str]:
     return geral, mcp
 
 
+def prompt_ficha() -> str:
+    """Bloco da ficha de cadastro (vazio quando a feature está desligada).
+
+    Parte técnica fixa + instrução do dono (tabela Prompt, chave "ficha").
+    Lido a cada mensagem, como o resto do prompt — ligar/desligar a ficha ou
+    reescrever a instrução no painel vale já na próxima resposta.
+    """
+    if not db.get_config().ficha_ativa:
+        return ""
+    instrucao = db.get_prompt("ficha")
+    if instrucao is None:
+        instrucao = PROMPT_FICHA_INSTRUCAO_PADRAO
+    partes = [PROMPT_FICHA_PADRAO]
+    if instrucao.strip():
+        partes.append(instrucao.strip())
+    return "\n".join(partes)
+
+
 def _system_prompt() -> str:
     cfg = db.get_config()
     try:
@@ -191,6 +228,8 @@ def _system_prompt() -> str:
     partes = [prefixo, geral.strip()]
     if mcp.strip():
         partes.append(mcp.strip())
+    if bloco_ficha := prompt_ficha():
+        partes.append(bloco_ficha)
     return "\n\n".join(p for p in partes if p)
 
 
@@ -276,7 +315,9 @@ async def responder(telefone: str, mensagem: str) -> str:
     )
     # Toolset por remetente: só o dono recebe as tools de gestão. O prompt
     # também é montado conforme o remetente (ver `_system_prompt`).
-    tools_do_remetente = _TOOLS_DONO if auth.eh_dono() else _TOOLS_CLIENTE
+    tools_do_remetente = list(_TOOLS_DONO if auth.eh_dono() else _TOOLS_CLIENTE)
+    if db.get_config().ficha_ativa:
+        tools_do_remetente += _TOOLS_FICHA
     agent = Agent(model, tools=tools_do_remetente, retries=2)
     agent.system_prompt(dynamic=True)(_system_prompt)
 
