@@ -1,6 +1,6 @@
 <!-- ============ HORÁRIOS DE FUNCIONAMENTO ============ -->
 <div class="card" id="horarios-card">
-  <div class="card-head" id="horarios-head"><h2>Grade semanal</h2><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
+  <div class="bloco-barra" id="horarios-head"><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
   <div id="horarios-body">
     <p class="card-sub">O agente só oferece e aceita horários dentro destes intervalos. Dia sem intervalo fica fechado.</p>
     {% set dias_nomes = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'] %}

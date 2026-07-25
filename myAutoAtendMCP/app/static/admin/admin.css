@@ -184,27 +184,37 @@ html[data-theme="dark"] .side-veu{background:rgba(0,0,0,.55);}
 /* ===========================================================================
    Cards e formulários
    =========================================================================== */
-.card{background:var(--card); border:1px solid var(--line); border-radius:16px;
-  padding:22px 24px 26px; margin:0 0 22px;
-  box-shadow:0 18px 40px -30px var(--shadow);}
+/* Sem caixa dentro da seção: o conteúdo assenta direto na área do painel —
+   o topo já emoldura a seção, uma borda aqui seria moldura sobre moldura.
+   O .card virou só um bloco de espaçamento; quem separa é o vão e o fio. */
+.card{margin:0 0 34px;}
 .card:last-child{margin-bottom:0;}
-html[data-theme="dark"] .card{box-shadow:0 18px 40px -26px rgba(0,0,0,.72);}
-.col2{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:22px; align-items:start;}
+.col2{display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:38px; align-items:start;}
+.col2 > .card{margin-bottom:0;}
+.col2 > .card + .card{border-left:1px solid var(--line); padding-left:38px;}
 
+/* Cabeçalho de bloco: só quando a seção tem mais de um bloco (Serviços,
+   Bloqueios, Agente) — senão repetiria o título que já está no topo. */
 .card-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
   margin:0 0 18px; padding-bottom:13px; border-bottom:1px solid var(--line);}
 .card-head h2{font-family:"DM Serif Display",serif; font-weight:400; font-size:21px;
   margin:0; letter-spacing:-.01em;}
-.card-head .tag{margin-left:auto; font:600 11px/1 "Hanken Grotesk"; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--accent); padding:5px 10px; border-radius:999px;
+/* Barra de estado/ações da seção: sem título, chips à esquerda, ação à direita. */
+.bloco-barra{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 16px;}
+.tag{font:600 11px/1 "Hanken Grotesk"; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); padding:5px 10px; border-radius:999px;
   background:color-mix(in srgb, var(--accent) 13%, transparent);}
-.card-acao{flex:none;}
-.card-busca{flex:none; width:min(260px,100%); margin:0; padding:8px 12px; font-size:13.5px;}
+.card-head .tag{margin-left:auto;}
+/* especificidade de 2 classes: .btn-sm{margin:0} vem depois e zeraria o auto */
+.bloco-barra .card-acao,.card-head .card-acao{flex:none; margin-left:auto;}
+.card-busca{flex:none; width:min(260px,100%); margin:0 0 0 auto; padding:8px 12px; font-size:13.5px;}
 .card-sub{color:var(--ink-soft); font-size:14px; margin:0 0 18px; max-width:70ch;}
 
 label{display:block; font-size:12.5px; font-weight:600; letter-spacing:.03em;
   text-transform:uppercase; color:var(--ink-soft); margin:14px 0 6px;}
-input,textarea,select{width:100%; background:var(--paper); border:1px solid var(--line); color:var(--ink);
+/* Campos e superfícies internas usam --card: agora que o conteúdo assenta no
+   papel da página, é o tom de cartão que dá o relevo (antes era o inverso). */
+input,textarea,select{width:100%; background:var(--card); border:1px solid var(--line); color:var(--ink);
   border-radius:10px; padding:11px 13px; font:inherit; transition:border-color .15s, box-shadow .15s;}
 input:focus,textarea:focus,select:focus{outline:none; border-color:var(--accent);
   box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);}
@@ -284,10 +294,10 @@ html[data-theme="dark"] .pill.off{background:rgba(180,166,138,.14);}
 /* ===========================================================================
    Proatividade (fila ao vivo do bot)
    =========================================================================== */
-.proat-live,.conv-live{display:inline-flex; align-items:center; gap:6px; margin-left:auto;
+.proat-live,.conv-live{display:inline-flex; align-items:center; gap:6px;
   font:600 10px/1 "Hanken Grotesk"; letter-spacing:.16em; text-transform:uppercase; color:var(--green);}
 .proat-live.off,.conv-live.off{color:var(--ink-soft); opacity:.5;}
-.proat-live + .tag,.conv-live + .tag{margin-left:10px;}
+.proat-live + .tag,.conv-live + .tag{margin-left:2px;}
 .proat-live-dot,.conv-live-dot{width:7px; height:7px; border-radius:50%; background:var(--green);
   box-shadow:0 0 0 0 rgba(63,107,76,.5); animation:proat-pulse 2s infinite;}
 .proat-live.off .proat-live-dot,.conv-live.off .conv-live-dot{background:var(--ink-soft);
@@ -401,7 +411,7 @@ html[data-theme="dark"] .conv-modal-backdrop{background:rgba(0,0,0,.6);}
    =========================================================================== */
 .wa-body{display:grid; grid-template-columns:auto 1fr; gap:24px; align-items:center;}
 .wa-qr-box{display:flex; flex-direction:column; align-items:center; justify-content:center;
-  min-width:240px; min-height:240px; background:var(--paper); border:1px solid var(--line);
+  min-width:240px; min-height:240px; background:var(--card); border:1px solid var(--line);
   border-radius:14px; padding:16px; text-align:center;}
 .wa-qr-box img{width:208px; height:208px; image-rendering:pixelated; border-radius:8px;}
 html[data-theme="dark"] #wa-qr{background:#fff;}
@@ -409,14 +419,13 @@ html[data-theme="dark"] #wa-qr{background:#fff;}
 .wa-side{display:flex; flex-direction:column; gap:12px; align-items:flex-start;}
 .wa-side .meta{word-break:break-all;}
 .wa-code{font-family:"JetBrains Mono",monospace; font-size:20px; letter-spacing:.18em;
-  background:var(--paper); border:1px dashed var(--line); border-radius:10px; padding:10px 14px;}
+  background:var(--card); border:1px dashed var(--line); border-radius:10px; padding:10px 14px;}
 .pill.connecting{background:rgba(184,134,47,.16); color:var(--gold);}
 .wa-perfil{display:flex; align-items:center; gap:12px; padding:12px 16px;
-  background:var(--paper); border:1px solid var(--line); border-radius:12px;}
+  background:var(--card); border:1px solid var(--line); border-radius:12px;}
 .wa-perfil .ava{width:44px; height:44px; font-size:17px;}
 .wa-perfil-nome{font-weight:600; line-height:1.25;}
 .wa-perfil .meta{word-break:normal;}
-#wa-card #wa-status{margin-left:auto;}
 
 /* ===========================================================================
    Provedores de IA
@@ -432,14 +441,14 @@ html[data-theme="dark"] #wa-qr{background:#fff;}
 .ia-pane{display:none;}
 .ia-pane.active{display:block;}
 .ia-subtabs{display:flex; gap:8px; margin:0 0 14px;}
-.ia-subtab{background:var(--paper); border:1px solid var(--line); color:var(--ink-soft);
+.ia-subtab{background:var(--card); border:1px solid var(--line); color:var(--ink-soft);
   border-radius:999px; padding:6px 14px; font-size:13px; font-weight:600;}
 .ia-subtab.active{background:var(--accent-solid); border-color:var(--accent-solid); color:var(--accent-on);}
 .ia-subtab[disabled]{cursor:not-allowed; opacity:.55;}
 .ia-subtab .soon{font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
   color:var(--gold); margin-left:6px;}
 .ia-resumo{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-  background:var(--paper); border:1px solid var(--line); border-radius:12px;
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
   padding:12px 14px; margin:12px 0 4px;}
 .ia-prov-atual{font-family:"JetBrains Mono",monospace; font-size:13px; color:var(--ink);}
 .ia-resumo button{margin-left:auto;}
@@ -570,7 +579,11 @@ html[data-theme="dark"] .tel-badge.no{background:rgba(223,111,115,.16); color:va
    Responsivo — a lateral vira gaveta abaixo de 1000px
    =========================================================================== */
 @media(max-width:1180px){
-  .col2{grid-template-columns:1fr;}
+  /* minmax(0,…): com 1fr puro a largura mínima da tabela estoura a coluna */
+  .col2{grid-template-columns:minmax(0,1fr); gap:30px;}
+  /* empilhado, quem separa os blocos é um fio horizontal, não o vertical */
+  .col2 > .card + .card{border-left:none; padding-left:0;
+    border-top:1px solid var(--line); padding-top:30px;}
   .topo-desc{display:none;}
 }
 @media(max-width:1000px){

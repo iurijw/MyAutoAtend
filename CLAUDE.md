@@ -192,7 +192,14 @@ primeiro `docker compose up -d`.
   preenchido). Cadastro manual de agendamento faz `db.upsert_cliente`, então o
   contato entra na agenda sem precisar mandar mensagem antes.
 - **UI do painel**: barra lateral fixa + área de conteúdo (sem grade
-  arrastável — Gridstack/`grade.js`/`gear.js` removidos). O servidor entrega
+  arrastável — Gridstack/`grade.js`/`gear.js` removidos). Conteúdo **sem caixa
+  interna**: `.card` é só bloco de espaçamento (nada de borda/fundo/sombra) —
+  o topo já emoldura a seção. Seção de bloco único usa `.bloco-barra` (chips à
+  esquerda, ação/busca à direita, sem `h2` que repetiria o título do topo);
+  seção com 2+ blocos (Serviços, Bloqueios, Agente) mantém `.card-head` com
+  `h2` + fio. `.col2` separa por fio vertical (horizontal quando empilha).
+  Campos e superfícies internas usam `--card` sobre o papel da página.
+  O servidor entrega
   TODAS as views; `js/nav.js` deixa só uma com `.ativa`, escolhida pelo hash
   (`#clientes`) — sobrevive ao reload dos forms e é linkável. Abaixo de 1000px
   a lateral vira gaveta (botão ☰). **Acento por seção**: cada view e o item de
