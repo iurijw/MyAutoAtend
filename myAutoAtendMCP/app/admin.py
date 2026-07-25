@@ -39,6 +39,41 @@ def autenticar(cred: HTTPBasicCredentials = Depends(security)) -> str:
     return cred.username
 
 
+def _fichas_clientes(agendamentos: list) -> list[dict]:
+    """Agenda de contatos da seção Clientes: quem já falou com o bot (tabela
+    Cliente) somado a quem só tem agendamento (cadastro manual antigo, feito
+    antes do upsert). Nome do agendamento serve de reserva quando o contato
+    ainda não trouxe pushName."""
+    marcados: dict[str, int] = {}
+    nome_do_agendamento: dict[str, str] = {}
+    for a in agendamentos:
+        tel = normalizar(a.telefone_cliente) or a.telefone_cliente
+        marcados[tel] = marcados.get(tel, 0) + 1
+        if a.nome_cliente and tel not in nome_do_agendamento:
+            nome_do_agendamento[tel] = a.nome_cliente
+
+    dono = db.get_config().telefone_dono
+    fichas: dict[str, dict] = {}
+    for c in db.listar_clientes():
+        fichas[c.telefone] = {
+            "telefone": c.telefone,
+            "nome": c.nome or nome_do_agendamento.get(c.telefone, ""),
+            "pausado": bool(c.bot_pausado),
+        }
+    for tel, nome in nome_do_agendamento.items():
+        fichas.setdefault(tel, {"telefone": tel, "nome": nome, "pausado": False})
+
+    lista = []
+    for tel, f in fichas.items():
+        f["telefone_fmt"] = formatar_internacional(tel) or tel
+        f["agendamentos"] = marcados.get(tel, 0)
+        f["dono"] = mesmo_numero(tel, dono)
+        lista.append(f)
+    # Com nome primeiro (ordem alfabética); os sem nome fecham a lista.
+    lista.sort(key=lambda f: (not f["nome"], (f["nome"] or f["telefone"]).lower()))
+    return lista
+
+
 @router.get("/admin", response_class=HTMLResponse)
 def painel(request: Request, _: str = Depends(autenticar)):
     servicos = db.listar_todos_servicos()
@@ -50,6 +85,7 @@ def painel(request: Request, _: str = Depends(autenticar)):
     for h in horarios:
         if 0 <= h.dia_semana <= 6:
             horarios_por_dia[h.dia_semana].append(h)
+    clientes = _fichas_clientes(agendamentos)
     return templates.TemplateResponse(
         request,
         "admin.html",
@@ -58,6 +94,7 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "servicos": servicos,
             "bloqueios": bloqueios,
             "agendamentos": agendamentos,
+            "clientes": clientes,
             "servico_nome": nome_por_id,
             "n_ativos": sum(1 for s in servicos if s.ativo),
             "horarios_por_dia": horarios_por_dia,
@@ -467,6 +504,9 @@ def novo_agendamento(
             status_code=409,
             detail="Horário indisponível (conflita com agendamento ou bloqueio).",
         )
+    # O contato entra na agenda de clientes já no cadastro manual — sem isso ele
+    # só apareceria depois de mandar a primeira mensagem no WhatsApp.
+    db.upsert_cliente(normalizar(tel) or tel, nome)
     return RedirectResponse("/admin", status_code=303)
 
 

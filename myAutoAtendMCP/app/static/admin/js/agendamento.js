@@ -11,9 +11,9 @@ import { toast } from './toast.js';
 
 const modal = document.getElementById('agm-modal');
 if (modal) {
-  // O modal nasce dentro de .wrap (stacking em z-index:1) — realocado pro body
-  // ele volta ao contexto raiz e o z-index dele passa a valer (padrão do
-  // modal de conversas, senão a engrenagem flutuante fica por cima).
+  // O modal nasce dentro da view "Agendamentos", que fica display:none quando
+  // outra seção está aberta. Realocado pro body ele passa a abrir de qualquer
+  // seção (a de Clientes usa isso) — mesmo padrão do modal de conversas.
   document.body.appendChild(modal);
 
   const abrirBtn = document.getElementById('ag-novo-abrir');
@@ -104,13 +104,27 @@ if (modal) {
   // Abrir / fechar
   // -------------------------------------------------------------------------
 
-  function abrir() {
+  /* `pre` opcional ({nome, telefone}) vem da seção Clientes — o botão
+     "Agendar" de um contato já abre o modal com a ficha preenchida. O evento
+     'input' é o que aciona a máscara e a checagem de WhatsApp (telefone.js). */
+  function abrir(pre) {
     form.reset();
     limparSelecao();
     dica('Escolha o serviço e a data para ver os horários.');
     modal.classList.add('open');
     document.body.classList.add('agm-aberto');
-    form.querySelector('[name="nome_cliente"]').focus();
+    const campoNome = form.querySelector('[name="nome_cliente"]');
+    const campoTel = form.querySelector('[name="telefone_cliente"]');
+    if (pre && (pre.nome || pre.telefone)) {
+      campoNome.value = pre.nome || '';
+      if (pre.telefone) {
+        campoTel.value = pre.telefone;
+        campoTel.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      (pre.nome ? servicoSel : campoNome).focus();
+    } else {
+      campoNome.focus();
+    }
   }
 
   function fechar() {
@@ -118,7 +132,9 @@ if (modal) {
     document.body.classList.remove('agm-aberto');
   }
 
-  abrirBtn?.addEventListener('click', abrir);
+  abrirBtn?.addEventListener('click', () => abrir());
+  // Aberto de fora (seção Clientes) já com o contato preenchido.
+  window.abrirNovoAgendamento = abrir;
   document.getElementById('agm-x').addEventListener('click', fechar);
   document.getElementById('agm-cancelar').addEventListener('click', fechar);
   modal.querySelector('.agm-backdrop').addEventListener('click', fechar);

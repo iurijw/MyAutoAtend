@@ -18,38 +18,167 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/admin/vendor/gridstack.min.css">
-  <link rel="stylesheet" href="/static/admin/admin.css?v=6">
-  <!-- Gridstack (vendor local, UMD): grade de cards com drag + resize. -->
-  <script src="/static/admin/vendor/gridstack-all.js" defer></script>
+  <link rel="stylesheet" href="/static/admin/admin.css?v=7">
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <div class="pole"></div>
-      <p class="eyebrow">myAutoAtend · Painel de Controle</p>
-      <h1>Agenda &amp; <em>Serviços</em></h1>
-    </header>
+  {% include "partials/icones.html" %}
 
-    {% include "partials/whatsapp.html" %}
-    {% include "partials/ia.html" %}
-    {% include "partials/prompt.html" %}
-    {% include "partials/agendamentos.html" %}
-    {% include "partials/conversas.html" %}
-    {% include "partials/proatividade.html" %}
-    {% include "partials/catalogo.html" %}
-    {% include "partials/horarios.html" %}
-    {% include "partials/config.html" %}
-  </div>
+  <div class="app">
+    <!-- ==================== BARRA LATERAL ==================== -->
+    <aside class="side" id="side">
+      <div class="side-marca">
+        <span class="side-pole"></span>
+        <div>
+          <div class="side-nome">myAutoAtend</div>
+          <div class="side-sub">Painel de controle</div>
+        </div>
+      </div>
 
-  <!-- ============ ENGRENAGEM: gerenciar cards ============ -->
-  <button type="button" class="gear-fab" id="gear-fab" title="Gerenciar cards do painel" aria-label="Gerenciar cards do painel">⚙︎<span class="gear-badge" id="gear-badge" style="display:none">0</span></button>
-  <div class="gear-panel" id="gear-panel" role="dialog" aria-label="Cards do painel">
-    <h3>Cards do painel</h3>
-    <p class="gear-sub">Desligue para esconder um card da página; ligue para trazê-lo de volta.</p>
-    <div id="gear-lista"></div>
-    <div class="gear-row gear-pref" id="tema-row" role="switch" aria-checked="false" tabindex="0" title="Alternar entre tema claro e escuro">
-      <span class="gear-nome">Tema escuro</span><span class="sw"></span>
+      <nav class="nav" id="nav" aria-label="Seções do painel">
+        <p class="nav-grupo">Atendimento</p>
+        <a class="nav-item" href="#conversas" data-accent="zap">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-chat"></use></svg>
+          <span class="nav-rotulo">Conversas</span>
+          <span class="nav-badge" id="nav-badge-conversas" hidden></span>
+        </a>
+        <a class="nav-item" href="#agendamentos" data-accent="marca">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-agenda"></use></svg>
+          <span class="nav-rotulo">Agendamentos</span>
+          {% if agendamentos %}<span class="nav-badge">{{ agendamentos|length }}</span>{% endif %}
+        </a>
+        <a class="nav-item" href="#clientes" data-accent="mare">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-clientes"></use></svg>
+          <span class="nav-rotulo">Clientes</span>
+          {% if clientes %}<span class="nav-badge">{{ clientes|length }}</span>{% endif %}
+        </a>
+
+        <p class="nav-grupo">Agenda</p>
+        <a class="nav-item" href="#servicos" data-accent="ouro">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-servicos"></use></svg>
+          <span class="nav-rotulo">Serviços</span>
+          {% if servicos %}<span class="nav-badge">{{ servicos|length }}</span>{% endif %}
+        </a>
+        <a class="nav-item" href="#horarios" data-accent="mata">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-relogio"></use></svg>
+          <span class="nav-rotulo">Horários</span>
+          {% if n_horarios %}<span class="nav-badge">{{ n_horarios }}</span>{% endif %}
+        </a>
+        <a class="nav-item" href="#bloqueios" data-accent="marca">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-bloqueio"></use></svg>
+          <span class="nav-rotulo">Bloqueios</span>
+          {% if bloqueios %}<span class="nav-badge">{{ bloqueios|length }}</span>{% endif %}
+        </a>
+
+        <p class="nav-grupo">Agente</p>
+        <a class="nav-item" href="#agente" data-accent="tinta">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-agente"></use></svg>
+          <span class="nav-rotulo">Agente de IA</span>
+        </a>
+        <a class="nav-item" href="#proatividade" data-accent="tinta">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-envio"></use></svg>
+          <span class="nav-rotulo">Proatividade</span>
+          <span class="nav-badge" id="nav-badge-proatividade" hidden></span>
+        </a>
+
+        <p class="nav-grupo">Sistema</p>
+        <a class="nav-item" href="#conexao" data-accent="zap">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-conexao"></use></svg>
+          <span class="nav-rotulo">Conexão WhatsApp</span>
+        </a>
+        <a class="nav-item" href="#config" data-accent="neutro">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-config"></use></svg>
+          <span class="nav-rotulo">Configurações</span>
+        </a>
+      </nav>
+
+      <div class="side-pe">
+        <div class="side-estado" id="side-estado" data-accent="zap">
+          <span class="side-estado-dot" id="side-estado-dot"></span>
+          <span class="side-estado-txt" id="side-estado-txt">verificando conexão…</span>
+        </div>
+        <button type="button" class="side-tema" id="tema-toggle" aria-pressed="false">
+          <svg class="side-tema-icone" aria-hidden="true"><use href="#i-tema"></use></svg>
+          <span id="tema-rotulo">Tema escuro</span>
+        </button>
+      </div>
+    </aside>
+    <div class="side-veu" id="side-veu" hidden></div>
+
+    <!-- ==================== ÁREA PRINCIPAL ==================== -->
+    <div class="main">
+      <header class="topo" id="topo">
+        <button type="button" class="topo-menu" id="topo-menu" aria-label="Abrir menu de seções">
+          <svg aria-hidden="true"><use href="#i-menu"></use></svg>
+        </button>
+        <div class="topo-id">
+          <p class="topo-eyebrow" id="topo-eyebrow">Atendimento</p>
+          <h1 class="topo-titulo" id="topo-titulo">Conversas</h1>
+        </div>
+        <p class="topo-desc" id="topo-desc"></p>
+      </header>
+
+      <main class="conteudo" id="conteudo">
+        <section class="view" id="view-conversas" data-accent="zap" data-grupo="Atendimento"
+                 data-titulo="Conversas"
+                 data-desc="Tudo que passou pelo bot no WhatsApp.">
+          {% include "partials/conversas.html" %}
+        </section>
+
+        <section class="view" id="view-agendamentos" data-accent="marca" data-grupo="Atendimento"
+                 data-titulo="Agendamentos"
+                 data-desc="A agenda ativa — remarque, cancele ou marque por aqui.">
+          {% include "partials/agendamentos.html" %}
+        </section>
+
+        <section class="view" id="view-clientes" data-accent="mare" data-grupo="Atendimento"
+                 data-titulo="Clientes"
+                 data-desc="Todo contato que o bot já conheceu.">
+          {% include "partials/clientes.html" %}
+        </section>
+
+        <section class="view" id="view-servicos" data-accent="ouro" data-grupo="Agenda"
+                 data-titulo="Serviços"
+                 data-desc="O catálogo que o agente oferece e agenda.">
+          {% include "partials/servicos.html" %}
+        </section>
+
+        <section class="view" id="view-horarios" data-accent="mata" data-grupo="Agenda"
+                 data-titulo="Horários de funcionamento"
+                 data-desc="A grade semanal de atendimento.">
+          {% include "partials/horarios.html" %}
+        </section>
+
+        <section class="view" id="view-bloqueios" data-accent="marca" data-grupo="Agenda"
+                 data-titulo="Bloqueios"
+                 data-desc="Folgas, feriados e janelas fechadas.">
+          {% include "partials/bloqueios.html" %}
+        </section>
+
+        <section class="view" id="view-agente" data-accent="tinta" data-grupo="Agente"
+                 data-titulo="Agente de IA"
+                 data-desc="Quem atende: modelos, chaves e instruções.">
+          {% include "partials/ia.html" %}
+          {% include "partials/prompt.html" %}
+        </section>
+
+        <section class="view" id="view-proatividade" data-accent="tinta" data-grupo="Agente"
+                 data-titulo="Proatividade"
+                 data-desc="Mensagens que o bot vai enviar por conta própria.">
+          {% include "partials/proatividade.html" %}
+        </section>
+
+        <section class="view" id="view-conexao" data-accent="zap" data-grupo="Sistema"
+                 data-titulo="Conexão WhatsApp"
+                 data-desc="O número que atende no WhatsApp.">
+          {% include "partials/whatsapp.html" %}
+        </section>
+
+        <section class="view" id="view-config" data-accent="neutro" data-grupo="Sistema"
+                 data-titulo="Configurações"
+                 data-desc="Telefone do dono, fuso e avisos.">
+          {% include "partials/config.html" %}
+        </section>
+      </main>
     </div>
   </div>
 

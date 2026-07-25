@@ -13,9 +13,18 @@ const elPerfil     = document.getElementById('wa-perfil');
 const elPerfilAva  = document.getElementById('wa-perfil-ava');
 const elPerfilNome = document.getElementById('wa-perfil-nome');
 const elPerfilNum  = document.getElementById('wa-perfil-num');
+// Espelho do estado no pé da barra lateral (visível em qualquer seção).
+const elSide    = document.getElementById('side-estado');
+const elSideTxt = document.getElementById('side-estado-txt');
 let pollTimer   = null;
 
 function pill(cls, txt){ elStatus.className = 'pill ' + cls; elStatus.textContent = txt; }
+
+function estadoNaLateral(conectado, texto){
+  if (!elSide) return;
+  elSide.classList.toggle('off', !conectado);
+  elSideTxt.textContent = texto;
+}
 
 function showQrBox(on){
   elQr.style.display   = on ? '' : 'none';
@@ -52,12 +61,14 @@ function render(state, perfil){
     elMsg.innerHTML = 'Número conectado e atendendo. Para trocar de número, desconecte primeiro.';
     btnCon.style.display = 'none';
     btnOut.style.display = '';
+    estadoNaLateral(true, (perfil && (perfil.numero_fmt || perfil.numero)) || 'WhatsApp conectado');
   } else if (state === 'connecting'){
     elPerfil.style.display = 'none';
     pill('connecting', 'aguardando leitura');
     btnCon.style.display = '';
     btnCon.textContent = 'Gerar novo QR';
     btnOut.style.display = '';
+    estadoNaLateral(false, 'aguardando leitura do QR');
   } else {
     elPerfil.style.display = 'none';
     pill('off', 'desconectado');
@@ -66,6 +77,7 @@ function render(state, perfil){
     btnCon.style.display = '';
     btnCon.textContent = 'Gerar QR Code';
     btnOut.style.display = 'none';
+    estadoNaLateral(false, 'WhatsApp desconectado');
   }
 }
 
@@ -73,12 +85,17 @@ async function estado(){
   try {
     const r = await fetch('/admin/whatsapp/estado');
     const d = await r.json();
-    if (d.erro){ pill('off', 'erro'); elHint.textContent = 'Evolution API indisponível.'; return null; }
+    if (d.erro){
+      pill('off', 'erro');
+      elHint.textContent = 'Evolution API indisponível.';
+      estadoNaLateral(false, 'Evolution indisponível');
+      return null;
+    }
     const st = (d.instance && d.instance.state) || 'close';
     render(st, d.perfil);
     if (st === 'open' && pollTimer){ clearInterval(pollTimer); pollTimer = null; }
     return st;
-  } catch(e){ pill('off', 'erro'); return null; }
+  } catch(e){ pill('off', 'erro'); estadoNaLateral(false, 'Evolution indisponível'); return null; }
 }
 
 function startPolling(){

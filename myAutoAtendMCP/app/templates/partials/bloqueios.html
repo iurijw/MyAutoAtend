@@ -1,0 +1,49 @@
+<!-- ============ BLOQUEIOS ============ -->
+<div class="col2">
+  <div class="card">
+    <div class="card-head">
+      <h2>Datas fechadas</h2>
+      <span class="tag">{{ bloqueios|length }} bloqueio{{ '' if bloqueios|length == 1 else 's' }}</span>
+    </div>
+    <div class="tbl-rolagem">
+    <table class="tbl">
+      <thead><tr><th>Data</th><th>Janela</th><th>Motivo</th><th></th></tr></thead>
+      <tbody>
+      {% for b in bloqueios %}
+        <tr>
+          <td class="when-cell"><span class="d">{{ b.data }}{% if b.data_fim %} → {{ b.data_fim }}{% endif %}</span></td>
+          <td class="meta">{% if b.inicio %}{{ b.inicio }}–{{ b.fim }}{% else %}<span class="t">dia inteiro</span>{% endif %}</td>
+          <td>{{ b.motivo or '—' }}</td>
+          <td>
+            <div class="acts">
+              <form method="post" action="/admin/bloqueio/{{ b.id }}/excluir" onsubmit="return confirm('Remover este bloqueio?')">
+                <button class="btn-sm btn-danger">Remover</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="empty">Nenhuma data bloqueada. A agenda segue o horário de funcionamento.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Bloquear período</h2></div>
+    <p class="card-sub">O agente não oferece nem aceita horários dentro de um bloqueio.</p>
+    <form method="post" action="/admin/bloqueio">
+      <div class="row">
+        <div><label>Data</label><input name="data" type="date" required></div>
+        <div><label>Data final <span style="text-transform:none;font-weight:400">(vazio = um dia)</span></label><input name="data_fim" type="date"></div>
+      </div>
+      <div class="row">
+        <div><label>Início <span style="text-transform:none;font-weight:400">(vazio = dia todo)</span></label><input name="inicio" type="time"></div>
+        <div><label>Fim</label><input name="fim" type="time"></div>
+      </div>
+      <label>Motivo</label><input name="motivo" placeholder="Folga, feriado…">
+      <button class="btn-acento">+ Bloquear</button>
+    </form>
+  </div>
+</div>

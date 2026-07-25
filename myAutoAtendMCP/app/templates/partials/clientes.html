@@ -1,0 +1,51 @@
+<!-- ============ CLIENTES ============ -->
+<div class="card" id="clientes-card">
+  <div class="card-head">
+    <h2>Agenda de contatos</h2>
+    <span class="tag" id="clientes-count">{{ clientes|length }} contato{{ '' if clientes|length == 1 else 's' }}</span>
+    <input class="card-busca" id="clientes-busca" type="search" placeholder="Buscar por nome ou telefone" aria-label="Buscar cliente" autocomplete="off">
+  </div>
+  <p class="card-sub">Quem já falou com o bot ou foi cadastrado num agendamento. Pausar silencia o bot só para aquele contato — as mensagens continuam sendo gravadas.</p>
+  <div class="tbl-rolagem">
+  <table class="tbl" id="clientes-tbl">
+    <thead><tr><th>Contato</th><th>Agendamentos</th><th>Bot</th><th></th></tr></thead>
+    <tbody>
+    {% for c in clientes %}
+      <tr data-tel="{{ c.telefone }}" data-busca="{{ (c.nome ~ ' ' ~ c.telefone ~ ' ' ~ c.telefone_fmt)|lower }}">
+        <td>
+          <div class="cli">
+            <div class="ava" data-num="{{ c.telefone }}">{{ (c.nome or '?')[:1]|upper }}</div>
+            <div>
+              <div class="who">{{ c.nome or 'Sem nome ainda' }}{% if c.dono %} <span class="tag-dono">dono</span>{% endif %}</div>
+              <div class="meta">{{ c.telefone_fmt }}</div>
+            </div>
+          </div>
+        </td>
+        <td class="cli-num">
+          {% if c.agendamentos %}<span class="cli-contador">{{ c.agendamentos }}</span> ativo{{ '' if c.agendamentos == 1 else 's' }}
+          {% else %}<span class="meta">nenhum</span>{% endif %}
+        </td>
+        <td>
+          {% if c.dono %}
+            <span class="pill off" title="O dono é a interface de gestão — nunca é pausado">sempre ativo</span>
+          {% else %}
+            <button type="button" class="conv-pausa-pill {{ 'on' if c.pausado }}" data-pausa="{{ c.telefone }}"
+              aria-pressed="{{ 'true' if c.pausado else 'false' }}"
+              title="{{ 'Bot pausado — clique para retomar' if c.pausado else 'Bot ativo — clique para pausar' }}">{{ 'pausado' if c.pausado else 'ativo' }}</button>
+          {% endif %}
+        </td>
+        <td>
+          <div class="acts">
+            <button type="button" class="btn-sm btn-ghost" data-conversa="{{ c.telefone }}">Conversa</button>
+            <button type="button" class="btn-sm btn-ghost" data-agendar="{{ c.telefone }}" data-nome="{{ c.nome }}">Agendar</button>
+          </div>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="empty">Nenhum contato ainda. Assim que alguém falar com o bot, ele aparece aqui.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="cli-vazio-busca" id="clientes-vazio" hidden>Nenhum contato com esse nome ou telefone.</p>
+</div>

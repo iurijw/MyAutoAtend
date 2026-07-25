@@ -1,8 +1,8 @@
 <!-- ============ HORÁRIOS DE FUNCIONAMENTO ============ -->
-<div class="card drag-sec" id="horarios-card" data-sec="horarios">
-  <div class="card-head" id="horarios-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Horários de Funcionamento</h2><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
+<div class="card" id="horarios-card">
+  <div class="card-head" id="horarios-head"><h2>Grade semanal</h2><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
   <div id="horarios-body">
-    <p class="hf-sub">Grade semanal de atendimento — o agente só oferece e aceita horários dentro destes intervalos. Dia sem intervalo fica fechado.</p>
+    <p class="card-sub">O agente só oferece e aceita horários dentro destes intervalos. Dia sem intervalo fica fechado.</p>
     {% set dias_nomes = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'] %}
     <form method="post" action="/admin/horarios" id="horarios-form">
       {% for d in range(7) %}
@@ -25,7 +25,7 @@
         </div>
       </div>
       {% endfor %}
-      <button class="btn-primary">Salvar horários</button>
+      <button class="btn-acento">Salvar horários</button>
     </form>
     <div class="hf-acoes">
       <form method="post" action="/admin/horarios/restaurar" onsubmit="return confirm('Restaurar o padrão (segunda a sexta, 08:00–12:00 e 13:30–18:00)? A grade atual será substituída.')">

@@ -89,6 +89,11 @@ async function carregar() {
   const tarefas = dados.tarefas || [];
   const pendentes = tarefas.filter(t => t.status === 'pendente' || t.status === 'executando').length;
   tagCount.textContent = pendentes ? `${pendentes} na fila` : 'fila vazia';
+  const navBadge = document.getElementById('nav-badge-proatividade');
+  if (navBadge) {
+    navBadge.textContent = pendentes || '';
+    navBadge.hidden = !pendentes;
+  }
 
   lista.innerHTML = '';
   if (!tarefas.length) {

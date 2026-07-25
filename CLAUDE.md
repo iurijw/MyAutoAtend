@@ -23,9 +23,9 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
 | `myAutoAtendMCP/app/tools.py` | 14 tools de agendamento (FastMCP) — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
-| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), header, includes dos partials, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css) |
-| `myAutoAtendMCP/app/templates/partials/` | Um arquivo por card: `whatsapp` · `ia` · `prompt` · `agendamentos` · `conversas` · `proatividade` · `catalogo` · `horarios` · `config` |
-| `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) + `vendor/` (Gridstack v11) |
+| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css) |
+| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) |
+| `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
 
@@ -88,7 +88,7 @@ primeiro `docker compose up -d`.
   só o `GET /models` usa headers nativos (`x-api-key` + `anthropic-version`).
 - Defaults de modelo: texto `gpt-5.1`, imagem `gpt-4o`, áudio `whisper-1`.
 - Sem chave salva → `IANaoConfigurada`; o agente não responde até configurar
-  no painel (card "Provedores de IA").
+  no painel (seção "Agente de IA").
 
 ## Instância Evolution API
 
@@ -97,7 +97,7 @@ primeiro `docker compose up -d`.
   espera a Evolution, cria se faltar, e **(re)configura o webhook sempre** →
   `http://mcp_agendamentos:8000/webhook/whatsapp/receberMensagem`
   (`MESSAGES_UPSERT`, base64 ativado).
-- Pareamento: QR Code no card "Conexão WhatsApp" do `/admin`.
+- Pareamento: QR Code na seção "Conexão WhatsApp" do `/admin`.
 
 ## Servidor MCP (`myAutoAtendMCP/`)
 
@@ -121,18 +121,18 @@ primeiro `docker compose up -d`.
   {existe, numero (E.164 do jid — resolve o nono dígito), numero_fmt, foto};
   usado pela máscara de telefone (`js/telefone.js`, inputs `data-telefone` no
   modal de agendamento e no telefone do dono; envio sempre em dígitos canônicos).
-- **Conversas no painel** (card + modal, `js/conversas.js`): `GET
+- **Conversas no painel** (seção + modal, `js/conversas.js`): `GET
   /admin/conversas` (lista com preview), `GET /admin/conversas/{tel}` (bolhas
   cliente/bot/sistema), `POST /admin/conversas/{tel}/enviar` (manual, sem IA;
   só grava na memória após sucesso; falha → 502), `POST
   /admin/conversas/{tel}/pausa` (bot_pausado; dono nunca pausável — também na
-  tool `pausar_bot` [DONO]). Botão "Conversa" na listagem de agendamentos abre
-  o modal (`window.abrirConversa`).
+  tool `pausar_bot` [DONO]). Botão "Conversa" nas listagens de agendamentos e
+  de clientes abre o modal (`window.abrirConversa`).
 - **Provedores de IA no painel**: `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.
 - **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
-- **Cadastro manual de agendamento**: botão "+ Novo agendamento" no card abre
+- **Cadastro manual de agendamento**: botão "+ Novo agendamento" na seção abre
   MODAL (`js/agendamento.js`) com seletor de horário em quadrados — `GET
   /admin/agenda/slots?data=&servico_id=` (mesma lógica da tool de consulta;
   passo = duração do serviço; ocupado = conflito ou horário passado hoje) —
@@ -169,30 +169,44 @@ primeiro `docker compose up -d`.
   Caso âncora: tool `remanejar_dia(data, acao, motivo)` [DONO] — fecha o dia,
   (se acao="cancelar") cancela os agendamentos, e cria uma tarefa
   `contatar_cliente` por cliente afetado.
-- **Proatividade no painel**: card "Proatividade Pendente" (`partials/
+- **Proatividade no painel**: seção "Proatividade" (`partials/
   proatividade.html` + `js/proatividade.js`, poll 20s) mostra a fila ao vivo —
   pendente/executando + últimas falhadas (concluídas/canceladas fora).
   `GET /admin/tarefas/estado` (`db.listar_tarefas_painel` +
   `tarefas.descrever_tarefa` p/ resumo legível) e
   `POST /admin/tarefas/{id}/cancelar` (`db.cancelar_tarefa` — só pendente vira
   `cancelada`, status string sem migração; executando/falhou → 409).
-- **Horários de funcionamento**: card próprio no painel; grade semanal na
+- **Horários de funcionamento**: seção própria no painel; grade semanal na
   tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
   linha = fechado). `POST /admin/horarios` (replace-all da grade),
   `/admin/horarios/restaurar` (padrão seg–sex 08:00–12:00 + 13:30–18:00),
   `/admin/horarios/limpar`. Seed do padrão SÓ na criação da tabela (vazia ≠
   nova). Tools `consultar_horarios_disponiveis`/`agendar`/`reagendar`
   respeitam a grade; `Config.abertura/fechamento` viraram colunas órfãs.
-- **UI do painel**: grade Gridstack (`js/grade.js`, vendor local) — cards
-  ocupam a janela, drag pelo grip ⠿ + resize; layout por navegador em
-  localStorage `admin-grade-v1` (posição efetiva = salvo > `PADRAO` > linha
-  cheia; salva só em dragstop/resizestop + 1 save de ponto fixo pós-montagem;
-  card oculto NÃO participa da montagem — gear.js emite `admin:cards-ocultos`).
-  Tema claro/escuro por tokens (`data-theme`, default escuro, `js/tema.js`).
-  Toasts (`js/toast.js`) + interceptação de forms POST (`js/forms.js`,
-  opt-out `data-nativo`) + validação (`js/validar.js`) + máscara/checagem de
-  telefone (`js/telefone.js`). Cards sempre abertos (sem recolher). Modais
-  (conversas, agendamento) vivem FORA dos cards, realocados pro `body`.
+- **Clientes** (seção própria): agenda de contatos renderizada pelo servidor
+  (`admin._fichas_clientes` junta tabela `Cliente` + telefones que só existem
+  em agendamentos antigos; `dono` marcado por `mesmo_numero`). `js/clientes.js`
+  faz busca local (nome/telefone, casa também só os dígitos), toggle de pausa
+  (mesma rota `/admin/conversas/{tel}/pausa`), "Conversa" (`window.abrirConversa`)
+  e "Agendar" (`window.abrirNovoAgendamento({nome, telefone})` — abre o modal já
+  preenchido). Cadastro manual de agendamento faz `db.upsert_cliente`, então o
+  contato entra na agenda sem precisar mandar mensagem antes.
+- **UI do painel**: barra lateral fixa + área de conteúdo (sem grade
+  arrastável — Gridstack/`grade.js`/`gear.js` removidos). O servidor entrega
+  TODAS as views; `js/nav.js` deixa só uma com `.ativa`, escolhida pelo hash
+  (`#clientes`) — sobrevive ao reload dos forms e é linkável. Abaixo de 1000px
+  a lateral vira gaveta (botão ☰). **Acento por seção**: cada view e o item de
+  nav declaram `data-accent` (`zap` verde-WhatsApp para conversas/conexão,
+  `marca` oxblood para agenda, `mare` para clientes, `ouro` para serviços,
+  `mata` para horários, `tinta` para o agente, `neutro` p/ config), que
+  redefine `--accent`/`--accent-solid`/`--accent-on`; rail do menu, fio do topo,
+  tags, `.btn-acento` e o foco dos campos herdam (fundos suaves via
+  `color-mix`). Tema claro/escuro por tokens (`data-theme`, default escuro,
+  `js/tema.js`, botão no pé da lateral). Toasts (`js/toast.js`) + interceptação
+  de forms POST (`js/forms.js`, opt-out `data-nativo`) + validação
+  (`js/validar.js`) + máscara/checagem de telefone (`js/telefone.js`). Modais
+  (conversas, agendamento) são realocados pro `body` — a view de origem fica
+  `display:none` quando outra seção está aberta.
 - Após mudar código: `docker compose up -d --build mcp-agendamentos`.
 
 ---
@@ -238,12 +252,12 @@ SENHA=   # senha do /admin + apikey da Evolution (AUTHENTICATION_API_KEY)
 > em banco).
 
 O que é config pós-boot (pelo painel `/admin`):
-- **Chave de IA** → card "Provedores de IA". Agente não responde até isso.
+- **Chave de IA** → seção "Agente de IA". Agente não responde até isso.
 - **Telefone do dono** → "Configuração geral" (placeholder `5500000000000`
   no compose até lá).
-- **System prompt** → card "Instruções do Agente" (defaults em `app/agente.py`;
-  env `AGENT_SYSTEM_PROMPT` ainda é aceita como seed legado, mas não vem no
-  compose).
+- **System prompt** → seção "Agente de IA", card "Instruções do Agente"
+  (defaults em `app/agente.py`; env `AGENT_SYSTEM_PROMPT` ainda é aceita como
+  seed legado, mas não vem no compose).
 
 Postgres é interno (sem porta no host): credenciais constantes hardcoded no
 compose (`evolution` / `evolution_db_interno` / `evolution_api_db`) — inclusive

@@ -1,9 +1,11 @@
 <!-- ============ AGENDAMENTOS ============ -->
-<div class="card drag-sec" data-sec="agendamentos">
-  <div class="card-head"><span class="drag-grip" title="Arrastar para reordenar">⠿</span><h2>Agendamentos ativos</h2><span class="tag">{{ agendamentos|length }} marcados</span></div>
-  <div class="ag-toolbar">
-    <button type="button" class="btn-primary btn-sm" id="ag-novo-abrir">+ Novo agendamento</button>
+<div class="card">
+  <div class="card-head">
+    <h2>Agenda ativa</h2>
+    <span class="tag">{{ agendamentos|length }} marcado{{ '' if agendamentos|length == 1 else 's' }}</span>
+    <button type="button" class="btn-acento btn-sm card-acao" id="ag-novo-abrir">+ Novo agendamento</button>
   </div>
+  <div class="tbl-rolagem">
   <table class="tbl">
     <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Quando</th><th></th></tr></thead>
     <tbody>
@@ -42,17 +44,17 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="5" class="empty">Nenhum agendamento ativo no momento.</td></tr>
+      <tr><td colspan="5" class="empty">Nenhum agendamento ativo. Marque o primeiro em <b>+ Novo agendamento</b>.</td></tr>
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
-<!-- Modal "Novo agendamento": fora do card p/ sobreviver a ocultar/arrastar
-     (realocado pro body via JS, mesmo padrão do modal de conversas). -->
+<!-- Modal "Novo agendamento": realocado pro body via JS (mesmo padrão do de conversas). -->
 <div class="agm-modal" id="agm-modal" role="dialog" aria-modal="true" aria-labelledby="agm-titulo">
   <div class="agm-backdrop" data-fechar></div>
-  <div class="agm-card">
+  <div class="agm-card" data-accent="marca">
     <header class="agm-head">
       <h2 class="agm-titulo" id="agm-titulo">Novo agendamento</h2>
       <button type="button" class="agm-x" id="agm-x" aria-label="Fechar">✕</button>

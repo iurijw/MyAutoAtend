@@ -10,11 +10,12 @@ const MODAL_POLL_MS = 12000;
 const lista = document.getElementById('conversas-lista');
 const tagCount = document.getElementById('conversas-count');
 const live = document.getElementById('conversas-live');
+const navBadge = document.getElementById('nav-badge-conversas');
 
 const modal = document.getElementById('conv-modal');
-// O modal nasce dentro de .wrap (stacking context em z-index:1), o que o
-// deixaria ATRÁS da engrenagem flutuante (body, z-index:50). Realocado para o
-// body, ele volta ao contexto raiz e a regra z-index dele passa a valer.
+// O modal nasce dentro da view "Conversas", que fica display:none quando outra
+// seção está aberta. Realocado para o body ele abre de qualquer seção — é o que
+// permite o botão "Conversa" da lista de agendamentos e da de clientes.
 document.body.appendChild(modal);
 const elAva = document.getElementById('conv-modal-ava');
 const elNome = document.getElementById('conv-modal-nome');
@@ -107,6 +108,10 @@ async function carregarLista() {
   tagCount.textContent = conversas.length
     ? `${conversas.length} ${conversas.length === 1 ? 'contato' : 'contatos'}`
     : 'nenhuma';
+  if (navBadge) {
+    navBadge.textContent = conversas.length || '';
+    navBadge.hidden = !conversas.length;
+  }
 
   lista.innerHTML = '';
   if (!conversas.length) {
