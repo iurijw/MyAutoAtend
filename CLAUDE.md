@@ -115,7 +115,9 @@ primeiro `docker compose up -d`.
   Tabelas: Config, Prompt, ProvedorIA, Conversa, Cliente (telefone E.164 PK,
   nome do pushName, bot_pausado), Servico, Bloqueio, Agendamento,
   HorarioFuncionamento, Tarefa, CampoFicha, ValorFicha (PK composta
-  telefone+campo_id).
+  telefone+campo_id). O telefone é chave em 5 tabelas — trocar o número de um
+  contato passa por `db.mover_contato` (ver "Ficha de cadastro"), nunca por
+  UPDATE em uma tabela só.
 - Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
 - Clients MCP externos identificam o solicitante via `?solicitante=` ou header
   `X-Solicitante-Telefone` (middleware em `main.py`).
@@ -129,6 +131,17 @@ primeiro `docker compose up -d`.
   {existe, numero (E.164 do jid — resolve o nono dígito), numero_fmt, foto};
   usado pela máscara de telefone (`js/telefone.js`, inputs `data-telefone` no
   modal de agendamento e no telefone do dono; envio sempre em dígitos canônicos).
+- **Máscara de telefone** (`js/telefone.js`): o prefixo `+55` aparece no FOCO
+  do campo (não depois do 1º dígito) e é apagável — o estado é o dígito
+  internacional (`internacional()` assume 55 quando não há `+`), o backspace
+  come um dígito mesmo quando o char deletado era da máscara, então dá para
+  chegar em `+` e digitar outro DDI (`+DDI` sem máscara BR). Blur/submit com
+  só o prefixo limpa o campo; `required` + Enter no campo é barrado no listener
+  de submit em capture (toast), porque para o browser "+55" não é vazio.
+  Ao fim de cada checagem o campo dispara o CustomEvent **`telefone-numero`**
+  (`detail.numero` = canônico da Evolution, ou os dígitos digitados quando ela
+  não confirma/está fora) — é o gancho de quem precisa buscar algo do contato
+  (a ficha no modal de agendamento) sem adivinhar quando a digitação terminou.
 - **Conversas no painel** (seção + modal, `js/conversas.js`): `GET
   /admin/conversas` (lista com preview), `GET /admin/conversas/{tel}` (bolhas
   cliente/bot/sistema), `POST /admin/conversas/{tel}/enviar` (manual, sem IA;
@@ -144,10 +157,25 @@ primeiro `docker compose up -d`.
   MODAL (`js/agendamento.js`) com seletor de horário em quadrados — `GET
   /admin/agenda/slots?data=&servico_id=` (mesma lógica da tool de consulta;
   passo = duração do serviço; ocupado = conflito ou horário passado hoje) —
-  e telefone com máscara/checagem. Submissão → `POST /admin/agendamento`
+  e telefone com máscara/checagem. O campo Cliente tem **autocomplete de
+  contato** (`js/autocomplete.js` + `GET /admin/clientes/buscar?q=` — mesma
+  agenda de `_fichas_clientes`, casa nome ou dígitos do telefone, máx. 8):
+  escolher um item preenche nome + telefone (dispara `input` p/ máscara e
+  checagem); ↑/↓ navega, Enter escolhe sem enviar o form, Esc fecha só a lista.
+  Submissão → `POST /admin/agendamento`
   (telefone normalizado E.164; slots do modal respeitam o expediente, mas o
   endpoint em si não valida horário de funcionamento — override do dono, como
   o reagendar do painel; conflito com agendamento/bloqueio → 409).
+  Com a ficha ligada, o modal também traz **os campos da ficha** (`#agm-ficha`,
+  montados por `ficha.montarCampos`): sabendo o telefone busca
+  `GET /admin/ficha/cliente/{tel}` — que já devolve os VALORES do contato, então
+  cliente antigo aparece preenchido (e o nome do cadastro entra se o campo
+  estiver vazio); sem telefone ainda, `GET /admin/ficha/campos` dá a definição
+  vazia. Gatilhos da (re)montagem: abrir o modal, escolher no autocomplete e o
+  evento `telefone-numero`. `POST /admin/agendamento` (agora lê `request.form()`)
+  valida os `campo_<chave>` ANTES de criar o agendamento — erro → 400
+  `{erros}` e nada é criado — e grava depois com origem "painel"; campo enviado
+  vazio APAGA o valor (mesma semântica do modal da ficha).
 - **Aviso ao dono** (`app/notificacoes.py`): WhatsApp do dono recebe template
   fixo (sem IA) quando o BOT agenda/reagenda/cancela. Liga/desliga só pelo
   painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em
@@ -158,9 +186,23 @@ primeiro `docker compose up -d`.
   reagendar; 2º `confirm` no cancelar) e tools `reagendar`/`cancelar` (param
   `avisar_cliente`, honrado só p/ dono em agendamento de terceiro; o prompt MCP
   manda pedir o aval antes). `db.criar_aviso_cliente` enfileira `Tarefa`
-  `contatar_cliente` (acoes `reagendado`/`cancelado`, instruções em
-  `tarefas.py`); avisos pendentes do mesmo agendamento são substituídos
-  (reagendos encadeados herdam o `inicio_anterior` original).
+  `contatar_cliente` (acoes `reagendado`/`cancelado` individuais e
+  `remarcar`/`cancelar` do remanejo de dia — `remanejar_dia` também passa por
+  ela, senão o cliente receberia dois avisos do mesmo agendamento).
+- **Ciclo de vida do aviso**: aviso pendente do mesmo agendamento é sempre
+  descartado antes de entrar um novo (status **`obsoleto`**, fora dos filtros do
+  painel e do worker — separado de `concluida`, que significa MENSAGEM ENVIADA).
+  `db.cancelar_agendamento` descarta o aviso pendente do agendamento (por
+  qualquer caminho: painel, tool `cancelar`, `remanejar_dia`) — avisar
+  remarcação de horário já cancelado é pior que não avisar; cancelar COM aval
+  ainda avisa, porque o caller enfileira o `cancelado` depois. O aviso novo
+  herda o `inicio_anterior` do descartado (dos pendentes e dos `obsoleto`, já
+  que o cancelamento descarta antes de enfileirar): é o único horário que o
+  cliente conhece, e a instrução do `cancelado`/`remarcar` avisa o agente em
+  caixa alta para falar DESSE horário, não do remarcado que nunca saiu.
+  `db.limpar_avisos_orfaos()` roda no boot do worker (rede de segurança para
+  fila antiga e agendamento apagado por fora; não toca em aviso de
+  cancelamento, que fala de um agendamento cancelado de propósito).
 - **Endurecimento contra injeção**: webhook exige `?token=` (hash da SENHA,
   `settings.webhook_token`; Evolution configurada com ele no bootstrap —
   forja local de remoteJid → 403); `[TAREFA INTERNA]` vindo do webhook é
@@ -183,7 +225,10 @@ primeiro `docker compose up -d`.
   `GET /admin/tarefas/estado` (`db.listar_tarefas_painel` +
   `tarefas.descrever_tarefa` p/ resumo legível) e
   `POST /admin/tarefas/{id}/cancelar` (`db.cancelar_tarefa` — só pendente vira
-  `cancelada`, status string sem migração; executando/falhou → 409).
+  `cancelada`, status string sem migração; executando/falhou → 409). Status de
+  `Tarefa` são string livre: `pendente`/`executando`/`concluida`/`falhou`/
+  `cancelada`/`obsoleto` — os filtros são allowlist, então status novo não
+  aparece na fila sem querer.
 - **Horários de funcionamento**: seção própria no painel; grade semanal na
   tabela `HorarioFuncionamento` (N intervalos por `dia_semana` 0–6; dia sem
   linha = fechado). `POST /admin/horarios` (replace-all da grade),
@@ -210,9 +255,27 @@ primeiro `docker compose up -d`.
     feature ligada) — `GET/POST /admin/ficha/cliente/{tel}`, input por tipo,
     erro por campo, botão **Abrir conversa** (`window.abrirConversa`).
     Excluir campo apaga os valores dele em todos os clientes (confirm no form).
+  - **Identificação editável no modal da ficha** (é a única tela que corrige um
+    contato): campos `nome` + `telefone` no mesmo `POST /admin/ficha/cliente/
+    {tel}`. Nome → `db.renomear_cliente` (muda `Cliente.nome` E o `nome_cliente`
+    dos agendamentos dele, que é foto do momento da marcação). Telefone
+    diferente → `db.mover_contato`, que MIGRA tudo indexado pelo número numa
+    transação: `Cliente` (PK, preserva pausa), `ValorFicha` (PK composta),
+    `Conversa` (memória, chave = `digitos@s.whatsapp.net`), `Agendamento.
+    telefone_cliente` (inclusive cancelados) e `Tarefa.telefone_alvo` (só
+    pendente/executando — senão o bot escreveria pro número velho). Guardas:
+    ficha validada ANTES de mover (nada de contato movido pela metade),
+    destino com rastro (`db.contato_tem_rastro`: cliente, conversa, agenda ou
+    ficha) → 409 sem merge, e contato do dono → 400 (número do dono é
+    autorização, muda na Configuração geral). No painel: `confirm` antes de
+    enviar e `location.reload()` depois (lista e agenda vêm do servidor).
+    O campo é preenchido com `definirTelefone` (telefone.js) — máscara sem
+    disparar a checagem, senão o canônico da Evolution entraria no valor e o
+    submit moveria o contato sem ninguém pedir.
   - `js/ficha.js` exporta `montarCampos(container, campos)` e
-    `marcarErros(container, erros)` — o cadastro manual de cliente reusa os
-    MESMOS inputs (`GET /admin/ficha/campos` devolve a definição sem valores).
+    `marcarErros(container, erros)` — o cadastro manual de cliente e o modal de
+    agendamento reusam os MESMOS inputs (`GET /admin/ficha/campos` devolve a
+    definição sem valores; `/admin/ficha/cliente/{tel}` devolve com valores).
 - **Clientes** (seção própria): agenda de contatos renderizada pelo servidor
   (`admin._fichas_clientes` junta tabela `Cliente` + telefones que só existem
   em agendamentos antigos; `dono` marcado por `mesmo_numero`). `js/clientes.js`
