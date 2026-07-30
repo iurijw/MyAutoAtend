@@ -8,7 +8,9 @@
    a mesma que o agente usa); aqui só marcamos o campo recusado. */
 
 import { toast } from './toast.js';
-import { ligarTelefone } from './telefone.js';
+import {
+  ligarTelefone, definirTelefone, formatarTelefone, soDigitos,
+} from './telefone.js';
 
 // ---------------------------------------------------------------------------
 // Formulário de novo campo: opções só existem no tipo "seleção"
@@ -140,8 +142,11 @@ if (modal) {
   const form = document.getElementById('fic-form');
   const btnSalvar = document.getElementById('fic-salvar');
   const btnConversa = document.getElementById('fic-conversa');
+  const inpNome = document.getElementById('fic-campo-nome');
+  const inpTel = document.getElementById('fic-campo-tel');
 
-  let alvo = null;
+  let alvo = null;        // telefone do contato aberto (chave do endpoint)
+  let nomeAberto = '';    // nome como veio do servidor — sabe se mudou
 
   function pintar(dados) {
     elNome.textContent = dados.nome || dados.telefone_fmt || dados.telefone;
@@ -151,12 +156,20 @@ if (modal) {
       ? `${dados.preenchidos} de ${dados.total}`
       : 'sem campos';
 
+    // Identificação editável. definirTelefone (e não um 'input') para o campo
+    // não ir consultar a Evolution e voltar com outro número no valor.
+    alvo = dados.telefone || alvo;
+    nomeAberto = dados.nome || '';
+    inpNome.value = nomeAberto;
+    definirTelefone(inpTel, dados.telefone || '');
+
+    // Sem campo de ficha o botão continua valendo: nome e telefone são sempre
+    // editáveis (é a única tela onde o contato pode ser corrigido).
+    btnSalvar.disabled = false;
     if (!dados.campos.length) {
       elCampos.innerHTML = '<p class="fic-vazio">Nenhum campo ativo na ficha. Crie campos na seção <b>Ficha de cadastro</b>.</p>';
-      btnSalvar.disabled = true;
       return;
     }
-    btnSalvar.disabled = false;
     montarCampos(elCampos, dados.campos);
   }
 
@@ -175,9 +188,13 @@ if (modal) {
 
   function abrir(telefone) {
     alvo = telefone;
+    nomeAberto = '';
     elNome.textContent = '—';
     elTel.textContent = telefone;
     elProgresso.textContent = '';
+    inpNome.value = '';
+    definirTelefone(inpTel, telefone);
+    btnSalvar.disabled = true;   // liberado quando a ficha chega (pintar)
     modal.classList.add('open');
     document.body.classList.add('fic-aberto');
     carregar();
@@ -204,6 +221,18 @@ if (modal) {
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (!alvo) return;
+    /* O telefone.js normaliza os campos data-telefone num listener de submit em
+       CAPTURE, então aqui o valor já é dígito puro. Trocar o número move o
+       contato inteiro — pede confirmação antes. */
+    const telNovo = soDigitos(inpTel.value);
+    const telAtual = soDigitos(alvo);
+    const trocouTel = !!telNovo && telNovo !== telAtual;
+    const mudouNome = inpNome.value.trim() !== nomeAberto;
+    if (trocouTel && !confirm(
+      `Trocar o telefone de ${elTel.textContent} para ${formatarTelefone(telNovo)}?\n\n`
+      + 'Ficha, conversa, agendamentos e avisos na fila passam para o número novo.',
+    )) return;
+
     marcarErros(elCampos, {});
     btnSalvar.disabled = true;
     try {
@@ -212,6 +241,13 @@ if (modal) {
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
+        if (trocouTel || mudouNome) {
+          // A lista de clientes e a agenda vêm do servidor: recarrega p/ não
+          // deixar nome/telefone velhos na tela.
+          toast('ok', trocouTel ? 'Contato movido para o número novo.' : 'Contato atualizado.');
+          location.reload();
+          return;
+        }
         toast('ok', 'Ficha salva.');
         pintar(d);
       } else if (d.erros) {

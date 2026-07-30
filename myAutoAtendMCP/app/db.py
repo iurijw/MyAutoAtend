@@ -655,6 +655,146 @@ def cliente_pausado(telefone: str) -> bool:
     return bool(c and c.bot_pausado)
 
 
+def renomear_cliente(telefone: str, nome: str) -> Cliente:
+    """Muda o nome do contato E o nome gravado nos agendamentos dele.
+
+    O `nome_cliente` do agendamento é uma foto do momento da marcação (é o que
+    a lista da agenda mostra); corrigir só a tabela Cliente deixaria a agenda
+    exibindo o nome errado para sempre.
+    """
+    chave = normalizar(telefone) or telefone
+    limpo = (nome or "").strip()
+    cliente = upsert_cliente(chave, limpo)
+    if not limpo:
+        return cliente
+    with _lock, _session() as s:
+        for a in s.exec(select(Agendamento)).all():
+            if mesmo_numero(a.telefone_cliente, chave) and a.nome_cliente != limpo:
+                a.nome_cliente = limpo
+                s.add(a)
+        s.commit()
+    return cliente
+
+
+def contato_tem_rastro(telefone: str) -> bool:
+    """Já existe algo gravado sob este número? (contato, memória ou agenda)
+
+    Usado antes de mover um contato de número: destino com rastro é OUTRA
+    pessoa (ou o mesmo cliente já cadastrado duas vezes) — juntar os dois é
+    decisão do dono, não efeito colateral de uma correção de telefone.
+    """
+    chave = normalizar(telefone) or telefone
+    if get_cliente(chave):
+        return True
+    if agendamentos_do_telefone(chave):
+        return True
+    with _session() as s:
+        for c in s.exec(select(Conversa)).all():
+            if mesmo_numero(c.telefone, chave):
+                return True
+        for v in s.exec(select(ValorFicha)).all():
+            if mesmo_numero(v.telefone, chave):
+                return True
+    return False
+
+
+def mover_contato(antigo: str, novo: str, nome: str | None = None) -> dict:
+    """Troca o telefone de um contato levando TUDO que é indexado por ele.
+
+    O telefone é chave em várias tabelas (Cliente PK, ValorFicha PK composta,
+    Conversa pelo remoteJid, Agendamento.telefone_cliente, Tarefa.telefone_alvo)
+    — corrigir o número num lugar só deixaria a ficha órfã e o bot escrevendo
+    para o número errado. Move linha por linha, numa transação: destino recebe
+    cópia, origem é apagada. `nome`, quando vem, é aplicado no contato e nos
+    agendamentos dele (o nome do agendamento é uma foto do momento da marcação).
+
+    Chame só depois de checar `contato_tem_rastro(novo)` — aqui não há merge.
+    """
+    origem = normalizar(antigo) or antigo
+    destino = normalizar(novo) or novo
+    movidos = {"ficha": 0, "agendamentos": 0, "tarefas": 0, "conversas": 0}
+    if origem == destino:
+        return movidos
+
+    jid_destino = f"{re.sub(r'[^0-9]', '', destino)}@s.whatsapp.net"
+    with _lock, _session() as s:
+        # Cliente: PK muda, então é cópia + delete (nome/pausa preservados).
+        antigo_cliente = s.get(Cliente, origem)
+        novo_cliente = Cliente(
+            telefone=destino,
+            nome=(nome.strip() if nome and nome.strip() else "")
+            or (antigo_cliente.nome if antigo_cliente else ""),
+            bot_pausado=bool(antigo_cliente.bot_pausado) if antigo_cliente else False,
+        )
+        if antigo_cliente:
+            s.delete(antigo_cliente)
+            s.flush()
+        s.add(novo_cliente)
+
+        # Ficha: o valor da origem manda (o destino não deveria ter rastro).
+        for v in s.exec(select(ValorFicha).where(ValorFicha.telefone == origem)).all():
+            ocupado = s.get(ValorFicha, (destino, v.campo_id))
+            if ocupado:
+                s.delete(ocupado)
+            valor, orig, quando = v.valor, v.origem, v.atualizado_em
+            campo_id = v.campo_id
+            s.delete(v)
+            s.flush()
+            s.add(
+                ValorFicha(
+                    telefone=destino,
+                    campo_id=campo_id,
+                    valor=valor,
+                    origem=orig,
+                    atualizado_em=quando,
+                )
+            )
+            movidos["ficha"] += 1
+
+        # Memória: a chave é o remoteJid, comparado de forma tolerante.
+        for c in s.exec(select(Conversa)).all():
+            if not mesmo_numero(c.telefone, origem):
+                continue
+            historico, quando = c.historico, c.atualizado_em
+            s.delete(c)
+            s.flush()
+            existente = s.get(Conversa, jid_destino)
+            if existente:
+                existente.historico = historico
+                existente.atualizado_em = quando
+                s.add(existente)
+            else:
+                s.add(
+                    Conversa(
+                        telefone=jid_destino, historico=historico, atualizado_em=quando
+                    )
+                )
+            movidos["conversas"] += 1
+
+        # Agendamentos (inclusive cancelados: o histórico segue o contato).
+        for a in s.exec(select(Agendamento)).all():
+            if not mesmo_numero(a.telefone_cliente, origem):
+                continue
+            a.telefone_cliente = destino
+            if nome and nome.strip():
+                a.nome_cliente = nome.strip()
+            s.add(a)
+            movidos["agendamentos"] += 1
+
+        # Avisos proativos ainda na fila: senão o bot escreve pro número velho.
+        for t in s.exec(select(Tarefa)).all():
+            if t.status not in ("pendente", "executando"):
+                continue
+            if not mesmo_numero(t.telefone_alvo, origem):
+                continue
+            t.telefone_alvo = destino
+            s.add(t)
+            movidos["tarefas"] += 1
+
+        s.commit()
+    return movidos
+
+
 # ---------------------------------------------------------------------------
 # Ficha de cadastro (campos definidos pelo dono + valores por contato)
 # ---------------------------------------------------------------------------

@@ -909,21 +909,67 @@ async def ficha_salvar_cliente(
     request: Request, telefone: str, _: str = Depends(autenticar)
 ):
     """Salva a ficha pelo painel. Campos chegam como `campo_<chave>`; valor
-    fora do formato do tipo volta em `erros` (o modal marca o campo)."""
+    fora do formato do tipo volta em `erros` (o modal marca o campo).
+
+    O modal também edita a IDENTIFICAÇÃO do contato (`nome` e `telefone`).
+    Trocar o telefone é uma migração: `db.mover_contato` leva ficha, memória,
+    agendamentos e avisos na fila para o número novo. Regras:
+    - destino com rastro (contato, conversa, agenda ou ficha) → 409, porque
+      juntar dois cadastros é decisão do dono, não efeito colateral;
+    - contato do dono não troca de número aqui — o número do dono é
+      autorização, muda na Configuração geral;
+    - a ficha é validada ANTES de mover, e gravada já no número novo.
+    """
     form = await request.form()
     dados = {
         k[len("campo_"):]: str(v)
         for k, v in form.items()
         if k.startswith("campo_")
     }
-    if not dados:
+    tem_nome = "nome" in form
+    novo_nome = str(form.get("nome") or "").strip()
+    novo_tel = str(form.get("telefone") or "").strip()
+    if not dados and not tem_nome and not novo_tel:
         raise HTTPException(status_code=400, detail="Nenhum campo enviado.")
-    resultado = ficha.preencher(telefone, dados, origem="painel")
-    if resultado["erros"]:
-        return JSONResponse(
-            {"ok": False, "erros": resultado["erros"]}, status_code=400
-        )
-    return {"ok": True, **ficha.ficha_de(telefone)}
+
+    atual = normalizar(telefone) or telefone
+    alvo = atual
+    trocar = bool(novo_tel) and not mesmo_numero(novo_tel, atual)
+    if trocar:
+        if not plausivel(novo_tel):
+            raise HTTPException(
+                status_code=400, detail="Telefone novo inválido — informe com DDD."
+            )
+        if mesmo_numero(atual, db.get_config().telefone_dono):
+            raise HTTPException(
+                status_code=400,
+                detail="Este é o contato do dono. Troque o número na "
+                "Configuração geral, não aqui.",
+            )
+        alvo = normalizar(novo_tel) or novo_tel
+        if db.contato_tem_rastro(alvo):
+            raise HTTPException(
+                status_code=409,
+                detail="Já existe um contato com esse número. Abra a ficha dele "
+                "em vez de mover este.",
+            )
+
+    # Ficha validada ANTES de mexer no contato: valor fora do formato não pode
+    # deixar o telefone movido pela metade.
+    prontos: list[tuple] = []
+    if dados:
+        prontos, erros = ficha.validar(dados)
+        if erros:
+            return JSONResponse({"ok": False, "erros": erros}, status_code=400)
+
+    if trocar:
+        db.mover_contato(atual, alvo, novo_nome if tem_nome else None)
+    elif tem_nome and novo_nome:
+        db.renomear_cliente(atual, novo_nome)
+
+    for campo, valor in prontos:
+        db.set_valor_ficha(alvo, campo.id, valor, origem="painel")
+    return {"ok": True, "movido": trocar, **ficha.ficha_de(alvo)}
 
 
 # ---------------------------------------------------------------------------

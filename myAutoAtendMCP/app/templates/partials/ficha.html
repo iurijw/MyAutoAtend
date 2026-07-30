@@ -113,6 +113,18 @@
       <button type="button" class="fic-x" id="fic-x" aria-label="Fechar ficha">✕</button>
     </header>
     <form class="fic-body" id="fic-form" data-nativo autocomplete="off">
+      <!-- Identificação do contato: editável. Trocar o telefone move ficha,
+           conversa, agendamentos e avisos pendentes para o número novo. -->
+      <div class="fic-contato">
+        <div class="row">
+          <div><label>Nome</label><input name="nome" id="fic-campo-nome" placeholder="Como o cliente se chama"></div>
+          <div>
+            <label>Telefone (WhatsApp)</label>
+            <input name="telefone" id="fic-campo-tel" placeholder="+55 (45) 99999-9999" data-telefone inputmode="tel">
+          </div>
+        </div>
+        <p class="fic-contato-nota">Mudar o telefone leva ficha, conversa, agendamentos e avisos na fila para o número novo. Número que já é de outro contato é recusado.</p>
+      </div>
       <div id="fic-campos" aria-live="polite"></div>
     </form>
     <footer class="fic-pe">
