@@ -4,10 +4,13 @@
    vira o hidden `inicio` (YYYY-MM-DDTHH:MM). Envio por fetch para não tirar o
    dono da página — sucesso recarrega, erro mostra toast sem fechar o modal.
 
-   O telefone é tratado por telefone.js (máscara + checagem de WhatsApp); aqui
-   só cuidamos do modal, dos slots e do envio. */
+   O telefone é tratado por telefone.js (máscara + checagem de WhatsApp) e o
+   nome do cliente tem autocomplete de contato já cadastrado (autocomplete.js);
+   aqui só cuidamos do modal, dos slots e do envio. */
 
 import { toast } from './toast.js';
+import { ligarAutocompleteCliente } from './autocomplete.js';
+import { montarCampos, marcarErros } from './ficha.js';
 
 const modal = document.getElementById('agm-modal');
 if (modal) {
@@ -24,6 +27,78 @@ if (modal) {
   const legenda = document.getElementById('agm-legenda');
   const inicioHidden = document.getElementById('agm-inicio');
   const salvarBtn = document.getElementById('agm-salvar');
+  const campoNome = form.querySelector('[name="nome_cliente"]');
+  const campoTel = form.querySelector('[name="telefone_cliente"]');
+  const fichaBox = document.getElementById('agm-ficha');
+  const fichaNota = document.getElementById('agm-ficha-nota');
+  const fichaCampos = document.getElementById('agm-ficha-campos');
+
+  // -------------------------------------------------------------------------
+  // Ficha de cadastro dentro do agendamento
+  //
+  // Com a ficha ligada, os campos dela entram no modal. Sabendo o telefone,
+  // vêm de GET /admin/ficha/cliente/{tel} — que devolve os campos JÁ com os
+  // valores do contato, então cliente antigo aparece preenchido e o operador
+  // só confere. Sem telefone ainda, GET /admin/ficha/campos dá a definição
+  // vazia. Os inputs são os mesmos do modal da ficha (ficha.js).
+  // -------------------------------------------------------------------------
+
+  let fichaDe = null;   // dígitos já montados (pedido e canônico) — evita remontar
+
+  function fichaJaMontada(digitos) {
+    return fichaDe !== null && fichaDe.includes(digitos);
+  }
+
+  async function montarFicha(telefone) {
+    const digitos = (telefone || '').replace(/\D/g, '');
+    if (fichaJaMontada(digitos)) return;
+    const url = digitos.length >= 10
+      ? '/admin/ficha/cliente/' + encodeURIComponent(digitos)
+      : '/admin/ficha/campos';
+    let d;
+    try {
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error(r.status);
+      d = await r.json();
+    } catch (_) {
+      fichaBox.hidden = true;   // ficha é complemento: falha não trava o agendamento
+      return;
+    }
+    const campos = d.ativa ? (d.campos || []) : [];
+    fichaDe = [digitos, (d.telefone || '').replace(/\D/g, '')];
+    if (!campos.length) {
+      fichaBox.hidden = true;
+      fichaCampos.innerHTML = '';
+      return;
+    }
+    montarCampos(fichaCampos, campos);
+    const prontos = campos.filter(c => c.valor).length;
+    fichaNota.textContent = prontos
+      ? `Ficha de cadastro — ${prontos} de ${campos.length} campo${prontos === 1 ? '' : 's'} `
+        + 'já vieram do cadastro deste cliente. Confira e complete.'
+      : 'Ficha de cadastro — preencha o que o cliente já informou (pode ficar para depois).';
+    fichaBox.hidden = false;
+    // Contato conhecido pelo número: aproveita o nome que já está no cadastro.
+    if (d.nome && !campoNome.value.trim()) campoNome.value = d.nome;
+  }
+
+  // -------------------------------------------------------------------------
+  // Autocomplete do cliente: escolher um contato conhecido preenche o telefone
+  // (dígitos E.164) e dispara o 'input' — quem monta a máscara e confere o
+  // WhatsApp é o telefone.js.
+  // -------------------------------------------------------------------------
+
+  ligarAutocompleteCliente(campoNome, c => {
+    campoNome.value = c.nome || '';
+    campoTel.value = c.telefone;
+    campoTel.dispatchEvent(new Event('input', { bubbles: true }));
+    montarFicha(c.telefone);
+    servicoSel.focus();
+  });
+
+  // Telefone digitado à mão: telefone.js avisa o número fechado (canônico da
+  // Evolution quando ela confirma) → a ficha daquele contato entra sozinha.
+  campoTel.addEventListener('telefone-numero', e => montarFicha(e.detail.numero));
 
   // -------------------------------------------------------------------------
   // Slots (seletor de horário)
@@ -111,10 +186,12 @@ if (modal) {
     form.reset();
     limparSelecao();
     dica('Escolha o serviço e a data para ver os horários.');
+    // Ficha sempre remontada: o reset zera o que o JS tinha escrito nos inputs.
+    fichaDe = null;
+    fichaCampos.innerHTML = '';
+    fichaBox.hidden = true;
     modal.classList.add('open');
     document.body.classList.add('agm-aberto');
-    const campoNome = form.querySelector('[name="nome_cliente"]');
-    const campoTel = form.querySelector('[name="telefone_cliente"]');
     if (pre && (pre.nome || pre.telefone)) {
       campoNome.value = pre.nome || '';
       if (pre.telefone) {
@@ -125,6 +202,7 @@ if (modal) {
     } else {
       campoNome.focus();
     }
+    montarFicha(pre?.telefone || '');
   }
 
   function fechar() {
@@ -152,6 +230,7 @@ if (modal) {
       toast('erro', 'Escolha um horário disponível para o agendamento.');
       return;
     }
+    marcarErros(fichaCampos, {});
     salvarBtn.disabled = true;
     try {
       const r = await fetch(form.action, {
@@ -167,6 +246,12 @@ if (modal) {
       }
       let d = null;
       try { d = await r.json(); } catch (_) { /* corpo não-JSON */ }
+      if (d && d.erros) {   // valor de campo da ficha recusado — nada foi criado
+        marcarErros(fichaCampos, d.erros);
+        toast('erro', 'Confira os campos marcados na ficha.');
+        salvarBtn.disabled = false;
+        return;
+      }
       toast('erro', (d && typeof d.detail === 'string' && d.detail) ||
         'Não foi possível criar o agendamento.');
     } catch (_) {

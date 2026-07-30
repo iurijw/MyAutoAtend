@@ -476,40 +476,58 @@ def agenda_slots(data: str, servico_id: int, _: str = Depends(autenticar)):
 
 
 @router.post("/admin/agendamento")
-def novo_agendamento(
-    _: str = Depends(autenticar),
-    servico_id: int = Form(...),
-    nome_cliente: str = Form(...),
-    telefone_cliente: str = Form(...),
-    inicio: str = Form(...),
-    observacoes: str = Form(""),
-):
+async def novo_agendamento(request: Request, _: str = Depends(autenticar)):
     """Cadastro manual pelo painel. O dono pode marcar fora do horário de
     funcionamento (override consciente, como no reagendar do painel) — só
-    conflito com agendamento/bloqueio é recusado."""
-    servico = db.get_servico(servico_id)
+    conflito com agendamento/bloqueio é recusado.
+
+    Com a ficha ligada, o modal manda também os campos dela (`campo_<chave>`,
+    já preenchidos com o que o contato tinha). Valem as mesmas regras do
+    cadastro manual de cliente: valida ANTES de criar o agendamento (valor fora
+    do formato volta em `erros` e nada é gravado) e grava depois, origem
+    "painel".
+    """
+    form = await request.form()
+    servico_bruto = str(form.get("servico_id") or "").strip()
+    nome = str(form.get("nome_cliente") or "").strip()
+    tel = str(form.get("telefone_cliente") or "").strip()
+    inicio = str(form.get("inicio") or "").strip()
+    observacoes = str(form.get("observacoes") or "").strip()
+
+    if not servico_bruto.isdigit():
+        raise HTTPException(status_code=400, detail="Escolha um serviço.")
+    servico = db.get_servico(int(servico_bruto))
     if not servico:
         raise HTTPException(status_code=404, detail="Serviço não encontrado.")
-    nome = nome_cliente.strip()
     if not nome:
         raise HTTPException(status_code=400, detail="Informe o nome do cliente.")
-    tel = telefone_cliente.strip()
     if not tel:
         raise HTTPException(status_code=400, detail="Informe o telefone do cliente.")
     try:
         dt_inicio = datetime.fromisoformat(inicio)
     except ValueError:
         raise HTTPException(status_code=400, detail="Horário inválido.")
+
+    dados_ficha = {
+        k[len("campo_"):]: str(v) for k, v in form.items() if k.startswith("campo_")
+    }
+    prontos: list[tuple] = []
+    if dados_ficha and ficha.ativa():
+        prontos, erros = ficha.validar(dados_ficha)
+        if erros:
+            return JSONResponse({"ok": False, "erros": erros}, status_code=400)
+
+    chave = normalizar(tel) or tel
     fim = (dt_inicio + timedelta(minutes=servico.duracao_min)).isoformat(
         timespec="minutes"
     )
     ag = db.criar_agendamento(
-        servico_id=servico_id,
-        telefone_cliente=normalizar(tel) or tel,
+        servico_id=servico.id,
+        telefone_cliente=chave,
         nome_cliente=nome,
         inicio=dt_inicio.isoformat(timespec="minutes"),
         fim=fim,
-        observacoes=observacoes.strip(),
+        observacoes=observacoes,
     )
     if not ag:
         raise HTTPException(
@@ -518,7 +536,9 @@ def novo_agendamento(
         )
     # O contato entra na agenda de clientes já no cadastro manual — sem isso ele
     # só apareceria depois de mandar a primeira mensagem no WhatsApp.
-    db.upsert_cliente(normalizar(tel) or tel, nome)
+    db.upsert_cliente(chave, nome)
+    for campo, valor in prontos:
+        db.set_valor_ficha(chave, campo.id, valor, origem="painel")
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -700,6 +720,39 @@ async def conversa_enviar(
 # ---------------------------------------------------------------------------
 # Clientes (cadastro manual pelo painel)
 # ---------------------------------------------------------------------------
+
+
+@router.get("/admin/clientes/buscar")
+def buscar_clientes(q: str = "", _: str = Depends(autenticar)):
+    """Sugestões de contato para o autocomplete (modal de agendamento).
+
+    Mesma agenda da seção Clientes (`_fichas_clientes`), filtrada por nome ou
+    telefone — dígitos soltos casam com o número mesmo digitado com máscara.
+    Devolve poucos itens: é uma lista de sugestão, não uma listagem.
+    """
+    termo = q.strip().lower()
+    if len(termo) < 2:
+        return {"clientes": []}
+    so_digitos = re.sub(r"\D", "", termo)
+
+    achados = []
+    for c in _fichas_clientes(db.listar_agendamentos()):
+        alvo = f"{c['nome']} {c['telefone']} {c['telefone_fmt']}".lower()
+        casa = termo in alvo or (
+            so_digitos and so_digitos in re.sub(r"\D", "", alvo)
+        )
+        if not casa:
+            continue
+        achados.append({
+            "nome": c["nome"],
+            "telefone": c["telefone"],
+            "telefone_fmt": c["telefone_fmt"],
+            "agendamentos": c["agendamentos"],
+            "dono": c["dono"],
+        })
+        if len(achados) >= 8:
+            break
+    return {"clientes": achados}
 
 
 @router.post("/admin/cliente")

@@ -60,7 +60,7 @@
     </header>
     <form class="agm-body" id="agm-form" action="/admin/agendamento" data-nativo autocomplete="off">
       <div class="row">
-        <div><label>Cliente</label><input name="nome_cliente" required placeholder="Nome"></div>
+        <div><label>Cliente</label><input name="nome_cliente" required placeholder="Nome — busca quem já é cliente"></div>
         <div>
           <label>Telefone (WhatsApp)</label>
           <input name="telefone_cliente" required placeholder="+55 (45) 99999-9999" data-telefone inputmode="tel">
@@ -91,6 +91,13 @@
 
       <label>Observações <span style="text-transform:none;font-weight:400">(opcional)</span></label>
       <input name="observacoes" placeholder="Detalhes do cliente">
+
+      <!-- Ficha de cadastro (só com a feature ligada): campos montados por
+           js/ficha.js, já preenchidos com o que o contato tinha. -->
+      <div class="agm-ficha" id="agm-ficha" hidden>
+        <p class="agm-ficha-nota" id="agm-ficha-nota"></p>
+        <div id="agm-ficha-campos"></div>
+      </div>
 
       <div class="agm-acoes">
         <button type="button" class="btn-ghost btn-sm" id="agm-cancelar">Cancelar</button>
