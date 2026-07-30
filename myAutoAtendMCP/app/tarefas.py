@@ -41,6 +41,9 @@ async def worker() -> None:
     presas = db.resetar_tarefas_executando()
     if presas:
         log.warning("%d tarefa(s) presas em 'executando' voltaram a pendente", presas)
+    orfaos = db.limpar_avisos_orfaos()
+    if orfaos:
+        log.info("%d aviso(s) pendente(s) de agendamento cancelado descartado(s)", orfaos)
     log.info("Worker de tarefas iniciado (tick %.0fs)", TICK_S)
     while True:
         try:
@@ -155,13 +158,25 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
     servico = db.get_servico(ag.servico_id)
     nome_servico = servico.nome if servico else f"serviço #{ag.servico_id}"
     data, hora = (ag.inicio.split("T") + [""])[:2]
+    # `inicio_anterior` = o dono remarcou e o aviso da remarcação foi descartado
+    # antes de sair (o cliente nunca soube). Então o horário que ELE conhece é
+    # esse, não o que está gravado agora no agendamento.
+    antes = payload.get("inicio_anterior") or ""
+    data_ant, hora_ant = (antes.split("T") + [""])[:2]
+    nunca_soube = (
+        f"ATENÇÃO: o cliente NUNCA foi avisado de uma remarcação anterior — para "
+        f"ele o horário marcado era dia {data_ant} às {hora_ant}. Fale do horário "
+        "que ELE conhece, não do remarcado. "
+        if antes
+        else ""
+    )
 
     if acao in ("remarcar", "cancelar"):  # remanejar_dia: o dia inteiro fechou
         motivo = payload.get("motivo") or "um imprevisto"
         base = (
             f"O dono teve um imprevisto ({motivo}) e não poderá atender no dia {data}. "
             f"O cliente {ag.nome_cliente} tem \"{nome_servico}\" às {hora} "
-            f"(agendamento #{ag.id}). "
+            f"(agendamento #{ag.id}). {nunca_soube}"
         )
         if acao == "cancelar":
             return base + (
@@ -180,14 +195,13 @@ def _instrucao_contatar_cliente(payload: dict) -> str | None:
     if acao == "cancelado":
         return (
             f"O dono cancelou o agendamento #{ag.id} de {ag.nome_cliente}: "
-            f"\"{nome_servico}\" do dia {data} às {hora}. O cancelamento JÁ FOI "
+            f"\"{nome_servico}\" do dia {data} às {hora}. {nunca_soube}"
+            "O cancelamento JÁ FOI "
             "FEITO — não tente desfazer nem cancelar de novo. Avise o cliente "
             "com delicadeza, peça desculpas pelo transtorno e ofereça ajuda "
             "para marcar uma nova data se ele quiser."
         )
     if acao == "reagendado":
-        antes = payload.get("inicio_anterior") or ""
-        data_ant, hora_ant = (antes.split("T") + [""])[:2]
         de = f"que era no dia {data_ant} às {hora_ant} " if antes else ""
         return (
             f"O dono remarcou o agendamento #{ag.id} de {ag.nome_cliente} "

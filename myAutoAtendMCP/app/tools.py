@@ -487,12 +487,10 @@ def remanejar_dia(
             db.cancelar_agendamento(a.id)
         if mesmo_numero(a.telefone_cliente, dono):
             continue  # horário do próprio dono — não faz sentido contatá-lo
-        db.criar_tarefa(
-            tipo="contatar_cliente",
-            telefone_alvo=a.telefone_cliente,
-            payload={"agendamento_id": a.id, "acao": acao, "motivo": motivo},
-            agendado_para=agora,
-        )
+        # criar_aviso_cliente (e não criar_tarefa): descarta aviso pendente
+        # anterior do mesmo agendamento — senão o cliente receberia duas
+        # mensagens, uma sobre a remarcação individual e outra sobre o dia.
+        db.criar_aviso_cliente(a, acao, agora, motivo=motivo)
         contatados += 1
 
     return {

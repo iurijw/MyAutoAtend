@@ -439,50 +439,119 @@ def criar_aviso_cliente(
     acao: str,
     agendado_para: str,
     inicio_anterior: str | None = None,
+    motivo: str = "",
 ) -> Tarefa:
     """Enfileira aviso proativo da IA ao cliente sobre ação do dono/admin no
-    agendamento — `acao` "reagendado" ou "cancelado" (instruções por ação em
-    app/tarefas.py).
+    agendamento — `acao` "reagendado"/"cancelado" (ação individual) ou
+    "remarcar"/"cancelar" (dia remanejado, com `motivo`). Instruções por ação
+    em app/tarefas.py.
 
     Avisos pendentes do mesmo agendamento são substituídos: ao cliente só
-    interessa o estado final. Reagendamento em cima de outro ainda não avisado
-    herda o `inicio_anterior` do aviso substituído — o único horário que o
-    cliente conhece.
+    interessa o estado final. O aviso novo herda o `inicio_anterior` do aviso
+    substituído — é o único horário que o cliente conhece, tanto para remarcar
+    de novo quanto para cancelar em cima de uma remarcação não avisada.
     """
     payload: dict = {"agendamento_id": ag.id, "acao": acao}
     if inicio_anterior:
         payload["inicio_anterior"] = inicio_anterior
-    for antigo in _obsoletar_avisos_pendentes(ag.id):
-        if (
-            acao == "reagendado"
-            and antigo.get("acao") == "reagendado"
-            and antigo.get("inicio_anterior")
+    if motivo:
+        payload["motivo"] = motivo
+    herdeiros = _obsoletar_avisos_pendentes(ag.id)
+    # Cancelamento chega aqui DEPOIS de db.cancelar_agendamento, que já
+    # descartou o aviso pendente — o horário que o cliente conhece só existe
+    # no aviso obsoleto, então ele também conta como fonte.
+    herdeiros += _avisos_obsoletos(ag.id)
+    for antigo in herdeiros:
+        if antigo.get("acao") in ("reagendado", "remarcar") and antigo.get(
+            "inicio_anterior"
         ):
-            payload["inicio_anterior"] = antigo["inicio_anterior"]
+            payload.setdefault("inicio_anterior", antigo["inicio_anterior"])
             break
     return criar_tarefa("contatar_cliente", ag.telefone_cliente, payload, agendado_para)
 
 
-def _obsoletar_avisos_pendentes(agendamento_id: int) -> list[dict]:
-    """Conclui os `contatar_cliente` pendentes do agendamento; retorna os
-    payloads substituídos na ordem de criação."""
+# Status de aviso que morreu antes de ser enviado (substituído por um mais
+# novo ou descartado com o agendamento). Fora dos filtros do painel (que só
+# olham pendente/executando/falhou) e do worker (só pendente); separado de
+# "concluida" porque concluída significa MENSAGEM ENVIADA — e é isso que decide
+# se o cliente já conhece o horário novo.
+STATUS_AVISO_OBSOLETO = "obsoleto"
+
+
+def _obsoletar_avisos_pendentes(
+    agendamento_id: int, motivo: str = "Substituída por aviso mais recente."
+) -> list[dict]:
+    """Tira da fila os `contatar_cliente` pendentes do agendamento; retorna os
+    payloads descartados na ordem de criação.
+
+    NÃO pega o `_lock` de quem chama: use fora de um `with _lock` (o Lock é
+    simples, não reentrante).
+    """
     with _lock, _session() as s:
         stmt = (
             select(Tarefa)
             .where(Tarefa.tipo == "contatar_cliente", Tarefa.status == "pendente")
             .order_by(Tarefa.id)
         )
-        substituidos: list[dict] = []
+        descartados: list[dict] = []
         for t in s.exec(stmt):
             payload = json.loads(t.payload or "{}")
             if payload.get("agendamento_id") != agendamento_id:
                 continue
-            t.status = "concluida"
-            t.resultado = "Substituída por aviso mais recente."
+            t.status = STATUS_AVISO_OBSOLETO
+            t.resultado = motivo
             s.add(t)
-            substituidos.append(payload)
+            descartados.append(payload)
         s.commit()
-        return substituidos
+        return descartados
+
+
+def limpar_avisos_orfaos() -> int:
+    """Tira da fila avisos pendentes que perderam o sentido (chamada no boot).
+
+    Rede de segurança para o que ficou na fila antes de `cancelar_agendamento`
+    passar a descartar aviso pendente, e para agendamento apagado por fora. Só
+    mexe em aviso que PRESSUPÕE agendamento ativo ("reagendado"/"remarcar") ou
+    cujo agendamento não existe mais — aviso de cancelamento fala justamente de
+    um agendamento cancelado e continua válido.
+    """
+    with _lock, _session() as s:
+        stmt = select(Tarefa).where(
+            Tarefa.tipo == "contatar_cliente", Tarefa.status == "pendente"
+        )
+        limpos = 0
+        for t in s.exec(stmt):
+            payload = json.loads(t.payload or "{}")
+            ag = s.get(Agendamento, payload.get("agendamento_id") or 0)
+            presume_ativo = payload.get("acao") in ("reagendado", "remarcar")
+            if ag and not (presume_ativo and ag.status != "ativo"):
+                continue
+            t.status = STATUS_AVISO_OBSOLETO
+            t.resultado = "Agendamento cancelado — aviso descartado."
+            s.add(t)
+            limpos += 1
+        s.commit()
+        return limpos
+
+
+def _avisos_obsoletos(agendamento_id: int) -> list[dict]:
+    """Payloads dos avisos do agendamento que nunca chegaram ao cliente, do mais
+    recente para o mais antigo."""
+    with _session() as s:
+        stmt = (
+            select(Tarefa)
+            .where(
+                Tarefa.tipo == "contatar_cliente",
+                Tarefa.status == STATUS_AVISO_OBSOLETO,
+            )
+            .order_by(Tarefa.id.desc())
+        )
+        achados: list[dict] = []
+        for t in s.exec(stmt):
+            payload = json.loads(t.payload or "{}")
+            if payload.get("agendamento_id") == agendamento_id:
+                achados.append(payload)
+        return achados
 
 
 def tarefas_vencidas(agora: str) -> list[Tarefa]:
@@ -1149,6 +1218,14 @@ def cancelar_agendamento(agendamento_id: int) -> bool:
         a.status = "cancelado"
         s.add(a)
         s.commit()
+    # Aviso proativo pendente deste agendamento morre com ele: avisar uma
+    # remarcação de horário que já foi cancelado é pior que não avisar nada.
+    # Se o dono quiser avisar o cancelamento, o caller enfileira o aviso
+    # "cancelado" DEPOIS desta chamada (que herda o inicio_anterior daqui).
+    # Fora do `with _lock` — _obsoletar_avisos_pendentes pega o mesmo Lock.
+    _obsoletar_avisos_pendentes(
+        agendamento_id, "Agendamento cancelado — aviso descartado."
+    )
     return True
 
 
