@@ -9,8 +9,8 @@ Segredo: derivado da SENHA do painel (`settings.session_secret`). Consequência
 desejada — trocar a SENHA invalida todas as sessões abertas, sem tabela nova
 nem estado em banco (o token carrega a validade).
 
-Sem lista de revogação: a expiração (12 h) é o limite. Para "deslogar de todo
-lugar" agora, troque a SENHA no .env e suba de novo.
+Sem lista de revogação: a expiração (30 dias) é o limite. Para "deslogar de
+todo lugar" agora, troque a SENHA no .env e suba de novo.
 """
 
 from __future__ import annotations
@@ -26,7 +26,8 @@ from fastapi import Response
 from .config import settings
 
 COOKIE = "maa_sessao"
-TTL_HORAS = 12
+# Um mês: o painel roda em máquina local do dono, relogar toda hora só atrapalha.
+TTL_HORAS = 24 * 30
 
 _CABECALHO = {"alg": "HS256", "typ": "JWT"}
 

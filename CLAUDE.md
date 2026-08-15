@@ -115,7 +115,7 @@ primeiro `docker compose up -d`.
   (Claude etc.) — o agente interno NÃO passa por ele (chama as tools direto).
 - **Login do painel** (`app/sessao.py`, sem HTTP Basic desde então): `/login`
   compara com `ADMIN_USER`/`ADMIN_PASS` (`compare_digest` sobre bytes) e devolve
-  cookie `maa_sessao` — JWT HS256 feito com hmac/hashlib, exp de 12 h, httpOnly,
+  cookie `maa_sessao` — JWT HS256 feito com hmac/hashlib, exp de 30 dias, httpOnly,
   samesite lax, `secure=False` porque o painel roda em http://localhost. Segredo
   = hash da SENHA (`settings.session_secret`), então trocar a SENHA derruba toda
   sessão aberta; não há lista de revogação. `admin.autenticar` (dependência de

@@ -25,7 +25,7 @@ uv run --with-requirements requirements.txt uvicorn app.main:app --reload --port
 ```
 
 - Painel: http://localhost:8000/admin  (cai em `/login`; entre com
-  `ADMIN_USER`/`ADMIN_PASS` — a sessão dura 12 h)
+  `ADMIN_USER`/`ADMIN_PASS` — a sessão dura 30 dias)
 - Webhook: http://localhost:8000/webhook/whatsapp/receberMensagem
 - Endpoint MCP: http://localhost:8000/mcp/
 - Health: http://localhost:8000/health

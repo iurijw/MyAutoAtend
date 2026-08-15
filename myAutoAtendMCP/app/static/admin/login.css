@@ -80,11 +80,6 @@
 .log-eyebrow-porta{color:var(--oxblood); margin-bottom:10px;}
 .log-titulo{margin:0; font-family:"DM Serif Display",serif; font-weight:400;
   font-size:clamp(27px,3.4vw,34px); line-height:1.1; letter-spacing:-.01em;}
-.log-sub{margin:9px 0 0; font-size:14px; color:var(--ink-soft);}
-.log-sub code{font:500 13px/1 "JetBrains Mono",monospace; color:var(--ink);
-  padding:2px 5px; border-radius:5px;
-  background:color-mix(in srgb, var(--ink-soft) 13%, transparent);}
-
 .log-erro{margin:20px 0 0; padding:11px 14px; border-radius:10px;
   font-size:13.5px; font-weight:600; color:var(--oxblood);
   background:color-mix(in srgb, var(--oxblood) 12%, transparent);
@@ -107,10 +102,9 @@
 
 .log-btn{width:100%; margin-top:24px; padding:13px 18px; font-size:15px;}
 
-.log-pe{display:flex; align-items:center; justify-content:space-between; gap:14px;
+/* só o botão de tema mora aqui desde que a página perdeu as linhas de aviso */
+.log-pe{display:flex; align-items:center; justify-content:flex-end;
   margin-top:28px; padding-top:18px; border-top:1px solid var(--line);}
-.log-nota{margin:0; font:500 11.5px/1.5 "JetBrains Mono",monospace;
-  color:var(--ink-soft);}
 .log-tema{width:auto; flex:none; padding:7px 11px; font-size:12.5px;}
 
 /* ---------- empilhado: a folha vira cabeçalho ---------- */
@@ -128,7 +122,6 @@
   .log-folha::after{left:26px;}
   .log-lead br{display:none;}
   .log-carimbo{margin-top:22px;}
-  .log-pe{flex-direction:column; align-items:flex-start; gap:12px;}
 }
 
 @media(prefers-reduced-motion: reduce){
