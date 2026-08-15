@@ -314,6 +314,12 @@ primeiro `docker compose up -d`.
   seção com 2+ blocos (Serviços, Bloqueios, Agente) mantém `.card-head` com
   `h2` + fio. `.col2` separa por fio vertical (horizontal quando empilha).
   Campos e superfícies internas usam `--card` sobre o papel da página.
+  **Todo `input[type=checkbox]` é um slider liga/desliga** (regra global no
+  `admin.css`: `appearance:none` + `::after` como botão; ligado veste o
+  `--accent` da seção). O input segue nativo — label, form, teclado, `:checked`
+  continuam valendo, nada de markup novo. Medidas em `--sw-w`/`--sw-h`/
+  `--sw-pad`: onde a linha é miúda (reagendar, topo do modal de conversa) só
+  redefinir essas variáveis.
   O servidor entrega
   TODAS as views; `js/nav.js` deixa só uma com `.ativa`, escolhida pelo hash
   (`#clientes`) — sobrevive ao reload dos forms e é linkável. Abaixo de 1000px

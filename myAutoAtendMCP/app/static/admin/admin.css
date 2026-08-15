@@ -228,7 +228,34 @@ textarea{min-height:84px; resize:vertical;}
 .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;}
 .check-linha{display:flex; align-items:center; gap:10px; margin-top:18px;
   text-transform:none; font-weight:400; font-size:14px; color:var(--ink); cursor:pointer;}
-.check-linha input{width:auto; margin:0; accent-color:var(--accent-solid);}
+.check-linha input{margin:0;}
+
+/* ---------- chave liga/desliga ----------
+   TODO checkbox do painel é um slider: o <input type=checkbox> segue nativo
+   (label, form, teclado, :checked), só troca a pele. Medidas vêm das três
+   variáveis — quem precisa de uma chave menor (linha de tabela, topo do modal)
+   redefine --sw-w/--sw-h e o resto se ajusta sozinho. */
+input[type="checkbox"]{
+  --sw-w:38px; --sw-h:22px; --sw-pad:3px;
+  appearance:none; -webkit-appearance:none; flex:none; position:relative;
+  width:var(--sw-w); height:var(--sw-h); min-width:var(--sw-w); padding:0;
+  border-radius:999px; border:1px solid var(--line); cursor:pointer;
+  background:color-mix(in srgb, var(--ink-soft) 22%, transparent);
+  transition:background .18s, border-color .18s, box-shadow .15s;}
+input[type="checkbox"]::after{
+  content:""; position:absolute; top:50%; left:var(--sw-pad);
+  width:calc(var(--sw-h) - var(--sw-pad) * 2); height:calc(var(--sw-h) - var(--sw-pad) * 2);
+  border-radius:50%; background:var(--card); box-shadow:0 1px 3px var(--shadow);
+  transform:translateY(-50%); transition:transform .18s cubic-bezier(.2,.7,.2,1);}
+input[type="checkbox"]:checked{background:var(--accent); border-color:var(--accent);}
+/* desloca exatamente o vão que sobra: largura − altura (o botão é circular) */
+input[type="checkbox"]:checked::after{
+  transform:translateY(-50%) translateX(calc(var(--sw-w) - var(--sw-h)));}
+input[type="checkbox"]:disabled{opacity:.5; cursor:not-allowed;}
+input[type="checkbox"]:focus{box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);}
+/* no escuro o botão claro é o que dá o contraste nas duas posições */
+html[data-theme="dark"] input[type="checkbox"]::after{background:var(--ink);}
+html[data-theme="dark"] input[type="checkbox"]{background:color-mix(in srgb, var(--ink-soft) 30%, transparent);}
 
 button,.btn{font:inherit; font-weight:600; cursor:pointer; border-radius:10px;
   border:1px solid transparent; padding:11px 18px;
@@ -285,7 +312,8 @@ html[data-theme="dark"] .pill.off{background:rgba(180,166,138,.14);}
 .reagenda input{max-width:220px; padding:7px 10px;}
 .avisar-cli{display:flex; align-items:center; gap:5px; font-size:.78rem; color:var(--ink-soft);
   white-space:nowrap; cursor:pointer; text-transform:none; font-weight:500; margin:0;}
-.reagenda .avisar-cli input{width:auto; max-width:none; padding:0; margin:0;}
+/* chave menor: a linha do reagendamento é miúda (.78rem) */
+.reagenda .avisar-cli input{--sw-w:32px; --sw-h:19px; --sw-pad:2.5px; max-width:none; margin:0;}
 
 /* ---------- Clientes ---------- */
 .cli-num{font-size:14px; color:var(--ink-soft);}
@@ -383,7 +411,7 @@ html[data-theme="dark"] .conv-modal-backdrop{background:rgba(0,0,0,.6);}
 .conv-modal-tel{font-size:12px;}
 .conv-pausa-mod{flex:none; display:flex; align-items:center; gap:6px; white-space:nowrap; margin:0;
   font-size:12.5px; font-weight:600; text-transform:none; color:var(--ink-soft); cursor:pointer;}
-.conv-pausa-mod input{width:auto; margin:0; accent-color:var(--accent-solid); cursor:pointer;}
+.conv-pausa-mod input{--sw-w:32px; --sw-h:19px; --sw-pad:2.5px; margin:0;}
 .conv-modal-x{flex:none; padding:4px 9px; border:none; background:transparent; color:var(--ink-soft);
   font-size:15px; line-height:1; border-radius:8px; cursor:pointer;}
 .conv-modal-x:hover{background:var(--paper-2); color:var(--accent);}
@@ -713,6 +741,7 @@ html[data-theme="dark"] .tel-badge.no{background:rgba(223,111,115,.16); color:va
 }
 @media(prefers-reduced-motion: reduce){
   html{scroll-behavior:auto;}
+  input[type="checkbox"],input[type="checkbox"]::after{transition:none;}
   .view.ativa{animation:none;}
   .side{transition:none;}
   .toast{transition:none; transform:none;}
