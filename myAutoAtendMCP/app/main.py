@@ -80,12 +80,27 @@ async def lifespan(_: FastAPI):
     bootstrap.cancel()
 
 
+class EstaticosRevalidados(StaticFiles):
+    """Serve /static com `Cache-Control: no-cache`.
+
+    Sem cabeçalho de cache o browser aplica cache heurístico e continua usando
+    o CSS/JS antigo depois de um deploy (o ?v=N do admin.css existia por isso,
+    mas os módulos JS não têm versão). `no-cache` não proíbe guardar: obriga a
+    revalidar, e o ETag do StaticFiles resolve em 304 — de graça na rede local.
+    """
+
+    def file_response(self, *args, **kwargs):
+        resposta = super().file_response(*args, **kwargs)
+        resposta.headers.setdefault("Cache-Control", "no-cache")
+        return resposta
+
+
 app = FastAPI(title="Gerenciador de Agendamentos", lifespan=lifespan)
 
 app.include_router(admin_router)
 app.include_router(whatsapp_router)
 app.mount("/mcp", SolicitanteMiddleware(mcp_app))
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", EstaticosRevalidados(directory="app/static"), name="static")
 
 
 @app.exception_handler(sessao.SessaoInvalida)

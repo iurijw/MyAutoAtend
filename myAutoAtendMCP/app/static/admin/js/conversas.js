@@ -4,8 +4,11 @@
 
 import { toast } from './toast.js';
 
-const LISTA_POLL_MS = 20000;
-const MODAL_POLL_MS = 12000;
+/* Ritmo do poll. Curto porque a conversa tem que acompanhar o WhatsApp de
+   verdade; o custo de repintar é zero quando nada mudou (ver `mudou`), então
+   o que sobra é uma leitura barata no SQLite local. */
+const LISTA_POLL_MS = 6000;
+const MODAL_POLL_MS = 2500;
 
 const lista = document.getElementById('conversas-lista');
 const tagCount = document.getElementById('conversas-count');
@@ -37,7 +40,21 @@ function esc(s) {
   return d.innerHTML;
 }
 
+/* Repintar a cada poll pisca a tela e derruba a rolagem de quem está lendo.
+   Guarda a última resposta por chave e só redesenha quando ela muda. */
+const ultimo = {};
+function mudou(chave, dados) {
+  const agora = JSON.stringify(dados);
+  if (ultimo[chave] === agora) return false;
+  ultimo[chave] = agora;
+  return true;
+}
+
 const QUEM_PREFIXO = { bot: 'Bot: ', sistema: 'Sistema: ' };
+
+// Quem escreveu a mensagem do lado do bot: a IA ou o dono, pelo painel.
+const prefixoDaLinha = (c) =>
+  c.quem === 'bot' && c.auto === false ? 'Você: ' : (QUEM_PREFIXO[c.quem] || '');
 
 async function pintarFoto(num, ...els) {
   if (!num) return;
@@ -66,8 +83,7 @@ function itemLista(c) {
 
   const inicial = (c.nome || c.telefone || '?').trim().charAt(0).toUpperCase() || '?';
   const titulo = c.nome || c.telefone;
-  const prefixo = QUEM_PREFIXO[c.quem] || '';
-  const prev = c.preview ? `${prefixo}${c.preview}` : 'Sem mensagens ainda';
+  const prev = c.preview ? `${prefixoDaLinha(c)}${c.preview}` : 'Sem mensagens ainda';
 
   el.innerHTML = `
     <button type="button" class="conv-item-open">
@@ -104,6 +120,7 @@ async function carregarLista() {
     return;
   }
   live?.classList.remove('off');
+  if (!mudou('lista', dados)) return;
   const conversas = dados.conversas || [];
   tagCount.textContent = conversas.length
     ? `${conversas.length} ${conversas.length === 1 ? 'contato' : 'contatos'}`
@@ -145,15 +162,29 @@ async function alternarPausa(telefone, pausar) {
 // Modal de conversa
 // ---------------------------------------------------------------------------
 
+/* Etiqueta do lado do bot: no WhatsApp as duas saem do mesmo número, então na
+   tela o dono precisa ver quem escreveu — a IA ou ele mesmo, pelo painel. */
+const ETIQUETA_BOT = { auto: 'Automatizado', manual: 'Enviado por você' };
+
 function bolha(m) {
   const el = document.createElement('div');
-  el.className = 'conv-bolha quem-' + (m.quem || 'cliente');
-  el.innerHTML = `<span class="conv-bolha-txt">${esc(m.texto)}</span>` +
-    (m.hora ? `<span class="conv-bolha-hora">${esc(m.hora)}</span>` : '');
+  el.className = 'conv-bolha quem-' + (m.quem || 'cliente') + (m.pendente ? ' pendente' : '');
+  let etiqueta = '';
+  if (m.quem === 'bot') {
+    const chave = m.auto === false ? 'manual' : 'auto';
+    el.classList.add('bot-' + chave);
+    etiqueta = `<span class="conv-bolha-tag">${ETIQUETA_BOT[chave]}</span>`;
+  }
+  el.innerHTML = etiqueta +
+    `<span class="conv-bolha-txt">${esc(m.texto)}</span>` +
+    (m.pendente
+      ? '<span class="conv-bolha-hora">recebida agora</span>'
+      : (m.hora ? `<span class="conv-bolha-hora">${esc(m.hora)}</span>` : ''));
   return el;
 }
 
 function pintarMensagens(dados) {
+  if (!mudou('modal', dados)) return;
   elNome.textContent = dados.nome || dados.telefone;
   elTel.textContent = dados.telefone;
   elPausa.checked = !!dados.pausado;
@@ -186,6 +217,7 @@ async function carregarMensagens() {
 
 function abrir(telefone) {
   alvo = telefone;
+  ultimo.modal = null;   // outra conversa (ou a mesma reaberta) sempre repinta
   elMsgs.innerHTML = '<p class="conv-msgs-vazio">Carregando…</p>';
   input.value = '';
   modal.classList.add('open');

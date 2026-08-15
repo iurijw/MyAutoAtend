@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import agente, db, evolution, ficha, ia, sessao, tarefas
+from . import agente, db, evolution, ficha, ia, sessao, tarefas, whatsapp
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar, plausivel
 from .tools import _agora_local
@@ -702,6 +702,9 @@ def _resumo_conversas() -> list[dict]:
         norm = normalizar(conv.telefone) or conv.telefone
         vistos.add(norm)
         bolhas = agente.historico_para_bolhas(conv.historico)
+        # mensagem recém-chegada (ainda no debounce/agente) manda no preview
+        for texto in whatsapp.mensagens_pendentes(norm):
+            bolhas.append({"quem": "cliente", "texto": texto, "hora": ""})
         ultima = bolhas[-1] if bolhas else None
         cli = clientes.get(norm)
         itens.append(
@@ -711,6 +714,7 @@ def _resumo_conversas() -> list[dict]:
                 "pausado": bool(cli and cli.bot_pausado),
                 "preview": (ultima["texto"][:90] if ultima else ""),
                 "quem": ultima["quem"] if ultima else "",
+                "auto": bool(ultima.get("auto")) if ultima else False,
                 "hora": ultima["hora"] if ultima else "",
                 "_ordem": conv.atualizado_em or "",
             }
@@ -725,6 +729,7 @@ def _resumo_conversas() -> list[dict]:
                 "pausado": bool(cli.bot_pausado),
                 "preview": "",
                 "quem": "",
+                "auto": False,
                 "hora": "",
                 "_ordem": "",
             }
@@ -745,11 +750,16 @@ def conversa_detalhe(telefone: str, _: str = Depends(autenticar)):
     norm = normalizar(telefone) or telefone
     cli = db.get_cliente(norm)
     bruto = db.get_conversa(db.resolver_chave_conversa(telefone))
+    mensagens = agente.historico_para_bolhas(bruto)
+    # O que chegou agora e ainda não virou memória (debounce de 6s + o tempo do
+    # modelo): sem isto a mensagem do cliente só apareceria depois da resposta.
+    for texto in whatsapp.mensagens_pendentes(norm):
+        mensagens.append({"quem": "cliente", "texto": texto, "hora": "", "pendente": True})
     return {
         "telefone": norm,
         "nome": cli.nome if cli and cli.nome else "",
         "pausado": bool(cli and cli.bot_pausado),
-        "mensagens": agente.historico_para_bolhas(bruto),
+        "mensagens": mensagens,
     }
 
 
@@ -795,7 +805,10 @@ async def conversa_enviar(
             detail="Não foi possível enviar pelo WhatsApp. Confira se o número "
             "está conectado no card Conexão WhatsApp.",
         ) from e
-    agente.registrar_na_memoria(db.resolver_chave_conversa(telefone), msg, "bot")
+    # origem "painel": a bolha entra marcada como escrita pelo dono, não pela IA
+    agente.registrar_na_memoria(
+        db.resolver_chave_conversa(telefone), msg, "bot", origem="painel"
+    )
     return {"ok": True}
 
 

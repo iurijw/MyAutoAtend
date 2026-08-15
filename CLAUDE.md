@@ -26,7 +26,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/ficha.py` | Ficha de cadastro: tipos de campo, validação/normalização por tipo, montagem da ficha de um contato |
 | `myAutoAtendMCP/app/sessao.py` | Sessão do painel: JWT HS256 (só stdlib) em cookie httpOnly, freio de força bruta por IP, exceção `SessaoInvalida` |
 | `myAutoAtendMCP/app/templates/login.html` | Tela de entrada (`/login`), fora do shell do painel — usa `admin.css` (tokens) + `login.css` |
-| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css) |
+| `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css — o `/static` também vai com `Cache-Control: no-cache`, ver `EstaticosRevalidados` em `main.py`, senão o browser fica com o JS velho depois do deploy) |
 | `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
@@ -165,6 +165,22 @@ primeiro `docker compose up -d`.
   /admin/conversas/{tel}/pausa` (bot_pausado; dono nunca pausável — também na
   tool `pausar_bot` [DONO]). Botão "Conversa" nas listagens de agendamentos e
   de clientes abre o modal (`window.abrirConversa`).
+  - **A tela mostra as MESMAS bolhas do WhatsApp**: `historico_para_bolhas`
+    quebra a resposta do bot com `agente.dividir_bolhas` (a função do envio —
+    mudou de `whatsapp.py` para `agente.py` para os dois lados usarem a mesma
+    regra) e o turno do cliente com `dividir_lote_do_cliente` (só o `[quebrar]`
+    do debounce; `\n` dentro de uma mensagem dele é quebra de linha).
+  - **Autoria da bolha do bot**: o envio manual do painel grava
+    `ModelResponse.model_name = agente.MODELO_ENVIO_MANUAL` (metadado, o modelo
+    não lê) via `registrar_na_memoria(..., origem="painel")`. A bolha vem com
+    `auto: false` → etiqueta "Enviado por você" em ouro; `auto: true` →
+    "Automatizado" no acento. Na lista, o preview troca "Bot:" por "Você:".
+  - **Mensagem recém-chegada**: só vira memória quando o agente termina, então
+    `whatsapp.mensagens_pendentes()` expõe o buffer do debounce + o lote
+    `_em_voo` (com o agente) e o painel pinta como bolha `pendente`
+    ("recebida agora", tracejada) — sem buraco entre receber e responder.
+  - Poll: lista 6s, modal 2,5s. Repintar só quando a resposta muda
+    (assinatura JSON em `mudou()`) — sem piscar nem perder a rolagem.
 - **Provedores de IA no painel**: `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.

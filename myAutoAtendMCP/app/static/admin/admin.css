@@ -234,18 +234,25 @@ textarea{min-height:84px; resize:vertical;}
    TODO checkbox do painel é um slider: o <input type=checkbox> segue nativo
    (label, form, teclado, :checked), só troca a pele. Medidas vêm das três
    variáveis — quem precisa de uma chave menor (linha de tabela, topo do modal)
-   redefine --sw-w/--sw-h e o resto se ajusta sozinho. */
+   redefine --sw-w/--sw-h e o resto se ajusta sozinho.
+
+   Cor: o tema mexe só nas VARIÁVEIS (--sw-trilho/--sw-botao), nunca no
+   `background` — um `html[data-theme="dark"] input[type=checkbox]{background}`
+   tem especificidade maior que `input[type=checkbox]:checked` e deixaria a
+   chave ligada cinza no escuro. */
 input[type="checkbox"]{
   --sw-w:38px; --sw-h:22px; --sw-pad:3px;
+  --sw-trilho:color-mix(in srgb, var(--ink-soft) 22%, transparent);
+  --sw-botao:var(--card);
   appearance:none; -webkit-appearance:none; flex:none; position:relative;
   width:var(--sw-w); height:var(--sw-h); min-width:var(--sw-w); padding:0;
   border-radius:999px; border:1px solid var(--line); cursor:pointer;
-  background:color-mix(in srgb, var(--ink-soft) 22%, transparent);
+  background:var(--sw-trilho);
   transition:background .18s, border-color .18s, box-shadow .15s;}
 input[type="checkbox"]::after{
   content:""; position:absolute; top:50%; left:var(--sw-pad);
   width:calc(var(--sw-h) - var(--sw-pad) * 2); height:calc(var(--sw-h) - var(--sw-pad) * 2);
-  border-radius:50%; background:var(--card); box-shadow:0 1px 3px var(--shadow);
+  border-radius:50%; background:var(--sw-botao); box-shadow:0 1px 3px var(--shadow);
   transform:translateY(-50%); transition:transform .18s cubic-bezier(.2,.7,.2,1);}
 input[type="checkbox"]:checked{background:var(--accent); border-color:var(--accent);}
 /* desloca exatamente o vão que sobra: largura − altura (o botão é circular) */
@@ -253,9 +260,13 @@ input[type="checkbox"]:checked::after{
   transform:translateY(-50%) translateX(calc(var(--sw-w) - var(--sw-h)));}
 input[type="checkbox"]:disabled{opacity:.5; cursor:not-allowed;}
 input[type="checkbox"]:focus{box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);}
-/* no escuro o botão claro é o que dá o contraste nas duas posições */
-html[data-theme="dark"] input[type="checkbox"]::after{background:var(--ink);}
-html[data-theme="dark"] input[type="checkbox"]{background:color-mix(in srgb, var(--ink-soft) 30%, transparent);}
+/* No escuro o trilho apagado precisa de mais corpo, e o botão troca de tom:
+   claro sobre o trilho cinza, escuro sobre o acento aceso — contraste nos
+   dois lados (botão claro sobre acento claro sumiria). */
+html[data-theme="dark"] input[type="checkbox"]{
+  --sw-trilho:color-mix(in srgb, var(--ink-soft) 34%, transparent);
+  --sw-botao:var(--ink);}
+html[data-theme="dark"] input[type="checkbox"]:checked{--sw-botao:var(--paper);}
 
 button,.btn{font:inherit; font-weight:600; cursor:pointer; border-radius:10px;
   border:1px solid transparent; padding:11px 18px;
@@ -432,6 +443,21 @@ html[data-theme="dark"] .conv-modal-backdrop{background:rgba(0,0,0,.6);}
 .conv-bolha.quem-sistema{align-self:center; max-width:88%; padding:2px 10px; background:transparent;
   color:var(--ink-soft); font-style:italic; font-size:12.5px; text-align:center;}
 .conv-bolha.quem-sistema .conv-bolha-hora{text-align:center; margin-top:2px;}
+
+/* Autoria do lado do bot: no WhatsApp as duas saem do mesmo número, aqui não
+   podem se confundir. Automatizado veste o acento; escrita pelo dono vem em
+   ouro, com o fio à direita marcando de quem é a mão. */
+.conv-bolha-tag{display:block; margin-bottom:3px;
+  font:700 9.5px/1.3 "JetBrains Mono",monospace; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); opacity:.85;}
+.conv-bolha.bot-manual{background:color-mix(in srgb, var(--gold) 14%, transparent);
+  border-color:color-mix(in srgb, var(--gold) 34%, transparent);
+  border-right:3px solid color-mix(in srgb, var(--gold) 62%, transparent);}
+.conv-bolha.bot-manual .conv-bolha-tag{color:var(--gold);}
+html[data-theme="dark"] .conv-bolha.bot-manual .conv-bolha-tag{opacity:1;}
+/* recebida agora: ainda no debounce/agente, fora da memória */
+.conv-bolha.pendente{opacity:.72; border-style:dashed;}
+.conv-bolha.pendente .conv-bolha-hora{font-style:italic;}
 
 .conv-envio{flex:none; display:flex; gap:10px; align-items:center; padding:14px 16px;
   border-top:1px solid var(--line);}

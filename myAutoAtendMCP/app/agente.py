@@ -348,6 +348,10 @@ def limpar_raciocinio(texto: str) -> str:
 # nos defaults de MCP — o modelo trata como instrução, não como o cliente.
 MARCADOR_TAREFA = "[TAREFA INTERNA]"
 
+# `model_name` gravado quando a fala do bot foi digitada pelo dono no painel.
+# Nome improvável de modelo real; é metadado, o modelo nunca lê isso.
+MODELO_ENVIO_MANUAL = "painel-manual"
+
 
 async def executar_tarefa(telefone: str, instrucao: str) -> str:
     """Roda o agente para uma ação proativa (worker de app/tarefas.py).
@@ -370,7 +374,9 @@ async def executar_tarefa(telefone: str, instrucao: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def registrar_na_memoria(telefone: str, texto: str, papel: str) -> None:
+def registrar_na_memoria(
+    telefone: str, texto: str, papel: str, origem: str = "agente"
+) -> None:
     """Anexa uma mensagem à memória do contato SEM acionar o agente.
 
     `papel` "cliente" → ModelRequest(UserPromptPart); "bot" → ModelResponse(
@@ -379,13 +385,19 @@ def registrar_na_memoria(telefone: str, texto: str, papel: str) -> None:
     painel — o agente retoma com o contexto completo. Turnos consecutivos do
     mesmo papel são aceitáveis. `telefone` é a chave de memória (remoteJid),
     igual ao 1º argumento de `responder`.
+
+    `origem="painel"` marca a fala do bot como digitada pelo dono: vai no
+    `model_name` do ModelResponse (campo de metadado — sobrevive à
+    serialização e NÃO entra no que o modelo lê), e é o que faz o painel
+    distinguir "Automatizado" de "Enviado por você".
     """
     conteudo = (texto or "").strip()
     if not conteudo:
         return
     msgs = _carregar_memoria(telefone)
     if papel == "bot":
-        msgs.append(ModelResponse(parts=[TextPart(content=conteudo)]))
+        modelo = MODELO_ENVIO_MANUAL if origem == "painel" else None
+        msgs.append(ModelResponse(parts=[TextPart(content=conteudo)], model_name=modelo))
     else:
         msgs.append(ModelRequest(parts=[UserPromptPart(content=conteudo)]))
     msgs = _aparar(msgs)
@@ -428,7 +440,17 @@ def historico_para_bolhas(bruto: str | None) -> list[dict]:
     UserPromptPart = fala do cliente (turno começando com [TAREFA INTERNA] =
     sistema); TextPart de resposta = fala do bot. Tool-calls/returns, thinking
     e o system prompt ficam de fora — o painel mostra só o que o cliente veria.
-    Cada bolha: {"quem": "cliente"|"bot"|"sistema", "texto": str, "hora": HH:MM}.
+
+    Uma entrada da memória vira N bolhas: o painel tem que mostrar a conversa
+    como ela chegou no WhatsApp. A resposta do bot é quebrada por
+    `dividir_bolhas` (a MESMA função que o envio usa — três mensagens no
+    aparelho, três bolhas aqui); o turno do cliente é quebrado só no
+    `[quebrar]` com que o debounce juntou o lote — quebra de linha dentro de
+    UMA mensagem dele é quebra de linha, não mensagem nova.
+
+    Cada bolha: {"quem": "cliente"|"bot"|"sistema", "texto", "hora" HH:MM,
+    "auto": bool} — `auto` só existe no bot: True = escrita pela IA, False =
+    enviada à mão pelo dono no painel (ver `registrar_na_memoria`).
     """
     if not bruto:
         return []
@@ -450,13 +472,48 @@ def historico_para_bolhas(bruto: str | None) -> list[dict]:
                     texto = texto[len(MARCADOR_TAREFA):].strip()
                 else:
                     papel = "cliente"
-                bolhas.append({"quem": papel, "texto": texto, "hora": _hora_local(p.timestamp)})
+                hora = _hora_local(p.timestamp)
+                for parte in dividir_lote_do_cliente(texto):
+                    bolhas.append({"quem": papel, "texto": parte, "hora": hora})
         elif isinstance(m, ModelResponse):
+            automatica = m.model_name != MODELO_ENVIO_MANUAL
             for p in m.parts:
                 if not isinstance(p, TextPart):
                     continue
                 # histórico antigo pode ter raciocínio vazado gravado
                 texto = limpar_raciocinio(p.content or "")
-                if texto:
-                    bolhas.append({"quem": "bot", "texto": texto, "hora": _hora_local(m.timestamp)})
+                hora = _hora_local(m.timestamp)
+                for parte in dividir_bolhas(texto):
+                    bolhas.append(
+                        {"quem": "bot", "texto": parte, "hora": hora, "auto": automatica}
+                    )
     return bolhas
+
+
+# ---------------------------------------------------------------------------
+# Divisão em bolhas (paridade com o "Code - Dividir Resposta" do n8n)
+# ---------------------------------------------------------------------------
+
+
+def dividir_bolhas(texto: str) -> list[str]:
+    """Resposta do agente → as mensagens que saem no WhatsApp. Usada pelo envio
+    (whatsapp.enviar_bolhas) E pela leitura do painel, para que a conversa na
+    tela tenha exatamente as mesmas bolhas que o cliente recebeu."""
+    normalizado = re.sub(r"\[quebra\]", "[quebrar]", texto or "", flags=re.IGNORECASE)
+    normalizado = re.sub(r"\n+", "[quebrar]", normalizado)
+    bolhas = [p.strip() for p in normalizado.split("[quebrar]") if p.strip()]
+    # modelos "reasoning" mal-comportados repetem o mesmo parágrafo várias
+    # vezes — bolhas consecutivas idênticas nunca são intencionais
+    sem_repeticao: list[str] = []
+    for b in bolhas:
+        if not sem_repeticao or sem_repeticao[-1] != b:
+            sem_repeticao.append(b)
+    return sem_repeticao
+
+
+def dividir_lote_do_cliente(texto: str) -> list[str]:
+    """Lote do debounce → as mensagens que o cliente mandou. Só o `[quebrar]`
+    do concat separa (ver whatsapp._esperar_e_responder); `\\n` é quebra de
+    linha digitada por ele."""
+    partes = [p.strip() for p in re.split(r"\[quebrar\]", texto or "", flags=re.IGNORECASE)]
+    return [p for p in partes if p] or ([texto.strip()] if (texto or "").strip() else [])

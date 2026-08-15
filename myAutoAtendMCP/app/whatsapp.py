@@ -24,6 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from . import agente, auth, db, evolution, ia
+from .agente import dividir_bolhas  # mora no agente: o painel lê pelas mesmas regras
 from .config import settings
 from .phone import mesmo_numero
 
@@ -37,6 +38,10 @@ DEBOUNCE_S = 6.0
 # Buffers do debounce: remoteJid → (mensagens pendentes, timer ativo).
 _buffers: dict[str, list[str]] = {}
 _timers: dict[str, asyncio.Task] = {}
+# Lote que já saiu do buffer e está com o agente. Só existe para o painel não
+# ter um buraco: a mensagem do cliente só entra na memória quando o agente
+# termina, e sem isto ela sumiria da tela entre o fim do debounce e a resposta.
+_em_voo: dict[str, list[str]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +170,17 @@ async def _esperar_e_responder(remote_jid: str) -> None:
         return
 
     lote = "[quebrar]".join(mensagens)  # paridade com o concat do n8n
+    _em_voo[remote_jid] = mensagens
     try:
         await _responder_contato(remote_jid, lote)
     except ia.IANaoConfigurada as e:
         log.warning("%s", e)
     except Exception:  # noqa: BLE001
         log.exception("Erro respondendo %s", remote_jid)
+    finally:
+        # a memória já tem o turno (ou o erro descartou o lote): o painel volta
+        # a ler tudo do banco
+        _em_voo.pop(remote_jid, None)
 
 
 async def _responder_contato(remote_jid: str, mensagem: str) -> None:
@@ -196,23 +206,17 @@ async def enviar_bolhas(numero: str, resposta: str) -> None:
 def contato_ocupado(telefone: str) -> bool:
     """True se o contato está no meio do debounce (mensagem dele em
     processamento) — tarefa proativa adia para não atropelar a conversa."""
-    pendentes = set(_buffers) | set(_timers)
+    pendentes = set(_buffers) | set(_timers) | set(_em_voo)
     return any(mesmo_numero(telefone, jid) for jid in pendentes)
 
 
-# ---------------------------------------------------------------------------
-# Divisão em bolhas (paridade com "Code - Dividir Resposta")
-# ---------------------------------------------------------------------------
-
-
-def dividir_bolhas(texto: str) -> list[str]:
-    normalizado = re.sub(r"\[quebra\]", "[quebrar]", texto or "", flags=re.IGNORECASE)
-    normalizado = re.sub(r"\n+", "[quebrar]", normalizado)
-    bolhas = [p.strip() for p in normalizado.split("[quebrar]") if p.strip()]
-    # modelos "reasoning" mal-comportados repetem o mesmo parágrafo várias
-    # vezes — bolhas consecutivas idênticas nunca são intencionais
-    sem_repeticao: list[str] = []
-    for b in bolhas:
-        if not sem_repeticao or sem_repeticao[-1] != b:
-            sem_repeticao.append(b)
-    return sem_repeticao
+def mensagens_pendentes(telefone: str) -> list[str]:
+    """Mensagens do contato já recebidas mas ainda fora da memória: as do
+    debounce e as que estão com o agente. O painel as mostra na hora, sem
+    esperar o bot responder."""
+    fila: list[str] = []
+    for mapa in (_em_voo, _buffers):
+        for jid, msgs in mapa.items():
+            if mesmo_numero(telefone, jid):
+                fila.extend(msgs)
+    return fila
