@@ -14,9 +14,15 @@ class Settings:
     # SQLite: caminho do arquivo. No container aponta para um volume (/data).
     db_path: str = os.getenv("MCP_DB_PATH", "agendamentos.db")
 
-    # Painel /admin (HTTP Basic). Trocar em produção.
+    # Painel /admin (login em /login, sessão JWT em cookie). Trocar em produção.
     admin_user: str = os.getenv("ADMIN_USER", "admin")
     admin_pass: str = os.getenv("ADMIN_PASS", "admin123")
+
+    # Segredo que assina o JWT da sessão do painel (app/sessao.py). Derivado da
+    # SENHA: trocar a senha invalida todas as sessões abertas, sem estado extra.
+    session_secret: str = hashlib.sha256(
+        f"sessao:{admin_user}:{admin_pass}".encode()
+    ).hexdigest()
 
     # Telefone do dono — autoriza ações restritas. Usado como seed da Config.
     owner_phone: str = os.getenv("OWNER_PHONE", "5545999990000")

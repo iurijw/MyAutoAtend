@@ -24,6 +24,8 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/tools.py` | 16 tools (FastMCP): 14 de agendamento + 2 da ficha de cadastro — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
 | `myAutoAtendMCP/app/ficha.py` | Ficha de cadastro: tipos de campo, validação/normalização por tipo, montagem da ficha de um contato |
+| `myAutoAtendMCP/app/sessao.py` | Sessão do painel: JWT HS256 (só stdlib) em cookie httpOnly, freio de força bruta por IP, exceção `SessaoInvalida` |
+| `myAutoAtendMCP/app/templates/login.html` | Tela de entrada (`/login`), fora do shell do painel — usa `admin.css` (tokens) + `login.css` |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css) |
 | `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
@@ -108,9 +110,23 @@ primeiro `docker compose up -d`.
 
 ## Servidor MCP (`myAutoAtendMCP/`)
 
-- FastAPI único: pipeline do WhatsApp + painel `/admin` (HTTP Basic) +
+- FastAPI único: pipeline do WhatsApp + painel `/admin` (login em `/login`) +
   endpoint `/mcp/` (streamable-http) mantido p/ clients MCP externos
   (Claude etc.) — o agente interno NÃO passa por ele (chama as tools direto).
+- **Login do painel** (`app/sessao.py`, sem HTTP Basic desde então): `/login`
+  compara com `ADMIN_USER`/`ADMIN_PASS` (`compare_digest` sobre bytes) e devolve
+  cookie `maa_sessao` — JWT HS256 feito com hmac/hashlib, exp de 12 h, httpOnly,
+  samesite lax, `secure=False` porque o painel roda em http://localhost. Segredo
+  = hash da SENHA (`settings.session_secret`), então trocar a SENHA derruba toda
+  sessão aberta; não há lista de revogação. `admin.autenticar` (dependência de
+  TODA rota do painel) só lê o cookie e levanta `SessaoInvalida`; o handler em
+  `main.py` decide: navegação HTML → 303 p/ `/login?next=<caminho>` (destino
+  filtrado por `_destino_seguro` contra open redirect), fetch → 401 +
+  `X-Sessao: expirada`, que o `js/sessao.js` (embrulha `window.fetch`, importado
+  primeiro no `admin.js`) transforma em ida ao login. 8 falhas por IP em 5 min →
+  429 por 2 min (`sessao.bloqueio_restante`, memória do processo). "Sair" fica no
+  pé da barra lateral (form `data-nativo` → `POST /logout`). A tela nunca mostra
+  o e-mail configurado — só ecoa o que foi digitado.
 - Persistência SQLite (SQLModel), volume `mcp_data` → `/data/agendamentos.db`.
   Tabelas: Config, Prompt, ProvedorIA, Conversa, Cliente (telefone E.164 PK,
   nome do pushName, bot_pausado), Servico, Bloqueio, Agendamento,

@@ -19,13 +19,13 @@ de qualquer comparação.
 
 import asyncio
 from contextlib import asynccontextmanager
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, evolution, tarefas
+from . import auth, evolution, sessao, tarefas
 from .admin import router as admin_router
 from .config import settings
 from .tools import mcp
@@ -86,6 +86,21 @@ app.include_router(admin_router)
 app.include_router(whatsapp_router)
 app.mount("/mcp", SolicitanteMiddleware(mcp_app))
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.exception_handler(sessao.SessaoInvalida)
+async def sessao_invalida(request: Request, _exc: sessao.SessaoInvalida):
+    """Sem sessão válida. Navegação do browser vai para a tela de login (com o
+    destino guardado em ?next=); chamada de JS recebe 401 + marcador, e o
+    js/sessao.js manda a página para o login."""
+    if "text/html" in request.headers.get("accept", ""):
+        alvo = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"/login?next={quote(alvo, safe='')}", status_code=303)
+    return JSONResponse(
+        {"detail": "Sua sessão expirou. Entre de novo."},
+        status_code=401,
+        headers={"X-Sessao": "expirada"},
+    )
 
 
 @app.get("/")

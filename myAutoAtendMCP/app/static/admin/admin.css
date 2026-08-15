@@ -152,6 +152,10 @@ html[data-theme="dark"] body::before{mix-blend-mode:soft-light; opacity:.5;}
 .side-tema-icone{flex:none; width:16px; height:16px; fill:none; stroke:currentColor;
   stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round;}
 
+/* sair: mesmo corpo do botão de tema, tom oxblood só no hover (a ação é rara) */
+.side-sair{width:100%;}
+.side-sair:hover{color:var(--oxblood); border-color:color-mix(in srgb, var(--oxblood) 45%, transparent);}
+
 .side-veu{position:fixed; inset:0; z-index:35; background:rgba(33,28,22,.45);
   backdrop-filter:blur(2px);}
 html[data-theme="dark"] .side-veu{background:rgba(0,0,0,.55);}

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tema aplicado ANTES do primeiro paint (evita flash). Padrão: escuro. -->
+  <script>
+    (function(){
+      try{
+        var t = localStorage.getItem('tema');
+        if (t !== 'dark' && t !== 'light') t = 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      }catch(e){ document.documentElement.setAttribute('data-theme','dark'); }
+    })();
+  </script>
+  <meta name="theme-color" content="#f3ece0">
+  <meta name="robots" content="noindex">
+  <title>Entrar · myAutoAtend</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- admin.css traz os tokens (papel, oxblood, tema) e os campos/botões. -->
+  <link rel="stylesheet" href="/static/admin/admin.css?v=14">
+  <link rel="stylesheet" href="/static/admin/login.css?v=1">
+</head>
+<body class="log-body">
+  {% include "partials/icones.html" %}
+
+  <div class="log">
+    <!-- Folha de agenda: a metade que diz de quem é a porta. -->
+    <aside class="log-folha" aria-hidden="true">
+      <span class="log-pole"></span>
+      <div class="log-folha-corpo">
+        <p class="log-eyebrow">whatsapp · agenda · piloto automático</p>
+        <p class="log-marca">my<em>Auto</em>Atend</p>
+        <p class="log-lead">
+          Lá fora o bot atende, marca e remarca.<br>
+          Aqui dentro você decide o que ele pode fazer.
+        </p>
+        <span class="log-carimbo">acesso do dono</span>
+      </div>
+    </aside>
+
+    <!-- Porta: o formulário. -->
+    <main class="log-porta">
+      <div class="log-caixa">
+        <p class="log-eyebrow log-eyebrow-porta">Painel de controle</p>
+        <h1 class="log-titulo">Entrar no painel</h1>
+        <p class="log-sub">Use o <code>LOGIN</code> e a <code>SENHA</code> do arquivo <code>.env</code>.</p>
+
+        {% if erro %}<p class="log-erro" role="alert">{{ erro }}</p>{% endif %}
+
+        <form method="post" action="/login" class="log-form">
+          <input type="hidden" name="proximo" value="{{ proximo }}">
+
+          <label for="log-usuario">E-mail</label>
+          <input id="log-usuario" name="usuario" type="text" inputmode="email"
+                 autocomplete="username" spellcheck="false" required
+                 value="{{ usuario }}" {% if not usuario %}autofocus{% endif %}>
+
+          <label for="log-senha">Senha</label>
+          <div class="log-senha">
+            <input id="log-senha" name="senha" type="password"
+                   autocomplete="current-password" required
+                   {% if usuario %}autofocus{% endif %}>
+            <button type="button" class="log-olho" id="log-olho"
+                    aria-pressed="false" aria-label="Mostrar senha">
+              <svg aria-hidden="true"><use href="#i-olho"></use></svg>
+            </button>
+          </div>
+
+          <button type="submit" class="btn btn-primary log-btn">Entrar</button>
+        </form>
+
+        <div class="log-pe">
+          <p class="log-nota">A sessão vale 12 horas neste navegador.</p>
+          <button type="button" class="side-tema log-tema" id="tema-toggle" aria-pressed="false">
+            <svg class="side-tema-icone" aria-hidden="true"><use href="#i-tema"></use></svg>
+            <span id="tema-rotulo">Tema escuro</span>
+          </button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/static/admin/js/login.js"></script>
+</body>
+</html>

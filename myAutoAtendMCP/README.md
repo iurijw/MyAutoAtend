@@ -15,8 +15,8 @@ autorização por telefone feita em código.
 - Servidor MCP (FastMCP, streamable-http) em `/mcp/` p/ clients externos
 - Persistência **SQLite** (SQLModel) — sobrevive a reinício, em volume Docker
 - Telefone normalizado para **E.164** com `phonenumbers`; fuso aplicado
-- Painel web `/admin` (HTTP Basic): serviços, agenda, pareamento WhatsApp por
-  QR, provedores de IA e instruções do agente
+- Painel web `/admin` (login em `/login`, sessão JWT em cookie): serviços,
+  agenda, pareamento WhatsApp por QR, provedores de IA e instruções do agente
 
 ## Como rodar (local)
 
@@ -24,7 +24,8 @@ autorização por telefone feita em código.
 uv run --with-requirements requirements.txt uvicorn app.main:app --reload --port 8000
 ```
 
-- Painel: http://localhost:8000/admin  (usuário/senha: `ADMIN_USER`/`ADMIN_PASS`)
+- Painel: http://localhost:8000/admin  (cai em `/login`; entre com
+  `ADMIN_USER`/`ADMIN_PASS` — a sessão dura 12 h)
 - Webhook: http://localhost:8000/webhook/whatsapp/receberMensagem
 - Endpoint MCP: http://localhost:8000/mcp/
 - Health: http://localhost:8000/health
@@ -66,7 +67,8 @@ app/
   auth.py      # autorização (dono / próprio cliente) + contextvar do solicitante
   db.py        # SQLite via SQLModel
   phone.py     # normalização E.164 (phonenumbers)
-  admin.py     # rotas do painel web
+  admin.py     # rotas do painel web + /login e /logout
+  sessao.py    # sessão do painel: JWT HS256 (stdlib) em cookie httpOnly
   config.py    # settings via env
   templates/admin.html
 Dockerfile · requirements.txt
@@ -99,7 +101,9 @@ Clients MCP externos (endpoint `/mcp/`) usam o mesmo esquema via query
 
 ## Evolução futura (não essencial)
 
-- Painel: trocar HTTP Basic por login de sessão com senha em hash (bcrypt) + cookie.
+- Painel: guardar a senha em hash (bcrypt) e permitir mais de um usuário — hoje
+  o login compara com `ADMIN_USER`/`ADMIN_PASS` do ambiente.
+- Cookie da sessão com `secure=True` ao publicar atrás de HTTPS (`app/sessao.py`).
 - Áudio via OpenRouter (endpoint próprio de transcrição, JSON base64).
 - Migrar SQLite → Postgres se precisar de múltiplas instâncias do servidor
   (aí a unicidade de horário e o debounce em memória devem ir pro banco/Redis).

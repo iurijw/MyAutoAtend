@@ -1,6 +1,7 @@
 /* Entrada única do painel /admin — cada módulo cuida de uma seção/feature.
    Dados vindos do servidor (Jinja) chegam por window.__ADMIN__ (ver admin.html). */
 
+import './sessao.js';   // 1º: embrulha o fetch antes de qualquer módulo chamar
 import './nav.js';
 import './tema.js';
 import './forms.js';

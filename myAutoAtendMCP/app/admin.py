@@ -1,42 +1,124 @@
 """Painel web de configuração (/admin).
 
-Autenticação: HTTP Basic, credenciais vindas de variáveis de ambiente
-(ADMIN_USER / ADMIN_PASS). Controla parâmetros críticos (telefone do dono,
-instruções, serviços) — NUNCA deixe o painel exposto sem credencial forte.
+Autenticação: página `/login` + sessão JWT em cookie httpOnly (app/sessao.py).
+Credenciais vêm de variáveis de ambiente (ADMIN_USER / ADMIN_PASS). O painel
+controla parâmetros críticos (telefone do dono, instruções, serviços) — NUNCA
+deixe exposto sem credencial forte.
 
-PARA EVOLUÇÃO FUTURA: trocar Basic por login de sessão com senha em hash
-(passlib/bcrypt) e cookie seguro.
+Toda rota daqui (menos /login) depende de `autenticar`, que só lê o cookie —
+sem cookie válido levanta `SessaoInvalida`, tratada em main.py (redirect p/
+/login na navegação, 401 JSON no fetch do painel).
 """
 
 import re
 import secrets
+import time as _time
 from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from . import agente, db, evolution, ficha, ia, tarefas
+from . import agente, db, evolution, ficha, ia, sessao, tarefas
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar, plausivel
 from .tools import _agora_local
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
-security = HTTPBasic()
 
 
-def autenticar(cred: HTTPBasicCredentials = Depends(security)) -> str:
-    ok_user = secrets.compare_digest(cred.username, settings.admin_user)
-    ok_pass = secrets.compare_digest(cred.password, settings.admin_pass)
-    if not (ok_user and ok_pass):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciais inválidas",
-            headers={"WWW-Authenticate": "Basic"},
+def autenticar(request: Request) -> str:
+    usuario = sessao.ler_token(request.cookies.get(sessao.COOKIE))
+    if not usuario:
+        raise sessao.SessaoInvalida()
+    return usuario
+
+
+# ---------------------------------------------------------------------------
+# Login / logout
+# ---------------------------------------------------------------------------
+
+
+def _destino_seguro(proximo: str | None) -> str:
+    """Só aceita caminho interno — barra open redirect ("//evil.com" e
+    "https://evil.com" viram /admin)."""
+    if not proximo or not proximo.startswith("/") or proximo.startswith("//"):
+        return "/admin"
+    return proximo
+
+
+def _tela_login(
+    request: Request,
+    proximo: str,
+    erro: str = "",
+    usuario: str = "",
+    status_code: int = 200,
+):
+    # `usuario` é só o eco do que a pessoa digitou — a tela é pública, o e-mail
+    # configurado (settings.admin_user) nunca vai para o HTML.
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"proximo": proximo, "erro": erro, "usuario": usuario},
+        status_code=status_code,
+    )
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/admin"):
+    destino = _destino_seguro(next)
+    if sessao.ler_token(request.cookies.get(sessao.COOKIE)):
+        return RedirectResponse(destino, status_code=303)
+    return _tela_login(request, destino)
+
+
+@router.post("/login")
+def login(
+    request: Request,
+    usuario: str = Form(...),
+    senha: str = Form(...),
+    proximo: str = Form("/admin"),
+):
+    destino = _destino_seguro(proximo)
+    ip = request.client.host if request.client else "?"
+
+    espera = sessao.bloqueio_restante(ip)
+    if espera:
+        return _tela_login(
+            request,
+            destino,
+            f"Muitas tentativas seguidas. Espere {espera}s e tente de novo.",
+            usuario=usuario,
+            status_code=429,
         )
-    return cred.username
+
+    # .encode(): compare_digest com str quebra em caractere não-ASCII (a senha
+    # do .env pode ter acento). Os dois lados sempre comparados, sem short-circuit.
+    ok_user = secrets.compare_digest(usuario.strip().encode(), settings.admin_user.encode())
+    ok_pass = secrets.compare_digest(senha.encode(), settings.admin_pass.encode())
+    if not (ok_user and ok_pass):
+        sessao.registrar_falha(ip)
+        _time.sleep(0.4)  # rota síncrona (threadpool): atrasa a força bruta
+        return _tela_login(
+            request,
+            destino,
+            "E-mail ou senha não conferem.",
+            usuario=usuario,
+            status_code=401,
+        )
+
+    sessao.limpar_falhas(ip)
+    resposta = RedirectResponse(destino, status_code=303)
+    sessao.definir_cookie(resposta, sessao.criar_token(settings.admin_user))
+    return resposta
+
+
+@router.post("/logout")
+def logout():
+    resposta = RedirectResponse("/login", status_code=303)
+    sessao.limpar_cookie(resposta)
+    return resposta
 
 
 def _fichas_clientes(agendamentos: list) -> list[dict]:

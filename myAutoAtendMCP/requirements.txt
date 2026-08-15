@@ -1,4 +1,5 @@
-mcp[cli]
+# <2: o SDK 2.0 removeu mcp.server.fastmcp (base de app/tools.py)
+mcp[cli]>=1.9,<2
 fastapi
 uvicorn[standard]
 jinja2
