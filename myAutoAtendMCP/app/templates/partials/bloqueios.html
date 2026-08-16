@@ -16,7 +16,10 @@
           <td>{{ b.motivo or '—' }}</td>
           <td>
             <div class="acts">
-              <form method="post" action="/admin/bloqueio/{{ b.id }}/excluir" onsubmit="return confirm('Remover este bloqueio?')">
+              <form method="post" action="/admin/bloqueio/{{ b.id }}/excluir"
+                    data-confirmar="Remover este bloqueio?"
+                    data-confirmar-texto="A agenda volta a aceitar marcação nesse período."
+                    data-confirmar-acao="Remover bloqueio">
                 <button class="btn-sm btn-danger">Remover</button>
               </form>
             </div>

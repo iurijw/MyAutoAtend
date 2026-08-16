@@ -417,6 +417,17 @@ primeiro `docker compose up -d`.
   (`js/validar.js`) + máscara/checagem de telefone (`js/telefone.js`). Modais
   (conversas, agendamento) são realocados pro `body` — a view de origem fica
   `display:none` quando outra seção está aberta.
+- **Confirmação** (`js/confirmar.js`): não existe mais `confirm()` nativo no
+  painel. `confirmar({titulo, texto, nota, acao, recusa, perigo})` devolve
+  Promise<bool> e desenha um `<dialog>` (foco preso, Esc e camada de topo vêm
+  do browser). `perigo` (padrão nos forms) veste oxblood e nasce com o foco no
+  botão de sair; a `.cfm-nota` é a faixa que diz o estrago concreto. Form
+  declara sem escrever JS: `data-confirmar` (pergunta) + `-texto`/`-nota`/
+  `-acao`, e `data-confirmar-seguro` desliga o tom de perigo. O listener é em
+  CAPTURE e dá `stopPropagation`, então o `forms.js` só vê o submit depois do
+  "sim" (`requestSubmit` remarcado com `data-confirmado`). Segunda pergunta
+  encadeada: `data-confirmar2*` + `data-confirmar2-campo`, o input escondido
+  que recebe "1"/"" — é assim que o cancelamento pergunta se avisa o cliente.
 - Após mudar código: `docker compose up -d --build mcp-agendamentos`.
 
 ---

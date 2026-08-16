@@ -20,7 +20,11 @@
               <form method="post" action="/admin/servico/{{ s.id }}/toggle">
                 <button class="btn-sm btn-ghost">{{ 'Pausar' if s.ativo else 'Ativar' }}</button>
               </form>
-              <form method="post" action="/admin/servico/{{ s.id }}/excluir" onsubmit="return confirm('Excluir o serviço &quot;{{ s.nome }}&quot;? Esta ação não pode ser desfeita.')">
+              <form method="post" action="/admin/servico/{{ s.id }}/excluir"
+                    data-confirmar="Excluir o serviço “{{ s.nome }}”?"
+                    data-confirmar-texto="Sai do catálogo e o agente para de oferecer."
+                    data-confirmar-nota="Para tirar de circulação sem apagar, use Pausar."
+                    data-confirmar-acao="Excluir serviço">
                 <button class="btn-sm btn-danger">Excluir</button>
               </form>
             </div>

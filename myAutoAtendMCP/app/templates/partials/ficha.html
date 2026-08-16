@@ -58,7 +58,10 @@
                 <button class="btn-sm btn-ghost">{{ 'Pausar' if c.ativo else 'Ativar' }}</button>
               </form>
               <form method="post" action="/admin/ficha/campo/{{ c.id }}/excluir"
-                    onsubmit="return confirm('Excluir o campo &quot;{{ c.rotulo }}&quot;? O que já foi preenchido nele em todos os clientes será apagado.')">
+                    data-confirmar="Excluir o campo “{{ c.rotulo }}”?"
+                    data-confirmar-texto="O campo sai da ficha de todo mundo."
+                    data-confirmar-nota="Apaga o que já estava preenchido nele em todos os clientes."
+                    data-confirmar-acao="Excluir campo">
                 <button class="btn-sm btn-danger">Excluir</button>
               </form>
             </div>

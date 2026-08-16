@@ -35,7 +35,12 @@
             <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
             <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
             <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
-                  onsubmit="if(!confirm('Cancelar o agendamento de {{ a.nome_cliente }}?'))return false;this.avisar_cliente.value=confirm('Avisar {{ a.nome_cliente }} pelo WhatsApp? A IA manda a mensagem do cancelamento.')?'1':'';">
+                  data-confirmar="Cancelar o agendamento de {{ a.nome_cliente }}?"
+                  data-confirmar-texto="{{ servico_nome.get(a.servico_id, 'Serviço') }} · {{ a.inicio.replace('T', ' às ') }}"
+                  data-confirmar-acao="Cancelar agendamento"
+                  data-confirmar2="Avisar {{ a.nome_cliente }} pelo WhatsApp?"
+                  data-confirmar2-texto="A IA escreve e envia a mensagem do cancelamento."
+                  data-confirmar2-campo="avisar_cliente">
               <input type="hidden" name="avisar_cliente" value="">
               <button class="btn-sm btn-danger">Cancelar</button>
             </form>

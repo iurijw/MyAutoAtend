@@ -762,6 +762,44 @@ html[data-theme="dark"] .tel-badge.no{background:rgba(223,111,115,.16); color:va
 .campo-erro{border-color:var(--oxblood) !important; box-shadow:0 0 0 3px rgba(138,42,47,.14);}
 .campo-erro-msg{margin:6px 0 0; font-size:12.5px; font-weight:600; color:var(--oxblood);}
 
+/* ===========================================================================
+   Confirmação (js/confirmar.js) — no lugar da caixa do browser.
+
+   O que a caixa nativa não dá e aqui é o ponto: dizer o QUE se perde. Título
+   com a pergunta, uma linha de explicação e, quando o estrago é concreto
+   (valores da ficha, aviso que vai pro cliente), a `.cfm-nota` — faixa em
+   oxblood, o único lugar colorido do cartão. O botão repete o verbo de onde
+   veio ("Excluir serviço", "Cancelar agendamento"), nunca "OK".
+   =========================================================================== */
+.cfm{width:min(400px,calc(100vw - 32px)); padding:22px 24px 18px; border:1px solid var(--line);
+  border-radius:14px; background:var(--card); color:var(--ink);
+  box-shadow:0 30px 70px -25px var(--shadow-pop);}
+.cfm::backdrop{background:rgba(33,28,22,.5); backdrop-filter:blur(2px);}
+html[data-theme="dark"] .cfm::backdrop{background:rgba(0,0,0,.62);}
+.cfm[open]{animation:cfm-entrar .16s cubic-bezier(.2,.7,.2,1);}
+@keyframes cfm-entrar{from{opacity:0; transform:translateY(6px) scale(.985);} to{opacity:1; transform:none;}}
+
+.cfm-eyebrow{margin:0 0 7px; font:700 9.5px/1 "JetBrains Mono",monospace; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--ink-soft);}
+.cfm.perigo .cfm-eyebrow{color:var(--oxblood);}
+.cfm-titulo{margin:0; font-family:"DM Serif Display",serif; font-weight:400; font-size:20px;
+  line-height:1.2; letter-spacing:-.01em;}
+.cfm-texto{margin:9px 0 0; font-size:13.5px; line-height:1.5; color:var(--ink-soft);}
+.cfm-nota{margin:14px 0 0; padding:9px 12px; border-radius:9px;
+  border-left:3px solid var(--oxblood); font-size:12.5px; line-height:1.45; color:var(--ink);
+  background:color-mix(in srgb, var(--oxblood) 11%, transparent);}
+html[data-theme="dark"] .cfm-nota{background:color-mix(in srgb, var(--oxblood) 16%, transparent);}
+
+.cfm-acts{display:flex; justify-content:flex-end; gap:9px; margin-top:20px;}
+.cfm-acts .btn{margin:0;}
+/* o botão que confirma o estrago é sólido: não é a saída "quieta" da caixa */
+.cfm-perigo{background:var(--oxblood); border-color:var(--oxblood); color:#f6ead2;}
+.cfm-perigo:hover{background:var(--oxblood-d); border-color:var(--oxblood-d); color:#f6ead2;}
+html[data-theme="dark"] .cfm-perigo{background:var(--oxblood-d); border-color:var(--oxblood-d);
+  color:#f6ead2;}
+
+@media(prefers-reduced-motion: reduce){ .cfm[open]{animation:none;} }
+
 /* atalho para reabrir o guia, no pé da Configuração geral */
 .cfg-guia{display:flex; align-items:center; gap:16px; flex-wrap:wrap;
   margin-top:30px; padding-top:20px; border-top:1px solid var(--line);}

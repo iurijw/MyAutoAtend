@@ -28,10 +28,18 @@
       <button class="btn-acento">Salvar horários</button>
     </form>
     <div class="hf-acoes">
-      <form method="post" action="/admin/horarios/restaurar" onsubmit="return confirm('Restaurar o padrão (segunda a sexta, 08:00–12:00 e 13:30–18:00)? A grade atual será substituída.')">
+      <form method="post" action="/admin/horarios/restaurar"
+            data-confirmar="Restaurar a grade padrão?"
+            data-confirmar-texto="Segunda a sexta, 08:00–12:00 e 13:30–18:00."
+            data-confirmar-nota="Substitui a grade atual inteira."
+            data-confirmar-acao="Restaurar padrão">
         <button class="btn-sm btn-ghost">Restaurar padrão</button>
       </form>
-      <form method="post" action="/admin/horarios/limpar" onsubmit="return confirm('Apagar TODOS os horários? Todos os dias ficarão sem expediente e o agente não oferecerá nenhum horário até você cadastrar novos.')">
+      <form method="post" action="/admin/horarios/limpar"
+            data-confirmar="Apagar todos os horários?"
+            data-confirmar-texto="Todos os dias ficam sem expediente."
+            data-confirmar-nota="Enquanto a grade estiver vazia, o agente não oferece horário nenhum."
+            data-confirmar-acao="Apagar tudo">
         <button class="btn-sm btn-danger">Apagar tudo</button>
       </form>
     </div>

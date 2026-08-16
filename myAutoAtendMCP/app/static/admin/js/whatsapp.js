@@ -1,6 +1,7 @@
 /* Card "Conexão WhatsApp": estado da instância, QR Code e desconexão. */
 
 import { toast } from './toast.js';
+import { confirmar } from './confirmar.js';
 
 const elStatus  = document.getElementById('wa-status');
 const elHint    = document.getElementById('wa-hint');
@@ -125,7 +126,14 @@ async function gerarQr(){
 }
 
 async function desconectar(){
-  if (!confirm('Desconectar o WhatsApp deste número?')) return;
+  const ok = await confirmar({
+    titulo: 'Desconectar este WhatsApp?',
+    texto: 'O bot para de receber e de responder até você parear de novo.',
+    nota: 'Conversas, agenda e clientes continuam salvos.',
+    acao: 'Desconectar',
+    perigo: true,
+  });
+  if (!ok) return;
   btnOut.disabled = true;
   try {
     const r = await fetch('/admin/whatsapp/desconectar', {method:'POST'});

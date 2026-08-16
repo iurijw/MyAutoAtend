@@ -2,6 +2,7 @@
    Dados vindos do servidor (Jinja) chegam por window.__ADMIN__ (ver admin.html). */
 
 import './sessao.js';   // 1º: embrulha o fetch antes de qualquer módulo chamar
+import './confirmar.js';  // modal de confirmação + os forms com data-confirmar
 import './nav.js';
 import './tema.js';
 import './forms.js';

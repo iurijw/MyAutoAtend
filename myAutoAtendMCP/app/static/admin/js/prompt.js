@@ -2,6 +2,7 @@
    Blocos: geral + MCP do dono + MCP do cliente (um textarea cada). */
 
 import { toast } from './toast.js';
+import { confirmar } from './confirmar.js';
 
 const $ = (id) => document.getElementById(id);
 let mcpDonoPadrao = '';
@@ -55,9 +56,15 @@ async function salvar(btn){
 }
 
 // Restaura um bloco MCP para o texto padrão (só preenche o campo — salvar publica).
-function restaurar(campoId, padrao, rotulo){
+async function restaurar(campoId, padrao, rotulo){
   if (!padrao) return;
-  if (!confirm(`Restaurar o bloco MCP (${rotulo}) para o texto padrão? O campo será sobrescrito (salve para publicar).`)) return;
+  const ok = await confirmar({
+    titulo: `Restaurar o bloco MCP (${rotulo})?`,
+    texto: 'O campo recebe o texto padrão do sistema.',
+    nota: 'Sobrescreve o que está escrito aí. Nada é publicado até você salvar.',
+    acao: 'Restaurar texto',
+  });
+  if (!ok) return;
   $(campoId).value = padrao;
   msg(`Bloco MCP (${rotulo}) restaurado ao padrão — clique em Salvar.`, true);
 }

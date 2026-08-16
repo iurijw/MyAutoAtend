@@ -8,6 +8,7 @@
    a mesma que o agente usa); aqui só marcamos o campo recusado. */
 
 import { toast } from './toast.js';
+import { confirmar } from './confirmar.js';
 import {
   ligarTelefone, definirTelefone, formatarTelefone, soDigitos,
 } from './telefone.js';
@@ -228,10 +229,12 @@ if (modal) {
     const telAtual = soDigitos(alvo);
     const trocouTel = !!telNovo && telNovo !== telAtual;
     const mudouNome = inpNome.value.trim() !== nomeAberto;
-    if (trocouTel && !confirm(
-      `Trocar o telefone de ${elTel.textContent} para ${formatarTelefone(telNovo)}?\n\n`
-      + 'Ficha, conversa, agendamentos e avisos na fila passam para o número novo.',
-    )) return;
+    if (trocouTel && !await confirmar({
+      titulo: `Trocar o telefone para ${formatarTelefone(telNovo)}?`,
+      texto: `O contato hoje está como ${elTel.textContent}.`,
+      nota: 'Ficha, conversa, agendamentos e avisos na fila passam para o número novo.',
+      acao: 'Trocar telefone',
+    })) return;
 
     marcarErros(elCampos, {});
     btnSalvar.disabled = true;
