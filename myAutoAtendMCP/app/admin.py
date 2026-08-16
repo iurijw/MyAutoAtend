@@ -416,6 +416,26 @@ def agente_prompt_salvar(
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# Guia de primeiros passos (aparece uma vez, na instalação nova)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/onboarding/concluir")
+def onboarding_concluir(_: str = Depends(autenticar)):
+    """Marca o guia como visto — vale tanto p/ "Concluir" quanto p/ "Pular"."""
+    db.update_config(onboarding_visto=True)
+    return {"ok": True}
+
+
+@router.post("/admin/onboarding/refazer")
+def onboarding_refazer(_: str = Depends(autenticar)):
+    """Reabre o guia (botão na Configuração geral). Útil depois de um reset,
+    ou para conferir o passo a passo sem apagar o banco."""
+    db.update_config(onboarding_visto=False)
+    return RedirectResponse("/admin", status_code=303)
+
+
 @router.post("/admin/config")
 def salvar_config(
     _: str = Depends(autenticar),

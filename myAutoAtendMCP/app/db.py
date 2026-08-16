@@ -37,6 +37,9 @@ class Config(SQLModel, table=True):
     fuso: str = settings.timezone
     avisar_dono: bool = True  # aviso no WhatsApp do dono a cada ação do bot
     ficha_ativa: bool = False  # ficha de cadastro do cliente (feature opcional)
+    # Guia de primeiros passos: aparece uma vez, na instalação nova (ver
+    # `_migrar` — banco já existente nasce com a coluna em 1 e nunca vê).
+    onboarding_visto: bool = False
 
 
 class HorarioFuncionamento(SQLModel, table=True):
@@ -304,6 +307,14 @@ def _migrar() -> None:
         if cols and "ficha_ativa" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE config ADD COLUMN ficha_ativa BOOLEAN NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+        # DEFAULT 1 de propósito: banco que já existe é instalação em uso e não
+        # deve ganhar o guia de primeiros passos. Instalação nova nasce com o
+        # default do modelo (False) e vê o guia uma vez.
+        if cols and "onboarding_visto" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE config ADD COLUMN onboarding_visto BOOLEAN NOT NULL DEFAULT 1"
             )
             conn.commit()
 

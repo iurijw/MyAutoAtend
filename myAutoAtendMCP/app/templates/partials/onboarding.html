@@ -1,0 +1,183 @@
+<!-- Guia de primeiros passos: sobreposição da instalação nova.
+     Cada passo veste o data-accent da seção que ele configura — quem passa
+     pelo guia já aprende o código de cor da barra lateral. -->
+<div class="ob" id="ob" data-accent="zap" hidden>
+  <div class="ob-veu"></div>
+
+  <div class="ob-card" role="dialog" aria-modal="true" aria-labelledby="ob-titulo">
+    <!-- Coluna do trilho: a lombada da marca enchendo passo a passo -->
+    <aside class="ob-trilho">
+      <div class="ob-marca">
+        <span class="ob-pole"><span class="ob-pole-cheio" id="ob-pole-cheio"></span></span>
+        <div>
+          <p class="ob-eyebrow">Primeiros passos</p>
+          <p class="ob-nome">myAutoAtend</p>
+        </div>
+      </div>
+
+      <ol class="ob-lista" id="ob-lista">
+        <li class="ob-passo" data-passo="0" data-accent="zap">
+          <span class="ob-num">01</span>
+          <span class="ob-rot">Conectar o WhatsApp</span>
+        </li>
+        <li class="ob-passo" data-passo="1" data-accent="ouro">
+          <span class="ob-num">02</span>
+          <span class="ob-rot">Cadastrar um serviço</span>
+        </li>
+        <li class="ob-passo" data-passo="2" data-accent="mata">
+          <span class="ob-num">03</span>
+          <span class="ob-rot">Horário de atendimento</span>
+        </li>
+        <li class="ob-passo" data-passo="3" data-accent="neutro">
+          <span class="ob-num">04</span>
+          <span class="ob-rot">Seu telefone</span>
+        </li>
+        <li class="ob-passo" data-passo="4" data-accent="tinta">
+          <span class="ob-num">05</span>
+          <span class="ob-rot">Ligar o agente</span>
+        </li>
+      </ol>
+
+      <button type="button" class="ob-pular" id="ob-pular">Pular por agora</button>
+    </aside>
+
+    <!-- Coluna do conteúdo -->
+    <section class="ob-conteudo">
+      <header class="ob-topo">
+        <p class="ob-passo-de" id="ob-contador">Passo 1 de 4</p>
+        <h2 class="ob-titulo" id="ob-titulo">Conectar o WhatsApp</h2>
+        <p class="ob-desc" id="ob-desc">
+          Abra o WhatsApp do negócio, vá em Aparelhos conectados e aponte a câmera para o código.
+        </p>
+      </header>
+
+      <div class="ob-corpo">
+        <!-- 1. WhatsApp -->
+        <div class="ob-tela" data-tela="0">
+          <div class="ob-qr-area">
+            <div class="ob-qr-moldura" id="ob-qr-moldura">
+              <img class="ob-qr" id="ob-qr" alt="QR Code para conectar o WhatsApp">
+              <p class="ob-qr-vazio" id="ob-qr-vazio">Gerando o código…</p>
+            </div>
+            <div class="ob-qr-lado">
+              <p class="ob-estado" id="ob-estado"><span class="ob-dot"></span><span id="ob-estado-txt">verificando…</span></p>
+              <p class="ob-nota" id="ob-qr-dica">O código expira rápido. Se sumir, gere outro.</p>
+              <button type="button" class="btn btn-sm btn-ghost" id="ob-qr-novo">Gerar outro código</button>
+              <div class="ob-conectado" id="ob-conectado" hidden>
+                <span class="ava ob-ava" id="ob-ava">W</span>
+                <div>
+                  <p class="ob-conectado-nome" id="ob-conectado-nome">WhatsApp conectado</p>
+                  <p class="ob-conectado-num meta" id="ob-conectado-num"></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Serviço -->
+        <div class="ob-tela" data-tela="1" hidden>
+          <div class="row">
+            <div>
+              <label for="ob-serv-nome">Nome do serviço</label>
+              <input id="ob-serv-nome" placeholder="Ex.: Corte de cabelo">
+            </div>
+            <div>
+              <label for="ob-serv-valor">Preço (R$)</label>
+              <input id="ob-serv-valor" type="number" step="0.01" min="0" placeholder="60">
+            </div>
+          </div>
+          <label for="ob-serv-dur">Duração (minutos)</label>
+          <input id="ob-serv-dur" type="number" min="5" step="5" placeholder="30">
+          <label for="ob-serv-desc">Descrição <span class="ob-opcional">(opcional — o agente usa ao explicar)</span></label>
+          <input id="ob-serv-desc" placeholder="Máquina e tesoura, com finalização">
+          <p class="ob-nota">Um basta para começar. O resto do catálogo entra depois, em Serviços.</p>
+        </div>
+
+        <!-- 3. Horário de atendimento (versão enxuta: dias + dois turnos iguais
+             para todos eles; grade fina, por dia, fica na seção Horários) -->
+        <div class="ob-tela" data-tela="2" hidden>
+          <label id="ob-dias-rot">Dias em que você atende</label>
+          <div class="ob-dias" id="ob-dias" role="group" aria-labelledby="ob-dias-rot">
+            <button type="button" class="ob-dia" data-dia="0" aria-pressed="true"><span>seg</span></button>
+            <button type="button" class="ob-dia" data-dia="1" aria-pressed="true"><span>ter</span></button>
+            <button type="button" class="ob-dia" data-dia="2" aria-pressed="true"><span>qua</span></button>
+            <button type="button" class="ob-dia" data-dia="3" aria-pressed="true"><span>qui</span></button>
+            <button type="button" class="ob-dia" data-dia="4" aria-pressed="true"><span>sex</span></button>
+            <button type="button" class="ob-dia" data-dia="5" aria-pressed="false"><span>sáb</span></button>
+            <button type="button" class="ob-dia" data-dia="6" aria-pressed="false"><span>dom</span></button>
+          </div>
+
+          <div class="ob-turnos">
+            <div class="ob-turno">
+              <label for="ob-m1">Manhã</label>
+              <div class="ob-faixa">
+                <input id="ob-m1" type="time" value="08:00" aria-label="Início da manhã">
+                <span class="ob-ate">até</span>
+                <input id="ob-m2" type="time" value="12:00" aria-label="Fim da manhã">
+              </div>
+            </div>
+            <div class="ob-turno">
+              <label for="ob-t1">Tarde <span class="ob-opcional">(deixe vazio se não tem)</span></label>
+              <div class="ob-faixa">
+                <input id="ob-t1" type="time" value="13:30" aria-label="Início da tarde">
+                <span class="ob-ate">até</span>
+                <input id="ob-t2" type="time" value="18:00" aria-label="Fim da tarde">
+              </div>
+            </div>
+          </div>
+          <p class="ob-nota">
+            Vale para todos os dias marcados. Horário diferente em um dia só — ou um terceiro
+            turno — você ajusta depois em Horários.
+          </p>
+        </div>
+
+        <!-- 4. Telefone do dono -->
+        <div class="ob-tela" data-tela="3" hidden>
+          <label for="ob-dono">Seu número no WhatsApp</label>
+          <input id="ob-dono" data-telefone placeholder="(99) 99999-9999">
+          <p class="ob-nota">
+            É por esse número que o bot reconhece você. Falando com ele, você fecha a agenda,
+            remaneja o dia e vê a agenda inteira — coisas que nenhum cliente consegue pedir.
+          </p>
+        </div>
+
+        <!-- 5. IA -->
+        <div class="ob-tela" data-tela="4" hidden>
+          <div class="row">
+            <div>
+              <label for="ob-ia-prov">Provedor</label>
+              <select id="ob-ia-prov"></select>
+            </div>
+            <div>
+              <label for="ob-ia-modelo">Modelo <span class="ob-opcional">(opcional)</span></label>
+              <input id="ob-ia-modelo" placeholder="gpt-5.1">
+            </div>
+          </div>
+          <label for="ob-ia-url" id="ob-ia-url-rot" hidden>URL base</label>
+          <input id="ob-ia-url" placeholder="https://meu-provedor/v1" hidden>
+          <label for="ob-ia-chave">Chave de API</label>
+          <input id="ob-ia-chave" type="password" autocomplete="off" placeholder="sk-…">
+          <p class="ob-nota">
+            A chave fica só no seu servidor e nenhuma tela devolve ela depois. Sem chave, o bot
+            recebe as mensagens mas não responde.
+          </p>
+        </div>
+
+        <!-- Fim -->
+        <div class="ob-tela ob-fim" data-tela="5" hidden>
+          <ul class="ob-resumo" id="ob-resumo"></ul>
+          <p class="ob-nota">
+            Manda uma mensagem para o número conectado e veja o bot responder. O que faltar
+            está na barra lateral — e o guia volta pelo botão em Configurações.
+          </p>
+        </div>
+      </div>
+
+      <footer class="ob-pe">
+        <button type="button" class="btn btn-ghost btn-sm" id="ob-voltar" hidden>Voltar</button>
+        <span class="ob-erro" id="ob-erro" role="alert"></span>
+        <button type="button" class="btn btn-acento ob-avancar" id="ob-avancar">Continuar</button>
+      </footer>
+    </section>
+  </div>
+</div>

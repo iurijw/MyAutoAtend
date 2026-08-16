@@ -16,3 +16,4 @@ import './ficha.js';
 import './telefone.js';
 import './agendamento.js';
 import './avatars.js';
+import './onboarding.js';   // só age na instalação nova (partial ausente depois)

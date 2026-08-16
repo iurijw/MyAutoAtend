@@ -28,7 +28,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/sessao.py` | Sessão do painel: JWT HS256 (só stdlib) em cookie httpOnly, freio de força bruta por IP, exceção `SessaoInvalida` |
 | `myAutoAtendMCP/app/templates/login.html` | Tela de entrada (`/login`), fora do shell do painel — usa `admin.css` (tokens) + `login.css` |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css — o `/static` também vai com `Cache-Control: no-cache`, ver `EstaticosRevalidados` em `main.py`, senão o browser fica com o JS velho depois do deploy) |
-| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) |
+| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) e `onboarding` (guia da 1ª execução, incluído só quando `Config.onboarding_visto` é falso) |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
@@ -361,6 +361,26 @@ primeiro `docker compose up -d`.
   apontando para a ficha existente. Telefone digitado à mão passa por
   `phone.plausivel` (E.164 válido ou 10–15 dígitos) — `normalizar` sozinho
   aceita qualquer dígito de propósito, para o pipeline nunca perder contato.
+- **Guia de primeiros passos** (`partials/onboarding.html` + `js/onboarding.js`):
+  sobreposição que abre UMA vez, na instalação nova. 5 passos na ordem em que
+  o sistema depende deles — conectar WhatsApp (QR ao vivo, poll 4s), cadastrar
+  um serviço, horário de atendimento, telefone do dono, chave de IA — e uma
+  tela final com o que ficou pendente. Não tem endpoint próprio de gravação:
+  cada passo POSTa no MESMO lugar que a seção correspondente
+  (`/admin/servico`, `/admin/horarios`, `/admin/config`,
+  `/admin/ia/credencial` + `/admin/ia/modelo`). O passo de horário é a versão
+  enxuta da grade: sete chips de dia + dois turnos que valem para todos os
+  dias marcados (a grade fina, por dia, fica na seção Horários). Nenhum dia
+  marcado = passo pulado, porque `/admin/horarios` é replace-all e um POST
+  vazio apagaria o padrão semeado no primeiro boot. Passo em branco é pulado;
+  "Pular por agora" fecha tudo. Cada passo veste o `data-accent` da seção que
+  configura, então o guia já ensina o código de cor da barra lateral.
+  Estado: `Config.onboarding_visto` — o ALTER em `_migrar` entra com
+  **DEFAULT 1** de propósito (banco que já existe é instalação em uso e não
+  deve ver o guia; instalação nova nasce com o default do modelo, False).
+  `POST /admin/onboarding/concluir` marca visto (serve p/ concluir e p/ pular)
+  e `POST /admin/onboarding/refazer` reabre — botão "Abrir o guia" no pé da
+  Configuração geral.
 - **UI do painel**: barra lateral fixa + área de conteúdo (sem grade
   arrastável — Gridstack/`grade.js`/`gear.js` removidos). Conteúdo **sem caixa
   interna**: `.card` é só bloco de espaçamento (nada de borda/fundo/sombra) —
