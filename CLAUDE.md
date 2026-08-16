@@ -104,7 +104,13 @@ primeiro `docker compose up -d`.
   agente (pausa + envio manual do painel); `historico_para_bolhas` desserializa
   p/ o modal de conversas; `limpar_raciocinio` remove `<think>`/`<answer>`
   vazados por modelos reasoning (saída e leitura).
-- System prompt: prefixo de data/hora (gerado em Python, fuso da Config) +
+- System prompt: cabeçalho gerado em Python — identidade (`Você é o assistente
+  virtual do estabelecimento {Config.nome_negocio}…`, só quando o nome está
+  preenchido) + data/hora no fuso da Config. O nome NÃO fica escrito no texto
+  do prompt: trocar em Configuração geral vale na mensagem seguinte, sem
+  ninguém editar instrução. O default `PROMPT_GERAL_PADRAO` proíbe emoji
+  ("NUNCA use emojis") — prompt já salvo no banco não muda sozinho, o dono
+  edita ou restaura o padrão no painel. Depois do cabeçalho vem a
   instrução geral + bloco MCP **por perfil** — tabela `Prompt`, chaves `geral`,
   `mcp_dono`, `mcp_cliente` (defaults `PROMPT_GERAL_PADRAO`/`PROMPT_MCP_DONO_
   PADRAO`/`PROMPT_MCP_CLIENTE_PADRAO` em `agente.py`; a versão cliente não
@@ -364,7 +370,8 @@ primeiro `docker compose up -d`.
 - **Guia de primeiros passos** (`partials/onboarding.html` + `js/onboarding.js`):
   sobreposição que abre UMA vez, na instalação nova. 5 passos na ordem em que
   o sistema depende deles — conectar WhatsApp (QR ao vivo, poll 4s), cadastrar
-  um serviço, horário de atendimento, telefone do dono, chave de IA — e uma
+  um serviço, horário de atendimento, nome do negócio + telefone do dono
+  (mesmo POST `/admin/config`; o nome vai para o cabeçalho do prompt), chave de IA — e uma
   tela final com o que ficou pendente. Não tem endpoint próprio de gravação:
   cada passo POSTa no MESMO lugar que a seção correspondente
   (`/admin/servico`, `/admin/horarios`, `/admin/config`,

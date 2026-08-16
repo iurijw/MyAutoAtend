@@ -27,8 +27,8 @@ function iniciar() {
      'O que você faz, quanto tempo leva e quanto custa — é assim que o bot monta a agenda.'],
     ['Horário de atendimento',
      'Fora dessas faixas o bot não marca nada. É o cerco da agenda.'],
-    ['Seu telefone',
-     'O número que manda no bot. Ele obedece a você e a mais ninguém.'],
+    ['Seu negócio',
+     'O nome que o agente usa para se apresentar e o número que manda nele.'],
     ['Ligar o agente',
      'A chave de IA que faz o bot pensar. Sem ela, ele lê as mensagens e não responde.'],
     ['Pronto para atender', 'Configuração terminada — dá para mexer em tudo isso depois.'],
@@ -196,14 +196,23 @@ function iniciar() {
     }
 
     if (n === 3) {
+      const nome = val('ob-nome');
       const tel = val('ob-dono').replace(/\D/g, '');
-      if (!tel) return null;
-      if (tel.length < 10) return 'Esse número está curto — confira o DDD.';
+      if (!nome && !tel) return null;
+      if (tel && tel.length < 10) return 'Esse número está curto — confira o DDD.';
+      // /admin/config exige telefone e fuso: o que a pessoa não digitou vai
+      // com o valor que já está salvo, para o POST não zerar nada.
+      const atualCfg = window.__ADMIN__ || {};
       const falha = await enviar('/admin/config', {
-        telefone_dono: tel, fuso: (window.__ADMIN__ || {}).fuso || 'America/Sao_Paulo',
+        nome_negocio: nome,
+        telefone_dono: tel || atualCfg.telefone_dono || '',
+        fuso: atualCfg.fuso || 'America/Sao_Paulo',
         avisar_dono: 'true',
       });
-      if (!falha) { feitos.add(3); toast('ok', 'Telefone do dono salvo.'); }
+      if (!falha) {
+        feitos.add(3);
+        toast('ok', nome ? `${nome} configurado.` : 'Telefone do dono salvo.');
+      }
       return falha;
     }
 
@@ -229,7 +238,7 @@ function iniciar() {
       [0, 'WhatsApp conectado', 'Conecte o WhatsApp na seção Conexão'],
       [1, 'Serviço cadastrado', 'Cadastre um serviço em Serviços'],
       [2, 'Horário de atendimento definido', 'Monte a grade em Horários'],
-      [3, 'Telefone do dono salvo', 'Informe seu telefone em Configurações'],
+      [3, 'Nome e telefone do dono salvos', 'Informe nome e telefone em Configurações'],
       [4, 'Agente com chave de IA', 'Salve a chave de IA em Agente de IA'],
     ];
     q('ob-resumo').innerHTML = linhas.map(([n, feito, falta]) => `

@@ -207,6 +207,7 @@
   <script>window.__ADMIN__ = {
     provedores: {{ provedores_ia | tojson }},
     fuso: {{ config.fuso | tojson }},
+    telefone_dono: {{ config.telefone_dono | tojson }},
     onboarding: {{ (not config.onboarding_visto) | tojson }}
   };</script>
   <script type="module" src="/static/admin/js/admin.js"></script>

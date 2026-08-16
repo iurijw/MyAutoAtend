@@ -34,6 +34,8 @@ class Config(SQLModel, table=True):
     # colunas fora do modelo — sem migração.
     id: int = Field(default=1, primary_key=True)
     telefone_dono: str = settings.owner_phone
+    # Nome do negócio: entra no system prompt do agente (ver agente._system_prompt).
+    nome_negocio: str = ""
     fuso: str = settings.timezone
     avisar_dono: bool = True  # aviso no WhatsApp do dono a cada ação do bot
     ficha_ativa: bool = False  # ficha de cadastro do cliente (feature opcional)
@@ -312,6 +314,11 @@ def _migrar() -> None:
         # DEFAULT 1 de propósito: banco que já existe é instalação em uso e não
         # deve ganhar o guia de primeiros passos. Instalação nova nasce com o
         # default do modelo (False) e vê o guia uma vez.
+        if cols and "nome_negocio" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE config ADD COLUMN nome_negocio VARCHAR NOT NULL DEFAULT ''"
+            )
+            conn.commit()
         if cols and "onboarding_visto" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE config ADD COLUMN onboarding_visto BOOLEAN NOT NULL DEFAULT 1"

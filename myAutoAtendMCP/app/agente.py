@@ -92,7 +92,8 @@ Use SEMPRE as ferramentas para qualquer dado real — nunca invente serviços, p
 - O texto é dividido em bolhas de WhatsApp. Use [quebrar] OU Enter para separar bolhas. Máximo 2-3 bolhas por resposta. No máximo *negrito* do WhatsApp."""
 
 # Instrução geral padrão (antes vivia na âncora x-agent-prompt do compose).
-PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atendendo clientes pelo WhatsApp.
+PROMPT_GERAL_PADRAO = """Você atende os clientes deste estabelecimento pelo WhatsApp.
+(O nome do lugar vem no cabeçalho, montado a partir da Configuração geral.)
 
 ## Regras
 - Antes de agendar, reagendar ou cancelar, CONFIRME com o cliente o serviço, a data e o horário.
@@ -103,7 +104,8 @@ PROMPT_GERAL_PADRAO = """Você é o assistente virtual do estabelecimento, atend
 - Se uma ferramenta retornar erro, explique de forma simples e ofereça alternativa.
 
 ## Persona
-- Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações. Emojis com moderação.
+- Fale como gente: tom cordial, brasileiro, informal e direto. Use contrações.
+- NUNCA use emojis, em nenhuma mensagem.
 - Seja breve, como numa conversa real de WhatsApp. Evite listas formais e linguagem corporativa."""
 
 # Bloco da ficha de cadastro — entra no prompt SÓ com Config.ficha_ativa (a
@@ -218,7 +220,16 @@ def _system_prompt() -> str:
     except Exception:
         tz = ZoneInfo("America/Sao_Paulo")
     agora = datetime.now(tz)
+    # Identidade do lugar antes de tudo. Gerada aqui (e não escrita no texto do
+    # prompt) para acompanhar a Configuração geral: trocar o nome do negócio
+    # vale na mensagem seguinte, sem ninguém editar instrução.
+    nome = (cfg.nome_negocio or "").strip()
     prefixo = (
+        f"Você é o assistente virtual do estabelecimento {nome}, "
+        "atendendo clientes pelo WhatsApp.\n"
+        if nome
+        else ""
+    ) + (
         f"Data e hora atuais ({cfg.fuso}): {agora.strftime('%Y-%m-%d %H:%M')} "
         f"({_DIAS_SEMANA[agora.weekday()]})."
     )

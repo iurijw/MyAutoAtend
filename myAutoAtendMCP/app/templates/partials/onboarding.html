@@ -30,7 +30,7 @@
         </li>
         <li class="ob-passo" data-passo="3" data-accent="neutro">
           <span class="ob-num">04</span>
-          <span class="ob-rot">Seu telefone</span>
+          <span class="ob-rot">Seu negócio</span>
         </li>
         <li class="ob-passo" data-passo="4" data-accent="tinta">
           <span class="ob-num">05</span>
@@ -131,8 +131,14 @@
           </p>
         </div>
 
-        <!-- 4. Telefone do dono -->
+        <!-- 4. Identidade do negócio: nome (vai para o prompt do agente) + o
+             telefone que autoriza as ações de gestão. Os dois moram na
+             Configuração geral, então saem no mesmo POST. -->
         <div class="ob-tela" data-tela="3" hidden>
+          <label for="ob-nome">Nome do estabelecimento</label>
+          <input id="ob-nome" placeholder="Ex.: Barbearia Central" autocomplete="organization">
+          <p class="ob-nota">É assim que o agente vai se apresentar: "assistente virtual da Barbearia Central".</p>
+
           <label for="ob-dono">Seu número no WhatsApp</label>
           <input id="ob-dono" data-telefone placeholder="(99) 99999-9999">
           <p class="ob-nota">

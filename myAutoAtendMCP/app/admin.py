@@ -442,8 +442,13 @@ def salvar_config(
     telefone_dono: str = Form(...),
     fuso: str = Form(...),
     avisar_dono: bool = Form(False),  # checkbox desmarcado não envia o campo
+    nome_negocio: str | None = Form(None),
 ):
-    db.update_config(telefone_dono=telefone_dono, fuso=fuso, avisar_dono=avisar_dono)
+    campos = {"telefone_dono": telefone_dono, "fuso": fuso, "avisar_dono": avisar_dono}
+    # None = o form nem mandou o campo (não mexe); "" = o dono apagou de propósito.
+    if nome_negocio is not None:
+        campos["nome_negocio"] = nome_negocio.strip()
+    db.update_config(**campos)
     return RedirectResponse("/admin", status_code=303)
 
 
