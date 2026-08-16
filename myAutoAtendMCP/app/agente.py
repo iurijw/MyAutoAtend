@@ -348,9 +348,11 @@ def limpar_raciocinio(texto: str) -> str:
 # nos defaults de MCP — o modelo trata como instrução, não como o cliente.
 MARCADOR_TAREFA = "[TAREFA INTERNA]"
 
-# `model_name` gravado quando a fala do bot foi digitada pelo dono no painel.
-# Nome improvável de modelo real; é metadado, o modelo nunca lê isso.
-MODELO_ENVIO_MANUAL = "painel-manual"
+# `model_name` gravado quando a fala do bot NÃO veio da IA. Nome improvável de
+# modelo real; é metadado, o modelo nunca lê isso.
+MODELO_ENVIO_MANUAL = "painel-manual"  # digitada pelo dono no painel
+MODELO_ENVIO_APARELHO = "whatsapp-aparelho"  # digitada no WhatsApp do negócio
+_ORIGENS = {"painel": MODELO_ENVIO_MANUAL, "aparelho": MODELO_ENVIO_APARELHO}
 
 
 async def executar_tarefa(telefone: str, instrucao: str) -> str:
@@ -386,22 +388,45 @@ def registrar_na_memoria(
     mesmo papel são aceitáveis. `telefone` é a chave de memória (remoteJid),
     igual ao 1º argumento de `responder`.
 
-    `origem="painel"` marca a fala do bot como digitada pelo dono: vai no
-    `model_name` do ModelResponse (campo de metadado — sobrevive à
+    `origem` marca de quem é a mão por trás da fala do bot: "painel" (dono
+    digitou no painel) ou "aparelho" (dono digitou no WhatsApp do negócio).
+    Vai no `model_name` do ModelResponse (campo de metadado — sobrevive à
     serialização e NÃO entra no que o modelo lê), e é o que faz o painel
-    distinguir "Automatizado" de "Enviado por você".
+    distinguir "Automatizado" das mensagens escritas à mão.
     """
     conteudo = (texto or "").strip()
     if not conteudo:
         return
     msgs = _carregar_memoria(telefone)
     if papel == "bot":
-        modelo = MODELO_ENVIO_MANUAL if origem == "painel" else None
-        msgs.append(ModelResponse(parts=[TextPart(content=conteudo)], model_name=modelo))
+        msgs.append(
+            ModelResponse(
+                parts=[TextPart(content=conteudo)], model_name=_ORIGENS.get(origem)
+            )
+        )
     else:
         msgs.append(ModelRequest(parts=[UserPromptPart(content=conteudo)]))
     msgs = _aparar(msgs)
     db.set_conversa(telefone, ModelMessagesTypeAdapter.dump_json(msgs).decode())
+
+
+def foi_dito_pelo_bot(telefone: str, texto: str) -> bool:
+    """O bot acabou de dizer isso? (últimos dois turnos dele)
+
+    A Evolution devolve pelo webhook tudo que sai do nosso número, inclusive o
+    que o próprio bot enviou. O caminho normal descarta o eco pelo id da
+    mensagem (`evolution.enviado_por_nos`); este é o segundo cinto, para o eco
+    que chega depois de um restart, quando a lista de ids já se perdeu.
+    """
+    alvo = (texto or "").strip()
+    if not alvo:
+        return False
+    respostas = [m for m in _carregar_memoria(telefone) if isinstance(m, ModelResponse)]
+    for m in respostas[-2:]:
+        for p in m.parts:
+            if isinstance(p, TextPart) and alvo in dividir_bolhas(p.content or ""):
+                return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -449,8 +474,9 @@ def historico_para_bolhas(bruto: str | None) -> list[dict]:
     UMA mensagem dele é quebra de linha, não mensagem nova.
 
     Cada bolha: {"quem": "cliente"|"bot"|"sistema", "texto", "hora" HH:MM,
-    "auto": bool} — `auto` só existe no bot: True = escrita pela IA, False =
-    enviada à mão pelo dono no painel (ver `registrar_na_memoria`).
+    "auto": bool, "origem": "ia"|"painel"|"aparelho"} — `auto`/`origem` só
+    existem no bot: quem escreveu foi a IA, o dono pelo painel ou o dono pelo
+    WhatsApp do negócio (ver `registrar_na_memoria`).
     """
     if not bruto:
         return []
@@ -476,7 +502,7 @@ def historico_para_bolhas(bruto: str | None) -> list[dict]:
                 for parte in dividir_lote_do_cliente(texto):
                     bolhas.append({"quem": papel, "texto": parte, "hora": hora})
         elif isinstance(m, ModelResponse):
-            automatica = m.model_name != MODELO_ENVIO_MANUAL
+            escrita_a_mao = {v: k for k, v in _ORIGENS.items()}.get(m.model_name)
             for p in m.parts:
                 if not isinstance(p, TextPart):
                     continue
@@ -485,7 +511,13 @@ def historico_para_bolhas(bruto: str | None) -> list[dict]:
                 hora = _hora_local(m.timestamp)
                 for parte in dividir_bolhas(texto):
                     bolhas.append(
-                        {"quem": "bot", "texto": parte, "hora": hora, "auto": automatica}
+                        {
+                            "quem": "bot",
+                            "texto": parte,
+                            "hora": hora,
+                            "auto": escrita_a_mao is None,
+                            "origem": escrita_a_mao or "ia",
+                        }
                     )
     return bolhas
 

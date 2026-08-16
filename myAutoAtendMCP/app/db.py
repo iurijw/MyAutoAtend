@@ -96,6 +96,53 @@ class Conversa(SQLModel, table=True):
     atualizado_em: str = ""
 
 
+class MensagemRef(SQLModel, table=True):
+    """Ponte entre o id de uma mensagem no WhatsApp e a bolha da conversa.
+
+    A memória do agente não guarda id nenhum (o modelo não tem o que fazer com
+    isso), mas a REAÇÃO chega apontando para o id da mensagem reagida. Esta
+    tabela guarda o mínimo para reencontrar a bolha: direção + texto, do mesmo
+    jeito que a mídia faz.
+
+    Uma linha por mensagem que passou por nós — recebida do cliente ou enviada
+    por nós (uma por bolha). São linhas minúsculas e não há expurgo: o volume
+    acompanha o da conversa.
+    """
+
+    msg_id: str = Field(primary_key=True)
+    telefone: str = Field(index=True)
+    direcao: str = "cliente"  # cliente | bot
+    texto: str = ""
+    momento: str = ""
+    reacao: str = ""  # emoji atual ("" = sem reação / reação desfeita)
+    reacao_de: str = ""  # cliente | bot — quem reagiu
+
+
+class Midia(SQLModel, table=True):
+    """Arquivo que passou pela conversa (imagem, vídeo, áudio, figurinha, doc).
+
+    A memória do agente (`Conversa`) só guarda TEXTO — é o que o modelo lê.
+    Esta tabela é o lado visual: o arquivo em si fica no disco
+    (`app/midia.py`, pasta ao lado do banco) e aqui ficam os metadados.
+
+    `texto` é exatamente o marcador que foi gravado na memória ("[Imagem
+    enviada pelo cliente] ..."), e é por ele que o painel casa o arquivo com a
+    bolha correspondente — sem sujar o histórico do modelo com ids.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    telefone: str = Field(index=True)  # E.164 normalizado do contato
+    momento: str = ""  # ISO UTC — ordena as mídias entre si
+    direcao: str = "cliente"  # cliente | bot
+    tipo: str = ""  # imagem | video | audio | figurinha | documento
+    mime: str = ""
+    arquivo: str = ""  # nome do arquivo dentro da pasta de mídia
+    nome: str = ""  # nome original (documento)
+    legenda: str = ""
+    texto: str = ""  # marcador gravado na memória (casa com a bolha)
+    msg_id: str = Field(default="", index=True)  # id no WhatsApp (dedupe)
+
+
 class Cliente(SQLModel, table=True):
     """Contato que já apareceu no WhatsApp do bot (telefone E.164 como PK).
 
@@ -675,6 +722,93 @@ def resolver_chave_conversa(telefone: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Mídia da conversa (metadados; o arquivo mora no disco — ver app/midia.py)
+# ---------------------------------------------------------------------------
+
+
+def salvar_midia(**campos) -> Midia:
+    with _lock, _session() as s:
+        m = Midia(**campos)
+        s.add(m)
+        s.commit()
+        return m
+
+
+def get_midia(midia_id: int) -> Midia | None:
+    with _session() as s:
+        return s.get(Midia, midia_id)
+
+
+def listar_midias(telefone: str) -> list[Midia]:
+    """Mídias de um contato, na ordem em que chegaram."""
+    chave = normalizar(telefone) or telefone
+    with _session() as s:
+        itens = list(s.exec(select(Midia).where(Midia.telefone == chave)).all())
+    itens.sort(key=lambda m: (m.momento or "", m.id or 0))
+    return itens
+
+
+def registrar_mensagem(msg_id: str, telefone: str, direcao: str, texto: str) -> None:
+    """Guarda o id de uma mensagem para uma reação futura achar a bolha."""
+    if not msg_id or not (texto or "").strip():
+        return
+    with _lock, _session() as s:
+        if s.get(MensagemRef, msg_id):
+            return  # reentrega do mesmo evento
+        s.add(
+            MensagemRef(
+                msg_id=msg_id,
+                telefone=normalizar(telefone) or telefone,
+                direcao=direcao,
+                texto=texto,
+                momento=datetime.now().isoformat(timespec="seconds"),
+            )
+        )
+        s.commit()
+
+
+def marcar_reacao(msg_id: str, emoji: str, de: str) -> bool:
+    """Anota (ou apaga, com emoji vazio) a reação de uma mensagem.
+
+    False = mensagem desconhecida: reação a algo anterior ao registro, que o
+    painel não tem como posicionar.
+    """
+    with _lock, _session() as s:
+        ref = s.get(MensagemRef, msg_id)
+        if ref is None:
+            return False
+        ref.reacao = emoji
+        ref.reacao_de = de if emoji else ""
+        s.add(ref)
+        s.commit()
+        return True
+
+
+def reacoes_do_contato(telefone: str) -> list[MensagemRef]:
+    """Mensagens do contato que estão com reação, na ordem em que chegaram."""
+    chave = normalizar(telefone) or telefone
+    with _session() as s:
+        itens = list(
+            s.exec(
+                select(MensagemRef)
+                .where(MensagemRef.telefone == chave)
+                .where(MensagemRef.reacao != "")
+            ).all()
+        )
+    itens.sort(key=lambda r: r.momento or "")
+    return itens
+
+
+def midia_do_msg_id(msg_id: str) -> Midia | None:
+    """Mídia já gravada para essa mensagem — o mesmo evento pode chegar duas
+    vezes (retry da Evolution) e o arquivo não deve entrar duplicado."""
+    if not msg_id:
+        return None
+    with _session() as s:
+        return s.exec(select(Midia).where(Midia.msg_id == msg_id)).first()
+
+
+# ---------------------------------------------------------------------------
 # Clientes (contatos conhecidos: nome + pausa do bot — cresce depois)
 # ---------------------------------------------------------------------------
 
@@ -781,7 +915,7 @@ def mover_contato(antigo: str, novo: str, nome: str | None = None) -> dict:
     """
     origem = normalizar(antigo) or antigo
     destino = normalizar(novo) or novo
-    movidos = {"ficha": 0, "agendamentos": 0, "tarefas": 0, "conversas": 0}
+    movidos = {"ficha": 0, "agendamentos": 0, "tarefas": 0, "conversas": 0, "midias": 0}
     if origem == destino:
         return movidos
 
@@ -839,6 +973,18 @@ def mover_contato(antigo: str, novo: str, nome: str | None = None) -> dict:
                     )
                 )
             movidos["conversas"] += 1
+
+        # Mídia e reações acompanham a memória (as bolhas casam por texto).
+        for m in s.exec(select(Midia)).all():
+            if not mesmo_numero(m.telefone, origem):
+                continue
+            m.telefone = destino
+            s.add(m)
+            movidos["midias"] = movidos.get("midias", 0) + 1
+        for r in s.exec(select(MensagemRef)).all():
+            if mesmo_numero(r.telefone, origem):
+                r.telefone = destino
+                s.add(r)
 
         # Agendamentos (inclusive cancelados: o histórico segue o contato).
         for a in s.exec(select(Agendamento)).all():

@@ -23,6 +23,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
 | `myAutoAtendMCP/app/tools.py` | 16 tools (FastMCP): 14 de agendamento + 2 da ficha de cadastro — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
+| `myAutoAtendMCP/app/midia.py` | Mídia da conversa: desembrulha o payload Baileys (efêmera/ver-uma-vez/doc com legenda), classifica o tipo e guarda o arquivo em `/data/midia` (teto de 25 MB) |
 | `myAutoAtendMCP/app/ficha.py` | Ficha de cadastro: tipos de campo, validação/normalização por tipo, montagem da ficha de um contato |
 | `myAutoAtendMCP/app/sessao.py` | Sessão do painel: JWT HS256 (só stdlib) em cookie httpOnly, freio de força bruta por IP, exceção `SessaoInvalida` |
 | `myAutoAtendMCP/app/templates/login.html` | Tela de entrada (`/login`), fora do shell do painel — usa `admin.css` (tokens) + `login.css` |
@@ -36,17 +37,45 @@ primeiro `docker compose up -d`.
 
 1. `POST /webhook/whatsapp/receberMensagem` — Evolution entrega `MESSAGES_UPSERT`
    (webhook configurado no startup pelo `evolution.garantir_instancia`).
-2. Filtra `fromMe`; upsert do contato na tabela `Cliente` (pushName). Se
-   `bot_pausado` p/ o contato (e não é o dono): mídia ainda vira texto, a
-   mensagem é gravada na memória (`agente.registrar_na_memoria`) e o fluxo
-   PARA — sem marcar lida, sem debounce, sem resposta. Senão, marca como lida
-   (falha não interrompe).
-3. Mídia → texto: áudio = `POST {base}/audio/transcriptions` (whisper-1,
-   multipart OpenAI); imagem = chat completions com `image_url` (data URL).
+2. Contato: `_jid_do_contato` resolve o remoteJid — endereço `@lid` (formato
+   novo do WhatsApp) NÃO é telefone, o número real vem em `remoteJidAlt`.
+   Upsert na tabela `Cliente` (pushName). Se `bot_pausado` p/ o contato (e não
+   é o dono): mídia ainda vira texto/arquivo, a mensagem é gravada na memória
+   (`agente.registrar_na_memoria`) e o fluxo PARA — sem marcar lida, sem
+   debounce, sem resposta. Senão, marca como lida (falha não interrompe).
+2b. **`fromMe` não é mais descartado** (`_registrar_saida`): a Evolution
+   devolve tudo que sai do nosso número. Se o id está em
+   `evolution.enviado_por_nos` (lista dos envios da API, 500 últimos), é eco do
+   próprio bot e é ignorado; senão é o DONO digitando no WhatsApp do negócio —
+   vira fala do bot na memória com `origem="aparelho"`, sem acionar o agente
+   (ele não responde a si mesmo). 2º cinto p/ eco pós-restart:
+   `agente.foi_dito_pelo_bot` compara com as bolhas dos 2 últimos turnos dele.
+2c. **Reação nunca vira turno** e NUNCA aciona o agente (responder a um 👍 é
+   ruído): `_registrar_reacao` grava o emoji na `MensagemRef` da mensagem
+   reagida (`reactionMessage.key.id`) e o painel desenha na quina da bolha.
+   Emoji vazio = reação desfeita; alvo fora da tabela vira só log.
+3. Conteúdo → texto + arquivo (`_conteudo_da_mensagem` + `app/midia.py`):
+   texto/extendedText; áudio = `POST {base}/audio/transcriptions` (whisper-1,
+   multipart OpenAI); imagem = chat completions com `image_url` (data URL);
+   vídeo, figurinha, documento, localização, contato e enquete viram
+   marcador em português (`[Figurinha]`, `[Documento x.pdf]`
+   …) — antes disso caíam no `return None` e a mensagem sumia da conversa.
+   **A IA é opcional aqui** (`_ler_com_ia`): sem provedor de visão/áudio
+   configurado a leitura falha e a mensagem segue com o marcador seco. Já
+   quebrou em produção — a exceção do `descrever_imagem` matava o evento
+   inteiro e a foto não chegava nem ao painel.
+   Mídia SAINDO (dono pelo celular) não gasta IA: nem transcreve nem descreve.
    Base64 vem do próprio webhook (`message.base64`, instância criada com
-   `base64: true`) ou de `getBase64FromMediaMessage`.
-4. **Debounce 6s** por contato: buffer em memória + `asyncio.Task`; mensagem
+   `base64: true`) ou de `getBase64FromMediaMessage`; o arquivo é gravado em
+   `/data/midia` e a linha em `Midia` (dedupe por `msg_id`), com `texto` = o
+   marcador que foi p/ a memória — é a chave que o painel usa p/ casar arquivo
+   e bolha, sem sujar o histórico do modelo com ids.
+4. **Debounce 12s** por contato: buffer em memória + `asyncio.Task`; mensagem
    nova cancela o timer e abre outro; o lote é concatenado com `[quebrar]`.
+   Eram 6s — curto demais p/ quem escreve em rajada, o bot respondia duas
+   vezes à mesma pergunta partida. Além do tempo, há um `asyncio.Lock` POR
+   CONTATO e o buffer só é esvaziado DENTRO dele: mensagem que chega enquanto
+   o agente responde entra no lote seguinte em vez de abrir um turno paralelo.
 5. Agente (`agente.responder`): o remoteJid é gravado no contextvar
    `auth.solicitante_ctx` ANTES do run — `auth.requester()` ignora o que o
    modelo passar em `telefone_solicitante` (mesma regra de ouro de sempre).
@@ -131,9 +160,11 @@ primeiro `docker compose up -d`.
   Tabelas: Config, Prompt, ProvedorIA, Conversa, Cliente (telefone E.164 PK,
   nome do pushName, bot_pausado), Servico, Bloqueio, Agendamento,
   HorarioFuncionamento, Tarefa, CampoFicha, ValorFicha (PK composta
-  telefone+campo_id). O telefone é chave em 5 tabelas — trocar o número de um
-  contato passa por `db.mover_contato` (ver "Ficha de cadastro"), nunca por
-  UPDATE em uma tabela só.
+  telefone+campo_id), Midia (metadados do arquivo; os bytes ficam em
+  `/data/midia`, mesmo volume), MensagemRef (id da mensagem no WhatsApp →
+  direção + texto, e a reação atual dela). O telefone é chave em 7 tabelas — trocar o
+  número de um contato passa por `db.mover_contato` (ver "Ficha de cadastro"),
+  nunca por UPDATE em uma tabela só.
 - Telefone E.164 (`phonenumbers`); autorização dono/próprio em `app/auth.py`.
 - Clients MCP externos identificam o solicitante via `?solicitante=` ou header
   `X-Solicitante-Telefone` (middleware em `main.py`).
@@ -170,11 +201,18 @@ primeiro `docker compose up -d`.
     mudou de `whatsapp.py` para `agente.py` para os dois lados usarem a mesma
     regra) e o turno do cliente com `dividir_lote_do_cliente` (só o `[quebrar]`
     do debounce; `\n` dentro de uma mensagem dele é quebra de linha).
-  - **Autoria da bolha do bot**: o envio manual do painel grava
-    `ModelResponse.model_name = agente.MODELO_ENVIO_MANUAL` (metadado, o modelo
-    não lê) via `registrar_na_memoria(..., origem="painel")`. A bolha vem com
-    `auto: false` → etiqueta "Enviado por você" em ouro; `auto: true` →
-    "Automatizado" no acento. Na lista, o preview troca "Bot:" por "Você:".
+  - **Autoria da bolha do bot**: `ModelResponse.model_name` guarda de quem foi
+    a mão (metadado, o modelo não lê) — `MODELO_ENVIO_MANUAL` p/
+    `registrar_na_memoria(..., origem="painel")` e `MODELO_ENVIO_APARELHO` p/
+    `origem="aparelho"`. A bolha sai com `origem` "ia" | "painel" | "aparelho"
+    → etiquetas "Automatizado" (acento), "Enviado por você" e "Enviado pelo
+    celular" (ouro). Na lista, o preview troca "Bot:" por "Você:".
+  - **Mídia e reação na bolha**: `GET /admin/midia/{id}` (rota autenticada,
+    `<img>` manda o cookie junto; `midia.caminho` corta travessia de diretório)
+    serve o arquivo, e `admin._anexar_extras` casa `Midia` e `MensagemRef`
+    (reações) com a bolha por (direção, texto) na ordem de chegada. Imagem/vídeo/figurinha/áudio
+    aparecem no player; documento vira link. Com mídia a bolha mostra a
+    legenda no lugar do marcador — menos no áudio, onde o texto é a transcrição.
   - **Mensagem recém-chegada**: só vira memória quando o agente termina, então
     `whatsapp.mensagens_pendentes()` expõe o buffer do debounce + o lote
     `_em_voo` (com o agente) e o painel pinta como bolha `pendente`
@@ -293,7 +331,8 @@ primeiro `docker compose up -d`.
     dos agendamentos dele, que é foto do momento da marcação). Telefone
     diferente → `db.mover_contato`, que MIGRA tudo indexado pelo número numa
     transação: `Cliente` (PK, preserva pausa), `ValorFicha` (PK composta),
-    `Conversa` (memória, chave = `digitos@s.whatsapp.net`), `Agendamento.
+    `Conversa` (memória, chave = `digitos@s.whatsapp.net`), `Midia`,
+    `Agendamento.
     telefone_cliente` (inclusive cancelados) e `Tarefa.telefone_alvo` (só
     pendente/executando — senão o bot escreveria pro número velho). Guardas:
     ficha validada ANTES de mover (nada de contato movido pela metade),

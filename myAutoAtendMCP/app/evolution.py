@@ -17,6 +17,7 @@ import asyncio
 import logging
 import re
 import time
+from collections import deque
 
 import httpx
 
@@ -217,6 +218,32 @@ async def marcar_como_lida(remote_jid: str, from_me: bool, message_id: str) -> N
         log.warning("markMessageAsRead falhou: %s", e)
 
 
+# Ids das mensagens que NÓS enviamos pela API. A Evolution devolve cada envio
+# de volta pelo webhook como MESSAGES_UPSERT com fromMe=true; sem esta lista o
+# pipeline gravaria de novo, como se o dono tivesse digitado no celular.
+_ENVIADOS: deque[str] = deque(maxlen=500)
+
+
+def _registrar_envio(resposta: dict | None) -> str:
+    """Guarda o id do envio e devolve ele (string vazia se a Evolution não
+    mandou id). Quem envia usa o id para casar a reação que vier depois."""
+    ident = ((resposta or {}).get("key") or {}).get("id") or ""
+    if ident:
+        _ENVIADOS.append(ident)
+    return ident
+
+
+def enviado_por_nos(message_id: str) -> bool:
+    return bool(message_id) and message_id in _ENVIADOS
+
+
+def _corpo_json(r: httpx.Response) -> dict | None:
+    try:
+        return r.json()
+    except ValueError:
+        return None
+
+
 def enviar_texto_sync(numero: str, texto: str) -> None:
     """Versão síncrona de `enviar_texto` para chamadas fora do event loop
     (ex.: aviso ao dono disparado de dentro de uma tool). Timeout curto:
@@ -228,12 +255,14 @@ def enviar_texto_sync(numero: str, texto: str) -> None:
             timeout=5.0,
         )
         r.raise_for_status()
+        _registrar_envio(_corpo_json(r))
 
 
 async def enviar_texto(
     numero: str, texto: str, digitando_ms: int = 0, timeout: float | None = None
-) -> None:
-    """Envia texto; `digitando_ms` > 0 mostra "digitando..." antes (delay).
+) -> str:
+    """Envia texto e devolve o id da mensagem; `digitando_ms` > 0 mostra
+    "digitando..." antes (delay).
 
     `timeout` sobrescreve o do cliente (30s): o envio manual do painel passa um
     valor curto para não prender a requisição atrás de uma instância
@@ -247,6 +276,7 @@ async def enviar_texto(
             f"/message/sendText/{settings.evolution_instance}", json=corpo, **kwargs
         )
         r.raise_for_status()
+        return _registrar_envio(_corpo_json(r))
 
 
 # ---------------------------------------------------------------------------

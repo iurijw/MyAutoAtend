@@ -459,6 +459,36 @@ html[data-theme="dark"] .conv-bolha.bot-manual .conv-bolha-tag{opacity:1;}
 .conv-bolha.pendente{opacity:.72; border-style:dashed;}
 .conv-bolha.pendente .conv-bolha-hora{font-style:italic;}
 
+/* reação: pastilha na quina de baixo da bolha reagida (como no WhatsApp) */
+.conv-bolha{position:relative;}
+.conv-reacao{position:absolute; bottom:-11px; padding:1px 6px; border-radius:999px;
+  font-size:13px; line-height:1.35; background:var(--card); border:1px solid var(--line);
+  box-shadow:0 1px 4px var(--shadow);}
+.conv-bolha.quem-cliente .conv-reacao{left:10px;}
+.conv-bolha.quem-bot .conv-reacao{right:10px;}
+/* a pastilha invade a bolha de baixo se o vão for o padrão */
+.conv-msgs{row-gap:14px;}
+
+/* ---------- mídia dentro da bolha ---------- */
+.conv-bolha.tem-midia{padding:7px 8px 6px;}
+.conv-midia{display:block; max-width:min(260px,60vw); max-height:300px; width:auto;
+  border-radius:10px; background:var(--paper-2);}
+.conv-midia-abrir{display:block; line-height:0;}
+.conv-midia-abrir:hover .conv-midia{filter:brightness(1.05);}
+/* figurinha é recorte transparente: moldura e fundo só atrapalhariam */
+.conv-figurinha{max-width:132px; max-height:132px; background:transparent;}
+.conv-audio{display:block; width:min(260px,60vw); height:38px; margin:2px 0;}
+.conv-bolha.tem-midia .conv-bolha-txt{display:block; margin-top:6px; padding:0 4px;}
+.conv-bolha.tem-midia .conv-bolha-hora{padding-right:4px;}
+
+.conv-doc{display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:9px;
+  text-decoration:none; background:color-mix(in srgb, var(--ink-soft) 12%, transparent);
+  color:var(--ink);}
+.conv-doc:hover{background:color-mix(in srgb, var(--accent) 16%, transparent);}
+.conv-doc-nome{font-size:13.5px; font-weight:600; word-break:break-all;}
+.conv-doc-abrir{margin-left:auto; flex:none; font:700 10px/1 "JetBrains Mono",monospace;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--accent);}
+
 .conv-envio{flex:none; display:flex; gap:10px; align-items:center; padding:14px 16px;
   border-top:1px solid var(--line);}
 .conv-envio input{flex:1; margin:0;}

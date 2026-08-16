@@ -16,10 +16,15 @@ import time as _time
 from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+)
 from fastapi.templating import Jinja2Templates
 
-from . import agente, db, evolution, ficha, ia, sessao, tarefas, whatsapp
+from . import agente, db, evolution, ficha, ia, midia, sessao, tarefas, whatsapp
 from .config import settings
 from .phone import formatar_internacional, mesmo_numero, normalizar, plausivel
 from .tools import _agora_local
@@ -745,12 +750,70 @@ def listar_conversas(_: str = Depends(autenticar)):
     return {"conversas": _resumo_conversas()}
 
 
+def _por_bolha(itens: list, chave) -> dict[tuple[str, str], list]:
+    """Indexa registros por (direção, texto) preservando a ordem de chegada."""
+    fila: dict[tuple[str, str], list] = {}
+    for i in itens:
+        fila.setdefault(chave(i), []).append(i)
+    return fila
+
+
+def _anexar_extras(telefone: str, bolhas: list[dict]) -> None:
+    """Devolve mídia e reações para a bolha de onde vieram.
+
+    A memória do agente é só texto: a mídia virou um marcador ("[Figurinha]")
+    e a reação não entra na memória de jeito nenhum. `Midia` e `MensagemRef`
+    guardam o texto da mensagem, então o casamento é por texto + direção, em
+    ordem de chegada — assim duas figurinhas seguidas pegam cada uma o seu
+    arquivo, sem precisar de id dentro do histórico do modelo.
+    """
+    midias = _por_bolha(db.listar_midias(telefone), lambda m: (m.direcao, m.texto))
+    reacoes = _por_bolha(
+        db.reacoes_do_contato(telefone), lambda r: (r.direcao, r.texto)
+    )
+    if not midias and not reacoes:
+        return
+    for b in bolhas:
+        chave = (b.get("quem"), b.get("texto"))
+        candidatas = midias.get(chave)
+        if candidatas:
+            m = candidatas.pop(0)
+            b["midia"] = {
+                "id": m.id,
+                "tipo": m.tipo,
+                "mime": m.mime,
+                "nome": m.nome,
+                "legenda": m.legenda,
+            }
+        reagidas = reacoes.get(chave)
+        if reagidas:
+            r = reagidas.pop(0)
+            b["reacao"] = {"emoji": r.reacao, "de": r.reacao_de}
+
+
+@router.get("/admin/midia/{midia_id}")
+def midia_arquivo(midia_id: int, _: str = Depends(autenticar)):
+    """Arquivo de uma mídia da conversa (a tag <img>/<video> do painel bate
+    aqui com o cookie de sessão — nada fica público)."""
+    m = db.get_midia(midia_id)
+    caminho = midia.caminho(m.arquivo) if m else None
+    if not caminho:
+        raise HTTPException(status_code=404, detail="Mídia não encontrada.")
+    return FileResponse(
+        caminho,
+        media_type=m.mime or "application/octet-stream",
+        filename=m.nome or None,
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
 @router.get("/admin/conversas/{telefone}")
 def conversa_detalhe(telefone: str, _: str = Depends(autenticar)):
     norm = normalizar(telefone) or telefone
     cli = db.get_cliente(norm)
     bruto = db.get_conversa(db.resolver_chave_conversa(telefone))
     mensagens = agente.historico_para_bolhas(bruto)
+    _anexar_extras(norm, mensagens)
     # O que chegou agora e ainda não virou memória (debounce de 6s + o tempo do
     # modelo): sem isto a mensagem do cliente só apareceria depois da resposta.
     for texto in whatsapp.mensagens_pendentes(norm):
@@ -798,7 +861,9 @@ async def conversa_enviar(
     try:
         # Timeout curto: sem WhatsApp pareado o sendText trava — o painel
         # precisa cair no 502 rápido para o toast aparecer.
-        await evolution.enviar_texto(numero, msg, digitando_ms=digitando_ms, timeout=8.0)
+        msg_id = await evolution.enviar_texto(
+            numero, msg, digitando_ms=digitando_ms, timeout=8.0
+        )
     except Exception as e:  # noqa: BLE001
         raise HTTPException(
             status_code=502,
@@ -809,6 +874,7 @@ async def conversa_enviar(
     agente.registrar_na_memoria(
         db.resolver_chave_conversa(telefone), msg, "bot", origem="painel"
     )
+    db.registrar_mensagem(msg_id, telefone, "bot", msg)  # p/ a reação do cliente
     return {"ok": True}
 
 

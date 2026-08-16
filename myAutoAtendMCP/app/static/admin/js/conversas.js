@@ -162,24 +162,72 @@ async function alternarPausa(telefone, pausar) {
 // Modal de conversa
 // ---------------------------------------------------------------------------
 
-/* Etiqueta do lado do bot: no WhatsApp as duas saem do mesmo número, então na
-   tela o dono precisa ver quem escreveu — a IA ou ele mesmo, pelo painel. */
-const ETIQUETA_BOT = { auto: 'Automatizado', manual: 'Enviado por você' };
+/* Etiqueta do lado do bot: no WhatsApp tudo sai do mesmo número, então na tela
+   o dono precisa ver de quem foi a mão — a IA, ele pelo painel, ou ele pelo
+   celular do negócio. */
+const ETIQUETA_BOT = {
+  ia: 'Automatizado',
+  painel: 'Enviado por você',
+  aparelho: 'Enviado pelo celular',
+};
+
+/* Mídia: o arquivo vem de /admin/midia/{id} (rota autenticada, o cookie da
+   sessão vai junto na tag). Figurinha não ganha moldura; documento é link. */
+function midiaHTML(md) {
+  const src = '/admin/midia/' + encodeURIComponent(md.id);
+  if (md.tipo === 'imagem') {
+    return `<a class="conv-midia-abrir" href="${src}" target="_blank" rel="noopener">
+      <img class="conv-midia" src="${src}" alt="Imagem da conversa" loading="lazy"></a>`;
+  }
+  if (md.tipo === 'figurinha') {
+    return `<img class="conv-midia conv-figurinha" src="${src}" alt="Figurinha" loading="lazy">`;
+  }
+  if (md.tipo === 'video') {
+    return `<video class="conv-midia" src="${src}" controls preload="metadata"></video>`;
+  }
+  if (md.tipo === 'audio') {
+    return `<audio class="conv-audio" src="${src}" controls preload="none"></audio>`;
+  }
+  return `<a class="conv-doc" href="${src}" target="_blank" rel="noopener">
+    <span class="conv-doc-nome">${esc(md.nome || 'Documento')}</span>
+    <span class="conv-doc-abrir">abrir</span></a>`;
+}
 
 function bolha(m) {
   const el = document.createElement('div');
   el.className = 'conv-bolha quem-' + (m.quem || 'cliente') + (m.pendente ? ' pendente' : '');
   let etiqueta = '';
   if (m.quem === 'bot') {
-    const chave = m.auto === false ? 'manual' : 'auto';
-    el.classList.add('bot-' + chave);
-    etiqueta = `<span class="conv-bolha-tag">${ETIQUETA_BOT[chave]}</span>`;
+    const origem = ETIQUETA_BOT[m.origem] ? m.origem : (m.auto === false ? 'painel' : 'ia');
+    el.classList.add('bot-' + (origem === 'ia' ? 'auto' : 'manual'));
+    etiqueta = `<span class="conv-bolha-tag">${ETIQUETA_BOT[origem]}</span>`;
   }
-  el.innerHTML = etiqueta +
-    `<span class="conv-bolha-txt">${esc(m.texto)}</span>` +
+
+  // Com mídia, o marcador ("[Figurinha]") vira o próprio arquivo; sobra a
+  // legenda. No áudio o texto é a transcrição — esse fica.
+  let corpo;
+  if (m.midia) {
+    el.classList.add('tem-midia');
+    const legenda = m.midia.tipo === 'audio' ? (m.texto || '') : (m.midia.legenda || '');
+    corpo = midiaHTML(m.midia) +
+      (legenda ? `<span class="conv-bolha-txt">${esc(legenda)}</span>` : '');
+  } else {
+    corpo = `<span class="conv-bolha-txt">${esc(m.texto)}</span>`;
+  }
+
+  el.innerHTML = etiqueta + corpo +
     (m.pendente
       ? '<span class="conv-bolha-hora">recebida agora</span>'
       : (m.hora ? `<span class="conv-bolha-hora">${esc(m.hora)}</span>` : ''));
+
+  // Reação fica pendurada na quina da bolha reagida, como no WhatsApp.
+  if (m.reacao && m.reacao.emoji) {
+    const chip = document.createElement('span');
+    chip.className = 'conv-reacao';
+    chip.textContent = m.reacao.emoji;
+    chip.title = m.reacao.de === 'bot' ? 'Você reagiu' : 'O cliente reagiu';
+    el.appendChild(chip);
+  }
   return el;
 }
 
