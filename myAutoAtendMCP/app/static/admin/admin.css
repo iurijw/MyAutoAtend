@@ -549,10 +549,18 @@ html[data-theme="dark"] .proat-erro{color:var(--oxblood);}
 .qd-fechado.faltou .qd-fechado-txt{color:var(--ink-soft);}
 .qd-fechado form{margin-left:auto;}
 .qd-desfazer{padding:3px 9px; font-size:11px;}
-/* card já fechado é recibo, não tarefa: recua para o fundo */
-.qd-card:has(.qd-fechado){opacity:.72;}
-.qd-card:has(.qd-fechado)::before{background:var(--ink-soft);}
-.qd-card:has(.qd-fechado):hover{opacity:1;}
+/* Recibo fora da coluna de fechamento: contexto do que passou, não assunto
+   do card. Uma linha discreta e datada — o valor sem data ao lado do chip do
+   próximo horário parecia ser daquele horário. */
+.qd-passado{margin:8px 0 0; padding-top:8px; border-top:1px dashed var(--line);
+  font:500 11.5px/1.4 "JetBrains Mono",monospace; color:var(--ink-soft);}
+
+/* Card que está ali SÓ por causa do recibo recua para o fundo. Em outra
+   coluna (ex.: já remarcou e está em "Agendado") o recibo é informação a
+   mais, não motivo para apagar o card. */
+.qd-col[data-chave="fechar"] .qd-card:has(.qd-fechado){opacity:.72;}
+.qd-col[data-chave="fechar"] .qd-card:has(.qd-fechado)::before{background:var(--ink-soft);}
+.qd-col[data-chave="fechar"] .qd-card:has(.qd-fechado):hover{opacity:1;}
 
 /* "respondendo…" — os três pontinhos do WhatsApp, que é onde isso acontece */
 .qd-digitando{flex:none; display:inline-flex; align-items:center; gap:3px; padding:0 2px;}
@@ -728,36 +736,87 @@ html[data-theme="dark"] #wa-qr{background:#fff;}
 /* ===========================================================================
    Provedores de IA
    =========================================================================== */
-.ia-tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin:0 0 16px;}
-.ia-tab{background:transparent; border:none; border-bottom:3px solid transparent; border-radius:10px 10px 0 0;
-  padding:10px 14px; font-weight:600; color:var(--ink-soft); display:flex; align-items:center; gap:8px;
-  margin-bottom:-1px;}
-.ia-tab:hover{color:var(--ink); background:color-mix(in srgb, var(--accent) 8%, transparent);}
-.ia-tab.active{color:var(--accent); border-bottom-color:var(--accent);}
-.ia-tab .dot{width:8px; height:8px; border-radius:50%; background:var(--line); flex:none;}
-.ia-tab .dot.on{background:var(--green);}
-.ia-pane{display:none;}
-.ia-pane.active{display:block;}
-.ia-subtabs{display:flex; gap:8px; margin:0 0 14px;}
-.ia-subtab{background:var(--card); border:1px solid var(--line); color:var(--ink-soft);
-  border-radius:999px; padding:6px 14px; font-size:13px; font-weight:600;}
-.ia-subtab.active{background:var(--accent-solid); border-color:var(--accent-solid); color:var(--accent-on);}
-.ia-subtab[disabled]{cursor:not-allowed; opacity:.55;}
-.ia-subtab .soon{font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
-  color:var(--gold); margin-left:6px;}
-.ia-resumo{display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-  background:var(--card); border:1px solid var(--line); border-radius:12px;
-  padding:12px 14px; margin:12px 0 4px;}
-.ia-prov-atual{font-family:"JetBrains Mono",monospace; font-size:13px; color:var(--ink);}
-.ia-resumo button{margin-left:auto;}
-.ia-chave{border:1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
-  border-radius:12px; padding:2px 16px 16px; margin:12px 0 4px;}
-.ia-busca{margin-bottom:8px;}
+/* Uma trilha por uso, sempre visível — o que está no ar se lê sem clicar.
+   Dentro, os passos são numerados porque a ordem é real: a lista de modelos
+   do provedor só existe depois da chave. O fio numerado acende conforme cada
+   passo é cumprido, e é o único enfeite da seção. */
+.ia-usos{display:flex; flex-direction:column; border-top:1px solid var(--line);}
+.ia-uso{border-bottom:1px solid var(--line);}
+.ia-uso-topo{display:flex; align-items:center; gap:14px; padding:15px 4px;}
+.ia-uso-icone{flex:none; width:21px; height:21px; color:var(--accent); opacity:.75;
+  fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round;}
+.ia-uso-id{min-width:0; width:150px; flex:none;}
+.ia-uso-nome{margin:0; font-size:15px; font-weight:600; line-height:1.2;}
+.ia-uso-sub{margin:2px 0 0; font-size:12px; line-height:1.35; color:var(--ink-soft);}
+.ia-uso-estado{flex:1; min-width:0; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.ia-uso-atual{font-size:13.5px; color:var(--ink-soft); min-width:0;}
+.ia-uso-modelo{font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--ink);}
+.ia-uso-topo .ia-abrir{flex:none;}
+
+.ia-editor{padding:2px 4px 20px;}
+.ia-passos{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:16px;}
+.ia-passo{display:grid; grid-template-columns:26px minmax(0,1fr); gap:14px; align-items:start;}
+/* o número é o fio: apagado enquanto o passo não está cumprido */
+.ia-passo-n{grid-row:1 / -1; display:flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:50%; border:1px solid var(--line);
+  font:500 11.5px/1 "JetBrains Mono",monospace; color:var(--ink-soft);
+  background:var(--card); transition:background .18s, color .18s, border-color .18s;}
+.ia-passo.ok .ia-passo-n{background:color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color:color-mix(in srgb, var(--accent) 40%, transparent); color:var(--accent);}
+.ia-passo-corpo{min-width:0;}
+.ia-passo-corpo > label{margin-top:0;}
+.ia-passo-corpo input,.ia-passo-corpo select{max-width:420px;}
+/* a lista de modelos acompanha a largura do campo, não a do card */
+.ia-passo-corpo .ac-wrap{max-width:420px;}
+.ia-passo-nota .ia-passo-corpo{padding-bottom:2px;}
+.ia-url{margin-top:12px;}
+.ia-dica{margin:7px 0 0; font-size:12.5px; line-height:1.45; color:var(--ink-soft); max-width:60ch;}
+.ia-dica.ok{color:var(--green);}
+.ia-dica code{font-family:"JetBrains Mono",monospace; font-size:12px;
+  background:color-mix(in srgb, var(--ink-soft) 12%, transparent); padding:1px 5px; border-radius:5px;}
+
+/* Chave já gravada: o campo sai do caminho e volta no "Trocar chave" — quem
+   abre a trilha quase sempre quer mexer no modelo, não recolar o segredo. */
+.ia-chave-ok{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.ia-chave-selo{display:inline-flex; align-items:center; gap:7px;
+  font:600 12px/1 "Hanken Grotesk"; color:var(--green);
+  background:rgba(63,107,76,.14); padding:6px 11px; border-radius:999px;}
+html[data-theme="dark"] .ia-chave-selo{background:rgba(120,183,141,.16);}
+.ia-chave-selo::before{content:"•"; font-size:15px; line-height:0;}
+.ia-chave-quando{font:500 11.5px/1 "JetBrains Mono",monospace; color:var(--ink-soft);}
+
+/* Aproveitar chave que já existe em outro uso (a cópia é feita no servidor). */
+.ia-reusar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:11px;
+  padding:10px 12px; border-radius:10px;
+  background:color-mix(in srgb, var(--accent) 8%, transparent);
+  border:1px dashed color-mix(in srgb, var(--accent) 35%, transparent);}
+.ia-reusar-rot{font-size:12.5px; color:var(--ink-soft);}
+.ia-replicar{display:flex; align-items:center; gap:9px; margin:12px 0 0; cursor:pointer;
+  font-size:13px; font-weight:500; letter-spacing:0; text-transform:none; color:var(--ink);}
+.ia-replicar input{--sw-w:32px; --sw-h:19px; --sw-pad:2.5px; margin:0;}
+
+.ia-editor-pe{display:flex; align-items:center; gap:8px; margin-top:20px; padding-top:14px;
+  border-top:1px solid var(--line);}
+.ia-erro{margin:0 auto 0 0; font-size:13px; color:var(--oxblood); display:none;}
+.ia-erro.visivel{display:block;}
+
+/* lista do combobox de modelo: item de uma linha só (o de clientes tem avatar) */
+.ac-item-simples{display:block; font-family:"JetBrains Mono",monospace; font-size:13px;
+  padding:8px 11px;}
+
+@media (max-width:760px){
+  .ia-uso-topo{flex-wrap:wrap; gap:10px;}
+  .ia-uso-id{width:auto; flex:1;}
+  .ia-uso-estado{flex-basis:100%;}
+}
+
+/* Peças compartilhadas com as Instruções do agente e a Ficha (nota, linha de
+   ações e a mensagem de status dos salvamentos). */
 .ia-note{color:var(--ink-soft); font-size:13.5px; margin:6px 0 0;}
+.ia-acts{display:flex; gap:8px; margin-top:14px;}
 .ia-msg{font-family:"JetBrains Mono",monospace; font-size:12.5px; margin:12px 0 0; min-height:1em;}
 .ia-msg.ok{color:var(--green);}
 .ia-msg.err{color:var(--oxblood);}
-.ia-acts{display:flex; gap:8px; margin-top:14px;}
 
 /* ---------- Instruções do agente ---------- */
 #prompt-geral{min-height:220px; font-size:14.5px;}

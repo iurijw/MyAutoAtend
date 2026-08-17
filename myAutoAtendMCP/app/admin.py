@@ -448,6 +448,7 @@ def ia_modelos_preview(
     provedor: str = Form(...),
     api_key: str = Form(...),
     base_url: str = Form(""),
+    alvo: str = Form(""),
 ):
     """Lista modelos do provedor com a chave recém-digitada (antes de salvar).
 
@@ -464,7 +465,7 @@ def ia_modelos_preview(
     if not chave:
         raise HTTPException(status_code=400, detail="Informe a chave de API.")
     try:
-        return {"modelos": ia.listar_modelos_do_provedor(url, chave)}
+        return {"modelos": ia.listar_modelos_do_provedor(url, chave, alvo or None)}
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"erro": str(e)}, status_code=502)
 
@@ -485,8 +486,8 @@ def ia_credencial(
     if not preset[alvo]:
         raise HTTPException(
             status_code=400,
-            detail=f"{preset['nome']} não suporta o uso '{alvo}' "
-            "(áudio exige API compatível com Whisper/whisper-1).",
+            detail=f"{preset['nome']} não atende esse uso "
+            "(áudio exige transcrição compatível com a API da OpenAI).",
         )
     url = (preset["base_url"] or base_url).strip().rstrip("/")
     if not url:
@@ -500,6 +501,26 @@ def ia_credencial(
         return JSONResponse({"erro": str(e)}, status_code=502)
 
 
+@router.post("/admin/ia/reusar")
+def ia_reusar(
+    _: str = Depends(autenticar),
+    de: str = Form(...),
+    para: str = Form(...),
+):
+    """Aproveita em outro uso a chave já gravada.
+
+    A chave não passa pelo navegador: o servidor copia de uma linha para a
+    outra. Serve para o caso comum de um provedor só (OpenRouter, OpenAI)
+    atendendo conversa, áudio e imagem com a mesma credencial.
+    """
+    try:
+        return ia.reusar_credencial(de, para)
+    except ia.IANaoConfigurada as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"erro": str(e)}, status_code=400)
+
+
 @router.post("/admin/ia/modelo")
 def ia_modelo(
     _: str = Depends(autenticar),
@@ -507,10 +528,7 @@ def ia_modelo(
     modelo: str = Form(...),
 ):
     if alvo not in ia.ALVOS_COM_MODELO:
-        raise HTTPException(
-            status_code=400,
-            detail="Alvo inválido (áudio tem modelo fixo whisper-1).",
-        )
+        raise HTTPException(status_code=400, detail="Alvo inválido.")
     if not modelo.strip():
         raise HTTPException(status_code=400, detail="Informe o nome do modelo.")
     try:
@@ -1090,18 +1108,23 @@ def _quadro_estado() -> dict:
         feito = fechado.get(tel)
         esfriada = False
 
-        # A ordem importa: uma pergunta sem resposta ganha de qualquer outra
-        # coisa — mesmo de quem já tem horário marcado, porque o bot está
-        # devendo resposta AGORA. Depois vem o fechamento: dinheiro pendente é
-        # a coisa mais concreta do quadro, e a fila de fechar tem que estar
-        # inteira num lugar só (o card já fechado fica junto, apagado, como
-        # recibo de que o clique valeu).
+        # A ordem importa, e ela é por AÇÃO PENDENTE, não por evento recente:
+        # 1) pergunta sem resposta ganha de tudo — o bot está devendo agora;
+        # 2) atendimento sem desfecho é a ação seguinte, e a fila de fechar tem
+        #    que estar inteira num lugar só;
+        # 3) horário marcado ganha do recibo: quem foi atendido hoje e JÁ
+        #    remarcou está agendado, não "concluído" (o recibo continua no card,
+        #    só não decide mais a coluna);
+        # 4) o recibo sozinho segura o card em "Fechar atendimento" pelos dias
+        #    configurados, como confirmação de que o clique valeu.
         if c["respondendo"] or c["quem"] == "cliente":
             coluna, limite = "bot", max(cfg.kanban_travado_min, 1)
-        elif pend or feito:
+        elif pend:
             coluna, limite = "fechar", None
         elif ag:
             coluna, limite = "agendado", None
+        elif feito:
+            coluna, limite = "fechar", None
         elif c["quem"] in ("bot", "sistema"):
             coluna = "cliente"
             limite = cfg.kanban_esfria_h * 60

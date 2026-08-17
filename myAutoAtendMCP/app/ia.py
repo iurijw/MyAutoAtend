@@ -33,20 +33,37 @@ MODELO_PADRAO = {"texto": "gpt-5.1", "audio": "whisper-1", "imagem": "gpt-4o"}
 CRED_POR_ALVO = {"texto": "IA - Texto", "audio": "IA - Áudio", "imagem": "IA - Imagem"}
 ALVOS = ("texto", "audio", "imagem")
 # Áudio fixa whisper-1 (formato multipart OpenAI) — sem modelo configurável.
-ALVOS_COM_MODELO = ("texto", "imagem")
+# Áudio virou configurável: OpenRouter (jul/2026) e Groq expõem transcrição no
+# MESMO formato multipart da OpenAI (`{base}/audio/transcriptions`), então o
+# que muda entre eles é só o nome do modelo.
+ALVOS_COM_MODELO = ("texto", "audio", "imagem")
 
-# Provedores com API compatível OpenAI, com capacidade por uso.
+# Provedores com API compatível OpenAI, capacidade por uso e o modelo que faz
+# sentido em cada um (`padrao`) — é o que o painel sugere ao escolher o
+# provedor e o que a cópia de chave entre usos grava, já que o modelo de
+# transcrição não é o mesmo do de conversa.
 PROVEDORES: dict[str, dict[str, Any]] = {
-    "openai": {"nome": "OpenAI", "base_url": "https://api.openai.com/v1", "texto": True, "audio": True, "imagem": True},
-    "anthropic": {"nome": "Anthropic (Claude)", "base_url": "https://api.anthropic.com/v1", "texto": True, "audio": False, "imagem": True},
-    "groq": {"nome": "Groq", "base_url": "https://api.groq.com/openai/v1", "texto": True, "audio": False, "imagem": True},
-    "openrouter": {"nome": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "texto": True, "audio": False, "imagem": True},
+    "openai": {"nome": "OpenAI", "base_url": "https://api.openai.com/v1", "texto": True, "audio": True, "imagem": True,
+               "padrao": {"texto": "gpt-5.1", "audio": "whisper-1", "imagem": "gpt-4o"}},
+    "anthropic": {"nome": "Anthropic (Claude)", "base_url": "https://api.anthropic.com/v1", "texto": True, "audio": False, "imagem": True,
+                  "padrao": {"texto": "claude-sonnet-5", "imagem": "claude-sonnet-5"}},
+    "groq": {"nome": "Groq", "base_url": "https://api.groq.com/openai/v1", "texto": True, "audio": True, "imagem": True,
+             "padrao": {"audio": "whisper-large-v3"}},
+    "openrouter": {"nome": "OpenRouter", "base_url": "https://openrouter.ai/api/v1", "texto": True, "audio": True, "imagem": True,
+                   "padrao": {"texto": "openai/gpt-5.1", "audio": "openai/whisper-large-v3", "imagem": "openai/gpt-4o"}},
     "mistral": {"nome": "Mistral", "base_url": "https://api.mistral.ai/v1", "texto": True, "audio": False, "imagem": True},
     "xai": {"nome": "xAI (Grok)", "base_url": "https://api.x.ai/v1", "texto": True, "audio": False, "imagem": True},
     "gemini": {"nome": "Google Gemini", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "texto": True, "audio": False, "imagem": True},
     "deepseek": {"nome": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "texto": True, "audio": False, "imagem": False},
     "custom": {"nome": "Personalizado (URL própria)", "base_url": "", "texto": True, "audio": True, "imagem": True},
 }
+
+
+def modelo_padrao(provedor: str | None, alvo: str) -> str:
+    """Modelo sugerido para (provedor, uso) — cai no padrão global se o
+    provedor não tiver sugestão própria."""
+    preset = (PROVEDORES.get(provedor or "") or {}).get("padrao") or {}
+    return preset.get(alvo) or MODELO_PADRAO[alvo]
 
 
 class IANaoConfigurada(RuntimeError):
@@ -93,15 +110,78 @@ def estado() -> dict:
 def atualizar_chave(alvo: str, api_key: str, base_url: str) -> dict:
     """Grava chave + base URL do alvo. Não retorna segredo algum."""
     atual = db.get_provedor_ia(alvo)
-    modelo = atual.modelo if atual and atual.modelo else MODELO_PADRAO[alvo]
+    # Mesma regra do reuso: modelo de linha que ainda não tinha chave é
+    # resquício, não escolha — não pode virar o modelo do provedor novo.
+    modelo = (
+        atual.modelo
+        if atual and atual.api_key and atual.modelo
+        else modelo_padrao(_provedor_da_url(base_url), alvo)
+    )
     db.set_provedor_ia(alvo, api_key=api_key, base_url=base_url.rstrip("/"), modelo=modelo)
     return {"ok": True, "credencial": CRED_POR_ALVO[alvo]}
 
 
+def reusar_credencial(de: str, para: str) -> dict:
+    """Copia a chave já gravada de um uso para outro, sem passar pelo navegador.
+
+    A chave é via de mão única: ela nunca sai do servidor, nem para ser
+    recolada em outro campo. O MODELO não é copiado — transcrever e conversar
+    não usam o mesmo modelo —, então o destino nasce com o padrão do provedor
+    para aquele uso e o dono ajusta se quiser.
+    """
+    if de not in ALVOS or para not in ALVOS or de == para:
+        raise RuntimeError("Uso inválido para copiar a chave.")
+    origem = _config(de)
+    provedor = _provedor_da_url(origem.base_url)
+    if provedor and not PROVEDORES.get(provedor, {}).get(para):
+        raise RuntimeError(
+            f"{PROVEDORES[provedor]['nome']} não atende esse uso — escolha outro provedor."
+        )
+    atual = db.get_provedor_ia(para)
+    # Só herda o modelo do destino se ele JÁ estava funcionando (tinha chave).
+    # Linha sem chave pode carregar um modelo velho de outra configuração — e
+    # herdar isso no áudio é o bug que manda um modelo de chat para o endpoint
+    # de transcrição ("Model ... does not exist", áudio chega sem texto).
+    herdar = bool(atual and atual.api_key and atual.modelo)
+    db.set_provedor_ia(
+        para,
+        api_key=origem.api_key,
+        base_url=origem.base_url,
+        modelo=(atual.modelo if herdar else modelo_padrao(provedor, para)),
+    )
+    return {"ok": True, "de": de, "para": para, "provedor": provedor}
+
+
+def _exigir_modelo_de_transcricao(p: db.ProvedorIA, modelo: str) -> None:
+    """Barra modelo de chat no uso de áudio enquanto dá para ter certeza.
+
+    O OpenRouter diz quais modelos transcrevem (`output_modalities`), então
+    aqui o erro é pego na hora de configurar. Sem isso ele só aparece quando
+    um cliente manda um áudio de verdade — e aí a mensagem dele já se perdeu
+    ("Model ... does not exist" no /audio/transcriptions). Provedor que não
+    permite essa checagem passa direto: travar a configuração por causa de uma
+    listagem fora do ar seria pior.
+    """
+    if "openrouter.ai" not in (p.base_url or ""):
+        return
+    try:
+        validos = {m["valor"] for m in listar_modelos_do_provedor(p.base_url, p.api_key, "audio")}
+    except Exception:  # noqa: BLE001
+        return
+    if validos and modelo not in validos:
+        exemplos = ", ".join(sorted(v for v in validos if "whisper" in v)[:2] or sorted(validos)[:2])
+        raise RuntimeError(
+            f"'{modelo}' não transcreve áudio no OpenRouter — é modelo de conversa. "
+            f"Escolha um de transcrição (ex.: {exemplos})."
+        )
+
+
 def atualizar_modelo(alvo: str, modelo: str) -> dict:
     if alvo not in ALVOS_COM_MODELO:
-        raise RuntimeError("Este uso não tem modelo configurável (áudio fixa whisper-1).")
-    _config(alvo)  # exige chave antes
+        raise RuntimeError("Este uso não tem modelo configurável.")
+    p = _config(alvo)  # exige chave antes
+    if alvo == "audio":
+        _exigir_modelo_de_transcricao(p, modelo)
     db.set_provedor_ia(alvo, modelo=modelo)
     return {"ok": True, "modelo": modelo}
 
@@ -111,8 +191,15 @@ def atualizar_modelo(alvo: str, modelo: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def listar_modelos_do_provedor(base_url: str, api_key: str) -> list[dict]:
-    """GET /models no provedor. Também usada no preview (chave transiente)."""
+def listar_modelos_do_provedor(
+    base_url: str, api_key: str, alvo: str | None = None
+) -> list[dict]:
+    """GET /models no provedor. Também usada no preview (chave transiente).
+
+    Com `alvo="audio"` no OpenRouter, filtra pela modalidade de saída: o
+    catálogo deles tem centenas de modelos de chat e mandar essa lista para o
+    campo de transcrição seria inútil.
+    """
     if "api.anthropic.com" in base_url:
         # GET /models da Anthropic não aceita Bearer — só x-api-key + versão.
         headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
@@ -120,6 +207,8 @@ def listar_modelos_do_provedor(base_url: str, api_key: str) -> list[dict]:
     else:
         headers = {"Authorization": f"Bearer {api_key}"}
         params = None
+        if alvo == "audio" and "openrouter.ai" in base_url:
+            params = {"output_modalities": "transcription"}
     r = httpx.get(
         base_url.rstrip("/") + "/models",
         headers=headers,
@@ -138,7 +227,7 @@ def listar_modelos_do_provedor(base_url: str, api_key: str) -> list[dict]:
 def listar_modelos(alvo: str) -> list[dict]:
     """Modelos do provedor configurado p/ o alvo (chave salva, nunca exposta)."""
     p = _config(alvo)
-    return listar_modelos_do_provedor(p.base_url, p.api_key)
+    return listar_modelos_do_provedor(p.base_url, p.api_key, alvo)
 
 
 # ---------------------------------------------------------------------------

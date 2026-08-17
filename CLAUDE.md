@@ -128,7 +128,28 @@ primeiro `docker compose up -d`.
   api_key, base_url, modelo. **Fluxo unidirecional**: chave entra pelo painel,
   nenhuma rota devolve (nem mascarada).
 - Compatibilidade: texto/imagem = qualquer chat completions compatível;
-  áudio = multipart OpenAI com whisper-1 (OpenRouter usa JSON base64 — futuro).
+  áudio = multipart OpenAI em `{base}/audio/transcriptions`. **Áudio agora tem
+  modelo configurável** (`ALVOS_COM_MODELO` = os três): além da OpenAI, o
+  OpenRouter (transcrição lançada em jul/2026, mesmo formato multipart, modelos
+  `openai/whisper-large-v3`, `openai/gpt-4o-transcribe`, `google/chirp-3`…) e o
+  Groq (`whisper-large-v3`) atendem no mesmo endpoint — muda só o nome do
+  modelo. Testado de verdade contra o OpenRouter com um WAV de silêncio.
+  Ao listar modelos de áudio no OpenRouter a chamada vai com
+  `?output_modalities=transcription`, senão viriam as centenas de modelos de
+  chat no campo errado.
+- **Modelo de linha SEM chave é resquício, não escolha** (já quebrou: áudio
+  saiu com `google/gemini-3.7-flash` e todo áudio do cliente virava
+  "[Áudio]" — `POST /audio/transcriptions` respondia
+  `Model ... does not exist`). `atualizar_chave` e `reusar_credencial` só
+  herdam o modelo do destino quando ele JÁ tinha chave; senão gravam
+  `modelo_padrao(provedor, alvo)`. Segunda barreira:
+  `_exigir_modelo_de_transcricao` recusa modelo de chat no uso de áudio
+  enquanto dá para ter certeza (OpenRouter expõe `output_modalities`);
+  provedor que não permite a checagem passa direto, porque travar a
+  configuração por causa de uma listagem fora do ar seria pior.
+- `PROVEDORES[x]["padrao"]` guarda o modelo sugerido por uso (o de transcrição
+  não é o de conversa, e cada provedor nomeia do seu jeito): é o que o painel
+  preenche ao trocar de provedor e o que a cópia de chave grava no destino.
 - Anthropic entra pela camada OpenAI-compatível (`https://api.anthropic.com/v1`);
   só o `GET /models` usa headers nativos (`x-api-key` + `anthropic-version`).
 - Defaults de modelo: texto `gpt-5.1`, imagem `gpt-4o`, áudio `whisper-1`.
@@ -241,17 +262,29 @@ primeiro `docker compose up -d`.
   3. `Atendido` — o último agendamento passou há menos de `kanban_atendido_dias`.
   4. `Esperando o cliente` — o bot falou por último.
   Contato sem conversa e sem agenda não entra (não há passo nenhum).
-  - **Fechar atendimento** é a coluna 2 na ordem das regras (`pend or feito`):
-    horário que passou e ninguém disse o que aconteceu. O par de botões
+  - **A ordem das regras é por AÇÃO PENDENTE, não por evento recente** (já
+    quebrou: quem foi atendido hoje e remarcou na hora aparecia como
+    "concluído" em vez de "agendado"). Fica: resposta devida → `pend`
+    (atendimento sem desfecho) → `ag` (horário marcado) → `feito` (só o
+    recibo). O recibo viaja no card em qualquer coluna, mas só DECIDE a coluna
+    quando não há mais nada pendente; o apagado do card fechado é escopado em
+    `.qd-col[data-chave="fechar"]`, senão o card remarcado apareceria
+    desbotado em "Agendado".
+  - **Fechar atendimento**: horário que passou e ninguém disse o que aconteceu. O par de botões
     (Compareceu / Faltou) mora no CARD, não na coluna — quem mandou mensagem
     depois está em "Vez do bot" e o dono fecha de lá também. "Compareceu"
     troca os botões pelo formulário no lugar (valor já preenchido com o preço
     do serviço, chips de forma de pagamento com a última lembrada em
     localStorage, chave "Já recebido"); "Faltou" passa pela confirmação e não
     lança nada. Enquanto o formulário está aberto o poll PARA (repintar
-    apagaria o que está sendo digitado). O card fechado vira recibo (`✓
-    Compareceu · R$ 35,50 · Pix`), fica apagado no pé da coluna pelos dias de
-    `kanban_atendido_dias` e leva **Desfazer**.
+    apagaria o que está sendo digitado). O card fechado vira recibo, **sempre
+    datado** (`✓ Compareceu hoje 14:30 · R$ 35,50 · Pix`) — sem a data, um
+    valor ao lado do chip do próximo horário parece ser daquele horário. Na
+    coluna "Fechar atendimento" o recibo é o assunto do card: vem inteiro,
+    apagado no pé da coluna pelos dias de `kanban_atendido_dias`, com
+    **Desfazer**. Em qualquer outra coluna (o cliente já remarcou) ele vira uma
+    linha discreta `.qd-passado` ("atendido hoje 14:30 · R$ 150,00"), sem ✓ e
+    sem Desfazer — que segue disponível na seção Agendamentos.
   - **O que é "esfriado" é do dono** (`Config.kanban_*`, ALTER em `_migrar`,
     form "Ajustes do quadro" → `POST /admin/kanban/ajustes`):
     `kanban_janela_dias` (7) tira do quadro quem parou há mais tempo — menos
@@ -276,9 +309,45 @@ primeiro `docker compose up -d`.
     tudo que compara com a AGENDA (passado/futuro, "hoje") usa
     `tools._agora_local()` (fuso da Config). Misturar os dois dá exatamente o
     offset do fuso.
-- **Provedores de IA no painel**: `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
+- **Provedores de IA no painel** ("Quem atende", `partials/ia.html` +
+  `js/ia.js`): `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.
+  - **Uma trilha por uso, sempre visível** (antes eram abas texto/áudio/imagem,
+    que escondiam justamente o que se quer de relance: o que está no ar). Linha
+    fechada = pill `no ar`/`sem chave` + provedor · modelo; sem chave o botão
+    vira "Configurar" com o acento. Só uma trilha aberta por vez.
+  - **Passos numerados 1 provedor → 2 chave → 3 modelo**: é sequência real, a
+    lista de modelos só existe depois da chave. O número acende quando o passo
+    está cumprido (`.ia-passo.ok`).
+  - **Um botão Salvar** para os dois endpoints (credencial e modelo): o JS
+    chama só o que mudou, na ordem. Antes eram "Salvar chave" e "Salvar
+    modelo" separados, além de "Atualizar chave"/"Cancelar".
+  - **Combobox de modelo** (`comboModelo` em `ia.js`, classes `.ac-*` do
+    autocomplete de clientes): um campo que aceita texto livre E filtra a lista
+    do provedor. Substitui o trio select + busca + input livre + opção "Outro
+    (digitar)", que era onde ninguém sabia qual dos três valia. Colar a chave
+    já dispara `modelos-preview` — listar É o teste da chave, e o número de
+    modelos aparece como confirmação.
+  - **Chave já gravada some do caminho**: o passo 2 vira o selo "chave
+    guardada · trocada em …" + botão "Trocar chave", que revela o campo. Quem
+    abre a trilha quase sempre quer mexer no modelo.
+  - **Aproveitar a chave em outro uso** (`POST /admin/ia/reusar`,
+    `ia.reusar_credencial`): a cópia é feita NO SERVIDOR — a chave nunca volta
+    ao navegador nem para ser recolada. Duas portas: botão "Usar a de
+    Conversa (OpenRouter)" num uso vazio, e a chave "Usar esta chave também
+    em Áudio e Imagem" ao gravar uma chave nova (só marca os usos VAZIOS que
+    aquele provedor atende — uso com chave própria nunca é tocado, trocar um
+    só continua sendo trocar um só). O modelo NÃO é copiado: transcrever e
+    conversar não usam o mesmo, então o destino nasce com
+    `ia.modelo_padrao(provedor, alvo)`.
+  - Feedback: erro fica inline no pé do editor (`.ia-erro`), sucesso vai por
+    toast. A `.ia-msg` sobreviveu só porque as Instruções do agente e a Ficha
+    ainda usam.
+  - O `<select>` de provedor é ordenado no JS (prontos em ordem alfabética,
+    "Personalizado" por último): o `tojson` do Jinja ordena as chaves do dict,
+    o que jogava "Personalizado (URL própria)" para o topo — e o topo é o que
+    fica escolhido por padrão.
 - **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
 - **Agenda ao vivo** (`js/agendamentos.js`, poll 8s): `GET /admin/agendamentos/
   estado` devolve `{total, linhas}` — `linhas` é HTML, renderizado do MESMO

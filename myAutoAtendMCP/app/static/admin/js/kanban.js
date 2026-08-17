@@ -88,7 +88,7 @@ function iniciar() {
   // Desenho
   // -------------------------------------------------------------------------
 
-  function cardHTML(c) {
+  function cardHTML(c, coluna) {
     // 0 = acabou de chegar na coluna, 1 = estourou o limite dela.
     const calor = c.limite_min ? Math.min(1, (c.parado_min || 0) / c.limite_min) : 0;
     const alerta = calor >= 1 && !c.esfriada;
@@ -127,7 +127,7 @@ function iniciar() {
       </button>
       ${msg}
       ${fecharHTML(c)}
-      ${fechadoHTML(c)}
+      ${fechadoHTML(c, coluna)}
       <div class="qd-card-pe">
         <div class="qd-chips">${chips.join('')}</div>
         <button type="button" class="qd-acao" data-agendar="${esc(c.telefone)}"
@@ -162,18 +162,32 @@ function iniciar() {
     </div>`;
   }
 
-  /* Recibo do que já foi fechado: fica no quadro pelos dias configurados em
-     "Atendido fica no quadro por" — é a confirmação de que o clique valeu, e
-     a janela para desfazer um desfecho informado errado. */
-  function fechadoHTML(c) {
+  /* Recibo do que já foi fechado. SEMPRE datado: sem a data, um "R$ 150,00"
+     ao lado do chip do próximo horário parece ser daquele horário.
+
+     Na coluna "Fechar atendimento" o recibo é o assunto do card — vem inteiro,
+     com Desfazer. Em qualquer outra coluna (o cliente já remarcou, por
+     exemplo) ele é só contexto do que passou: uma linha discreta, sem ✓ e sem
+     Desfazer, que continua disponível na seção Agendamentos. */
+  function fechadoHTML(c, coluna) {
     const f = c.fechado;
     if (!f) return '';
     const veio = f.resultado === 'concluido';
-    const partes = [veio ? 'Compareceu' : 'Faltou'];
+    const quando = esc(f.quando);
+    const servico = esc(f.servico || '');
+
+    if (coluna !== 'fechar') {
+      const partes = [`${veio ? 'atendido' : 'faltou'} ${f.quando}`];
+      if (veio && f.valor != null) partes.push(brl(f.valor));
+      return `<p class="qd-passado" title="${servico}${veio && f.forma ? ' · ' + esc(f.forma) : ''}">
+        ${esc(partes.join(' · '))}</p>`;
+    }
+
+    const partes = [`${veio ? 'Compareceu' : 'Faltou'} ${f.quando}`];
     if (veio && f.valor != null) partes.push(brl(f.valor));
     if (veio && f.forma) partes.push(f.forma);
     return `<div class="qd-fechado${veio ? '' : ' faltou'}">
-      <span class="qd-fechado-txt">${veio ? '✓' : '✕'} ${esc(partes.join(' · '))}</span>
+      <span class="qd-fechado-txt" title="${servico}">${veio ? '✓' : '✕'} ${esc(partes.join(' · '))}</span>
       ${veio && f.valor != null && !f.pago ? '<span class="qd-chip alerta">a receber</span>' : ''}
       <form method="post" action="/admin/agendamento/${f.id}/reabrir"
             data-sem-reload="Fechamento desfeito.">
@@ -211,7 +225,7 @@ function iniciar() {
   }
 
   function colunaHTML(col) {
-    const cards = col.cards.map(cardHTML).join('');
+    const cards = col.cards.map(c => cardHTML(c, col.chave)).join('');
     return `<section class="qd-col" data-accent="${col.accent}" data-chave="${col.chave}">
       <header class="qd-col-topo">
         <div class="qd-col-id">
