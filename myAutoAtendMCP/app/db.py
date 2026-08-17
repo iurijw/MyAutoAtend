@@ -17,7 +17,7 @@ from datetime import datetime
 from threading import Lock
 from typing import Optional
 
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlmodel import Field, Session, SQLModel, col, create_engine, select
 
 from .config import settings
 from .phone import mesmo_numero, normalizar
@@ -251,8 +251,45 @@ class Agendamento(SQLModel, table=True):
     nome_cliente: str
     inicio: str  # ISO "YYYY-MM-DDTHH:MM"
     fim: str
-    status: str = "ativo"  # ativo | cancelado
+    # ativo | concluido | faltou | cancelado. `concluido`/`faltou` são o
+    # DESFECHO informado pelo dono — nunca deduzido do relógio: horário que
+    # passou continua `ativo` até alguém dizer o que aconteceu.
+    status: str = "ativo"
+    concluido_em: str = ""  # ISO local de quando o desfecho foi informado
     observacoes: str = ""  # campo livre, opcional
+
+
+class Lancamento(SQLModel, table=True):
+    """Uma entrada ou saída de dinheiro.
+
+    Nasce do fechamento de um atendimento (`agendamento_id` preenchido) ou à
+    mão no caixa (venda de produto, despesa). É tabela separada do Agendamento
+    de propósito: caixa tem dinheiro que não é atendimento (produto, gorjeta,
+    aluguel, insumo), um atendimento pode virar mais de um lançamento (serviço
+    + produto, pagamento dividido) e estorno é lançamento novo, não reescrita
+    do histórico.
+
+    `valor` é SEMPRE positivo — o sinal vem do `tipo`. `data` é a competência
+    (o dia a que o dinheiro pertence, que é o dia do atendimento) e `criado_em`
+    é quando alguém registrou: fechar hoje a agenda de ontem cai no caixa de
+    ontem. O valor é CÓPIA do preço no momento do fechamento, não join com
+    Servico — subir o preço em março não pode reescrever o que entrou em
+    janeiro.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    data: str = Field(index=True)  # "YYYY-MM-DD" — competência
+    criado_em: str = ""  # ISO local
+    tipo: str = "receita"  # receita | despesa
+    categoria: str = "servico"  # ver CATEGORIAS_LANCAMENTO
+    descricao: str = ""
+    valor: float = 0.0  # sempre positivo
+    forma: str = ""  # ver FORMAS_PAGAMENTO ("" = não informado)
+    pago: bool = True
+    pago_em: str = ""
+    agendamento_id: Optional[int] = Field(default=None, index=True)
+    telefone_cliente: str = ""
+    servico_id: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +342,11 @@ def _migrar() -> None:
         if cols and "observacoes" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE agendamento ADD COLUMN observacoes VARCHAR NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+        if cols and "concluido_em" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE agendamento ADD COLUMN concluido_em VARCHAR NOT NULL DEFAULT ''"
             )
             conn.commit()
         cols = {r[1] for r in conn.exec_driver_sql("PRAGMA table_info(config)")}
@@ -1341,7 +1383,10 @@ def _conflita(s: Session, inicio: str, fim: str, ignorar_id: int | None = None) 
         if ini < b_fim and f > b_ini:
             return True
 
-    for a in s.exec(select(Agendamento).where(Agendamento.status == "ativo")).all():
+    # Concluído/faltou também ocupa: o horário aconteceu, e remarcar alguém
+    # por cima de um atendimento já fechado bagunçaria o histórico.
+    ocupados = ("ativo", "concluido", "faltou")
+    for a in s.exec(select(Agendamento).where(col(Agendamento.status).in_(ocupados))).all():
         if a.id == ignorar_id:
             continue
         a_ini = datetime.fromisoformat(a.inicio)
@@ -1393,6 +1438,160 @@ def reagendar_agendamento(agendamento_id: int, novo_inicio: str, novo_fim: str) 
         s.add(a)
         s.commit()
     return True
+
+
+def agendamentos_a_fechar(agora_iso: str) -> list[Agendamento]:
+    """Atendimentos cujo horário já passou e que ninguém disse o que aconteceu.
+
+    `agora_iso` vem do caller no fuso da Config (tools._agora_local) — este
+    módulo não conhece fuso, e comparar com o relógio do container mandaria
+    atendimento de hoje à tarde para a fila cedo demais.
+    """
+    with _session() as s:
+        pendentes = s.exec(select(Agendamento).where(Agendamento.status == "ativo")).all()
+    return sorted((a for a in pendentes if a.inicio < agora_iso), key=lambda a: a.inicio)
+
+
+def concluir_agendamento(
+    agendamento_id: int,
+    compareceu: bool,
+    agora_iso: str,
+    valor: float | None = None,
+    forma: str = "",
+    pago: bool = True,
+) -> Agendamento | None:
+    """Grava o desfecho do atendimento e, se houve cobrança, o lançamento.
+
+    `valor` só é usado quando `compareceu`: falta não gera lançamento (é dado
+    de agenda, não de caixa). Valor zero/None fecha sem dinheiro — cortesia,
+    atendimento gratuito ou valor a lançar depois no caixa.
+    """
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if not a or a.status != "ativo":
+            return None
+        a.status = "concluido" if compareceu else "faltou"
+        a.concluido_em = agora_iso
+        s.add(a)
+
+        if compareceu and valor and valor > 0:
+            s.add(
+                Lancamento(
+                    data=a.inicio[:10],  # competência = dia do atendimento
+                    criado_em=agora_iso,
+                    tipo="receita",
+                    categoria="servico",
+                    descricao=a.nome_cliente,
+                    valor=round(float(valor), 2),
+                    forma=forma if forma in FORMAS_PAGAMENTO else "",
+                    pago=bool(pago),
+                    pago_em=agora_iso if pago else "",
+                    agendamento_id=a.id,
+                    telefone_cliente=a.telefone_cliente,
+                    servico_id=a.servico_id,
+                )
+            )
+        s.commit()
+        s.refresh(a)
+
+    # Aviso proativo pendente perde o sentido depois do atendimento acontecer.
+    _obsoletar_avisos_pendentes(
+        agendamento_id, "Atendimento fechado — aviso descartado."
+    )
+    return a
+
+
+def reabrir_agendamento(agendamento_id: int) -> bool:
+    """Desfaz um fechamento: volta para `ativo` e apaga o que ele lançou.
+
+    Só serve para corrigir clique errado — por isso apaga apenas lançamentos
+    amarrados a ESTE agendamento. Lançamento avulso do caixa não é tocado.
+    """
+    with _lock, _session() as s:
+        a = s.get(Agendamento, agendamento_id)
+        if not a or a.status not in ("concluido", "faltou"):
+            return False
+        a.status = "ativo"
+        a.concluido_em = ""
+        s.add(a)
+        for lanc in s.exec(
+            select(Lancamento).where(Lancamento.agendamento_id == agendamento_id)
+        ).all():
+            s.delete(lanc)
+        s.commit()
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Caixa (lançamentos)
+# ---------------------------------------------------------------------------
+
+FORMAS_PAGAMENTO = {
+    "dinheiro": "Dinheiro",
+    "pix": "Pix",
+    "debito": "Débito",
+    "credito": "Crédito",
+    "outro": "Outro",
+}
+
+CATEGORIAS_LANCAMENTO = {
+    "servico": "Serviço",
+    "produto": "Produto",
+    "gorjeta": "Gorjeta",
+    "multa": "Multa",
+    "insumo": "Insumo",
+    "aluguel": "Aluguel",
+    "outro": "Outro",
+}
+
+
+def criar_lancamento(**campos) -> Lancamento:
+    with _lock, _session() as s:
+        lanc = Lancamento(**campos)
+        s.add(lanc)
+        s.commit()
+        s.refresh(lanc)
+        return lanc
+
+
+def lancamentos_do_agendamento(agendamento_id: int) -> list[Lancamento]:
+    with _session() as s:
+        return list(
+            s.exec(
+                select(Lancamento).where(Lancamento.agendamento_id == agendamento_id)
+            ).all()
+        )
+
+
+def listar_lancamentos(de: str = "", ate: str = "") -> list[Lancamento]:
+    """Lançamentos por competência, do mais recente para o mais antigo.
+    `de`/`ate` são "YYYY-MM-DD" inclusivos; vazios = tudo."""
+    with _session() as s:
+        stmt = select(Lancamento)
+        if de:
+            stmt = stmt.where(Lancamento.data >= de)
+        if ate:
+            stmt = stmt.where(Lancamento.data <= ate)
+        itens = list(s.exec(stmt).all())
+    return sorted(itens, key=lambda x: (x.data, x.criado_em), reverse=True)
+
+
+def resumo_caixa(de: str = "", ate: str = "") -> dict:
+    """Entradas, saídas, saldo e o que ainda está a receber no período."""
+    receita = despesa = a_receber = 0.0
+    for lanc in listar_lancamentos(de, ate):
+        if lanc.tipo == "despesa":
+            despesa += lanc.valor
+        else:
+            receita += lanc.valor
+            if not lanc.pago:
+                a_receber += lanc.valor
+    return {
+        "receita": round(receita, 2),
+        "despesa": round(despesa, 2),
+        "saldo": round(receita - despesa, 2),
+        "a_receber": round(a_receber, 2),
+    }
 
 
 def cancelar_agendamento(agendamento_id: int) -> bool:

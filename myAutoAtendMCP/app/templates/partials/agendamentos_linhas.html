@@ -4,9 +4,15 @@
    painel e em GET /admin/agendamentos/estado, que o js/agendamentos.js usa
    para repintar o corpo da tabela sem recarregar a página. Remontar essa
    linha em JS deixaria dois markups (com os data-confirmar, o form de
-   reagendar, os botões) para manter em sincronia. #}
+   reagendar, os botões) para manter em sincronia.
+
+   Contexto: `agendamentos`, `servico_nome`, `lancamentos` (id do agendamento →
+   Lancamento, só nos fechados) e `vazio_txt`. Linha ATIVA é operável
+   (reagendar/cancelar); linha com desfecho vira histórico — mostra o que
+   aconteceu, quanto entrou, e só permite desfazer. #}
+{% set rotulo_status = {'concluido': 'concluído', 'faltou': 'faltou', 'cancelado': 'cancelado'} %}
 {% for a in agendamentos %}
-  <tr>
+  <tr class="ag-linha ag-{{ a.status }}">
     <td class="id">{{ a.id }}</td>
     <td>
       <div class="cli">
@@ -21,15 +27,18 @@
     <td class="when-cell">
       <span class="d">{{ a.inicio.split('T')[0] }}</span>
       <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
+      {% if a.status == 'ativo' %}
       <form class="reagenda" id="rg{{ a.id }}" method="post" action="/admin/agendamento/{{ a.id }}/reagendar"
             data-sem-reload="Agendamento remarcado.">
         <input type="datetime-local" name="novo_inicio" value="{{ a.inicio }}" required>
         <label class="avisar-cli" title="A IA manda mensagem no WhatsApp do cliente avisando a mudança"><input type="checkbox" name="avisar_cliente" value="1"> Avisar cliente</label>
         <button class="btn-sm btn-primary" style="margin:0">Confirmar</button>
       </form>
+      {% endif %}
     </td>
     <td>
       <div class="acts">
+      {% if a.status == 'ativo' %}
         <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
         <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
         <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
@@ -43,9 +52,31 @@
           <input type="hidden" name="avisar_cliente" value="">
           <button class="btn-sm btn-danger">Cancelar</button>
         </form>
+      {% else %}
+        {% set lanc = lancamentos.get(a.id) %}
+        <span class="acts-desfecho">
+          <span class="pill st-{{ a.status }}">{{ rotulo_status.get(a.status, a.status) }}</span>
+          {% if lanc %}
+            <span class="price">R$ {{ "%.2f"|format(lanc.valor)|replace('.', ',') }}</span>
+            {% if lanc.forma %}<span class="meta">{{ formas.get(lanc.forma, lanc.forma) }}</span>{% endif %}
+            {% if not lanc.pago %}<span class="pill st-receber">a receber</span>{% endif %}
+          {% endif %}
+        </span>
+        <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
+        {% if a.status in ('concluido', 'faltou') %}
+        <form method="post" action="/admin/agendamento/{{ a.id }}/reabrir"
+              data-sem-reload="Fechamento desfeito."
+              data-confirmar="Desfazer o fechamento de {{ a.nome_cliente }}?"
+              data-confirmar-texto="Volta para a fila de fechamento no Quadro."
+              data-confirmar-nota="{{ 'O valor lançado no caixa é apagado.' if lanc else 'Nada foi lançado no caixa.' }}"
+              data-confirmar-acao="Desfazer" data-confirmar-seguro>
+          <button class="btn-sm btn-ghost">Desfazer</button>
+        </form>
+        {% endif %}
+      {% endif %}
       </div>
     </td>
   </tr>
 {% else %}
-  <tr><td colspan="5" class="empty">Nenhum agendamento ativo. Marque o primeiro em <b>+ Novo agendamento</b>.</td></tr>
+  <tr><td colspan="5" class="empty">{{ vazio_txt }}</td></tr>
 {% endfor %}

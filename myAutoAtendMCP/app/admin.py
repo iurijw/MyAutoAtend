@@ -187,6 +187,11 @@ def painel(request: Request, _: str = Depends(autenticar)):
             "agendamentos": agendamentos,
             "clientes": clientes,
             "servico_nome": nome_por_id,
+            # A seção Agendamentos abre nos ativos; os outros desfechos entram
+            # pelo filtro, que repinta pelo mesmo partial (ver _contexto_agenda).
+            "lancamentos": {},
+            "formas": db.FORMAS_PAGAMENTO,
+            "vazio_txt": STATUS_AGENDA["ativo"][1],
             "n_ativos": sum(1 for s in servicos if s.ativo),
             "horarios_por_dia": horarios_por_dia,
             "n_horarios": len(horarios),
@@ -209,8 +214,113 @@ def painel(request: Request, _: str = Depends(autenticar)):
 # ---------------------------------------------------------------------------
 
 
+# Filtro da seção Agendamentos: chave → (rótulo, texto de lista vazia).
+STATUS_AGENDA = {
+    "ativo": (
+        "Ativos",
+        "Nenhum agendamento ativo. Marque o primeiro em + Novo agendamento.",
+    ),
+    "concluido": (
+        "Concluídos",
+        "Nenhum atendimento concluído ainda. O fechamento é feito no Quadro.",
+    ),
+    "faltou": ("Faltas", "Nenhuma falta registrada."),
+    "cancelado": ("Cancelados", "Nenhum agendamento cancelado."),
+    "todos": ("Todos", "Nada na agenda ainda."),
+}
+
+
+def _intervalo_periodo(periodo: str) -> tuple[str, str]:
+    """Atalho de período → (de, ate) em YYYY-MM-DD, resolvido no fuso da Config.
+
+    Resolver no servidor (e não no navegador) porque "hoje" é o hoje do
+    negócio: o painel pode estar aberto num celular em outro fuso.
+    """
+    hoje = _agora_local().date()
+    if periodo == "hoje":
+        return hoje.isoformat(), hoje.isoformat()
+    if periodo == "semana":  # segunda a domingo da semana corrente
+        ini = hoje - timedelta(days=hoje.weekday())
+        return ini.isoformat(), (ini + timedelta(days=6)).isoformat()
+    if periodo == "mes":
+        ini = hoje.replace(day=1)
+        fim = (ini + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        return ini.isoformat(), fim.isoformat()
+    return "", ""
+
+
+def _contexto_agenda(
+    status: str = "ativo",
+    periodo: str = "tudo",
+    de: str = "",
+    ate: str = "",
+    servico: int = 0,
+    busca: str = "",
+) -> dict:
+    """Contexto do partial das linhas: desfecho + período + serviço + busca.
+
+    Ativos vêm com os próximos primeiro (é a fila de trabalho); histórico vem
+    do mais recente para o mais antigo, que é como se olha para trás. O valor
+    do fechamento sai do `Lancamento` ligado ao agendamento — a linha não
+    recalcula preço nenhum. Datas explícitas ganham do atalho de período: quem
+    digitou um intervalo quer aquele intervalo.
+    """
+    escolhido = status if status in STATUS_AGENDA else "ativo"
+    todos = db.listar_agendamentos(apenas_ativos=False)
+    itens = todos if escolhido == "todos" else [a for a in todos if a.status == escolhido]
+
+    if not (de or ate):
+        de, ate = _intervalo_periodo(periodo)
+    if de:
+        itens = [a for a in itens if a.inicio[:10] >= de]
+    if ate:
+        itens = [a for a in itens if a.inicio[:10] <= ate]
+    if servico:
+        itens = [a for a in itens if a.servico_id == servico]
+    if busca.strip():
+        termo = busca.strip().lower()
+        digitos = re.sub(r"\D", "", termo)
+        itens = [
+            a
+            for a in itens
+            if termo in (a.nome_cliente or "").lower()
+            or (digitos and digitos in re.sub(r"\D", "", a.telefone_cliente or ""))
+        ]
+
+    filtrado = bool(de or ate or servico or busca.strip())
+    itens.sort(key=lambda a: a.inicio, reverse=escolhido != "ativo")
+
+    lancamentos: dict[int, db.Lancamento] = {}
+    if escolhido != "ativo":
+        for lanc in db.listar_lancamentos():
+            if lanc.agendamento_id and lanc.agendamento_id not in lancamentos:
+                lancamentos[lanc.agendamento_id] = lanc
+
+    return {
+        "agendamentos": itens,
+        "servico_nome": {s.id: s.nome for s in db.listar_todos_servicos()},
+        "lancamentos": lancamentos,
+        "formas": db.FORMAS_PAGAMENTO,
+        # Com filtro ligado, a lista vazia não é "não existe nada" — é "nada
+        # casou". Dizer a coisa errada aqui manda o dono procurar bug onde não há.
+        "vazio_txt": (
+            "Nada encontrado com esses filtros."
+            if filtrado
+            else STATUS_AGENDA[escolhido][1]
+        ),
+    }
+
+
 @router.get("/admin/agendamentos/estado")
-def agendamentos_estado(_: str = Depends(autenticar)):
+def agendamentos_estado(
+    status: str = "ativo",
+    periodo: str = "tudo",
+    de: str = "",
+    ate: str = "",
+    servico: int = 0,
+    q: str = "",
+    _: str = Depends(autenticar),
+):
     """Corpo da tabela de agendamentos, pronto para o painel trocar sozinho.
 
     Devolve HTML e não JSON de propósito: as linhas saem do MESMO partial da
@@ -219,15 +329,19 @@ def agendamentos_estado(_: str = Depends(autenticar)):
     para sair de sincronia. O JS compara a string com a anterior e só repinta
     quando ela muda — agendamento marcado pelo bot no WhatsApp aparece aqui sem
     ninguém apertar F5.
+
+    Filtros: `status` (desfecho), `periodo` (tudo/hoje/semana/mes) ou o par
+    `de`/`ate`, `servico` e `q` (nome ou telefone do cliente). O total volta
+    junto para o contador da seção.
     """
-    agendamentos = sorted(db.listar_agendamentos(), key=lambda a: a.inicio)
-    linhas = templates.get_template("partials/agendamentos_linhas.html").render(
-        {
-            "agendamentos": agendamentos,
-            "servico_nome": {s.id: s.nome for s in db.listar_todos_servicos()},
-        }
-    )
-    return {"total": len(agendamentos), "linhas": linhas}
+    ctx = _contexto_agenda(status, periodo, de, ate, servico, q)
+    linhas = templates.get_template("partials/agendamentos_linhas.html").render(ctx)
+    return {
+        "total": len(ctx["agendamentos"]),
+        # O badge do menu conta sempre os ATIVOS, esteja o filtro onde estiver.
+        "ativos": len(db.listar_agendamentos()),
+        "linhas": linhas,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -701,6 +815,59 @@ def cancelar_agendamento(
     return RedirectResponse("/admin", status_code=303)
 
 
+def _valor_brl(bruto: str) -> float | None:
+    """"45,50" / "45.50" / "R$ 45" → 45.5. Vazio ou ilegível → None."""
+    limpo = re.sub(r"[^\d,.-]", "", bruto or "").replace(",", ".")
+    if not limpo:
+        return None
+    try:
+        return round(float(limpo), 2)
+    except ValueError:
+        return None
+
+
+@router.post("/admin/agendamento/{agendamento_id}/concluir")
+def concluir_agendamento_painel(
+    agendamento_id: int,
+    _: str = Depends(autenticar),
+    compareceu: str = Form("1"),
+    valor: str = Form(""),
+    forma: str = Form(""),
+    pago: str = Form(""),
+):
+    """Desfecho do atendimento: compareceu (com o que foi cobrado) ou faltou.
+
+    Falta não gera lançamento — é dado de agenda, não de caixa. O valor é
+    cópia do preço no momento do fechamento (ver db.concluir_agendamento).
+    """
+    veio = compareceu not in ("", "0", "false")
+    ag = db.concluir_agendamento(
+        agendamento_id,
+        compareceu=veio,
+        agora_iso=_agora_local().isoformat(timespec="minutes"),
+        valor=_valor_brl(valor) if veio else None,
+        forma=forma.strip().lower(),
+        pago=pago not in ("", "0", "false"),
+    )
+    if not ag:
+        raise HTTPException(
+            status_code=404,
+            detail="Atendimento não encontrado ou já fechado.",
+        )
+    return {"ok": True, "status": ag.status}
+
+
+@router.post("/admin/agendamento/{agendamento_id}/reabrir")
+def reabrir_agendamento_painel(agendamento_id: int, _: str = Depends(autenticar)):
+    """Desfaz um fechamento feito por engano (volta a ativo e apaga o que ele
+    lançou no caixa)."""
+    if not db.reabrir_agendamento(agendamento_id):
+        raise HTTPException(
+            status_code=404, detail="Atendimento não está fechado."
+        )
+    return {"ok": True}
+
+
 @router.post("/admin/agendamento/{agendamento_id}/reagendar")
 def reagendar_agendamento(
     agendamento_id: int,
@@ -820,7 +987,7 @@ COLUNAS_QUADRO = (
     ("bot", "Vez do bot", "o cliente falou por último", "zap"),
     ("cliente", "Esperando o cliente", "o bot falou por último", "ouro"),
     ("agendado", "Agendado", "com horário marcado", "mata"),
-    ("atendido", "Atendido", "o horário já passou", "neutro"),
+    ("fechar", "Fechar atendimento", "o horário passou — o que aconteceu?", "neutro"),
 )
 
 
@@ -881,17 +1048,36 @@ def _quadro_estado() -> dict:
     hoje = agora_local.date()
     agora_iso = agora_local.isoformat(timespec="minutes")
 
-    # Por contato: o próximo agendamento e o último que já passou.
+    # Por contato: o próximo agendamento, o que está esperando fechamento e o
+    # último já fechado (que fica um tempo no quadro como recibo).
     servicos = {s.id: s.nome for s in db.listar_todos_servicos()}
+    valores = {s.id: s.valor for s in db.listar_todos_servicos()}
+    limite_fechado = (
+        agora_local - timedelta(days=max(cfg.kanban_atendido_dias, 0))
+    ).isoformat(timespec="minutes")
+
     proximo: dict[str, db.Agendamento] = {}
-    anterior: dict[str, db.Agendamento] = {}
-    for a in db.listar_agendamentos():
+    a_fechar: dict[str, db.Agendamento] = {}
+    fechado: dict[str, db.Agendamento] = {}
+    for a in db.listar_agendamentos(apenas_ativos=False):
         tel = normalizar(a.telefone_cliente) or a.telefone_cliente
-        if a.inicio >= agora_iso:
-            if tel not in proximo or a.inicio < proximo[tel].inicio:
-                proximo[tel] = a
-        elif tel not in anterior or a.inicio > anterior[tel].inicio:
-            anterior[tel] = a
+        if a.status == "ativo":
+            if a.inicio >= agora_iso:
+                if tel not in proximo or a.inicio < proximo[tel].inicio:
+                    proximo[tel] = a
+            # Horário passou e ninguém disse o que aconteceu: o mais ANTIGO
+            # primeiro — é o que está esperando fechamento há mais tempo.
+            elif tel not in a_fechar or a.inicio < a_fechar[tel].inicio:
+                a_fechar[tel] = a
+        elif a.status in ("concluido", "faltou") and a.inicio >= limite_fechado:
+            if tel not in fechado or a.inicio > fechado[tel].inicio:
+                fechado[tel] = a
+
+    # Valor e forma do que já foi fechado, em uma consulta só.
+    lancados: dict[int, db.Lancamento] = {}
+    for lanc in db.listar_lancamentos(de=limite_fechado[:10]):
+        if lanc.agendamento_id and lanc.agendamento_id not in lancados:
+            lancados[lanc.agendamento_id] = lanc
 
     cards: dict[str, list] = {chave: [] for chave, *_ in COLUNAS_QUADRO}
     fora = 0
@@ -900,21 +1086,22 @@ def _quadro_estado() -> dict:
         tel = c["telefone"]
         parado = _minutos_desde(c["atualizado_em"], agora)
         ag = proximo.get(tel)
-        ant = anterior.get(tel)
-        desde_atendimento = _minutos_desde(ant.inicio, agora_local) if ant else None
+        pend = a_fechar.get(tel)
+        feito = fechado.get(tel)
         esfriada = False
 
         # A ordem importa: uma pergunta sem resposta ganha de qualquer outra
         # coisa — mesmo de quem já tem horário marcado, porque o bot está
-        # devendo resposta AGORA.
+        # devendo resposta AGORA. Depois vem o fechamento: dinheiro pendente é
+        # a coisa mais concreta do quadro, e a fila de fechar tem que estar
+        # inteira num lugar só (o card já fechado fica junto, apagado, como
+        # recibo de que o clique valeu).
         if c["respondendo"] or c["quem"] == "cliente":
             coluna, limite = "bot", max(cfg.kanban_travado_min, 1)
+        elif pend or feito:
+            coluna, limite = "fechar", None
         elif ag:
             coluna, limite = "agendado", None
-        elif desde_atendimento is not None and (
-            desde_atendimento <= cfg.kanban_atendido_dias * 24 * 60
-        ):
-            coluna, limite = "atendido", None
         elif c["quem"] in ("bot", "sistema"):
             coluna = "cliente"
             limite = cfg.kanban_esfria_h * 60
@@ -922,15 +1109,19 @@ def _quadro_estado() -> dict:
         else:
             continue  # contato sem conversa e sem agenda: não há passo nenhum
 
-        # Fora da janela de atividade = esfriou, salvo se tem horário marcado
+        # Fora da janela de atividade = esfriou, salvo se tem agenda envolvida
         # (aí o card é informação viva, não conversa parada).
-        if not ag and parado is not None and parado > cfg.kanban_janela_dias * 24 * 60:
+        if (
+            not (ag or pend or feito)
+            and parado is not None
+            and parado > cfg.kanban_janela_dias * 24 * 60
+        ):
             esfriada = True
         if esfriada and not cfg.kanban_mostrar_esfriadas:
             fora += 1
             continue
 
-        ref = ag or (ant if coluna == "atendido" else None)
+        lanc = lancados.get(feito.id) if feito else None
         cards[coluna].append(
             {
                 "telefone": tel,
@@ -947,12 +1138,40 @@ def _quadro_estado() -> dict:
                 "esfriada": esfriada,
                 "agendamento": (
                     {
-                        "servico": servicos.get(ref.servico_id, "—"),
-                        "quando": _quando_fmt(ref.inicio, hoje),
-                        "quando_iso": ref.inicio,
-                        "hoje": ref.inicio[:10] == hoje.isoformat(),
+                        "servico": servicos.get(ag.servico_id, "—"),
+                        "quando": _quando_fmt(ag.inicio, hoje),
+                        "quando_iso": ag.inicio,
+                        "hoje": ag.inicio[:10] == hoje.isoformat(),
                     }
-                    if ref
+                    if ag
+                    else None
+                ),
+                # Botões de desfecho: vão no card, não na coluna — quem tem
+                # fechamento pendente pode estar em "Vez do bot" e o dono
+                # precisa poder fechar de lá também.
+                "fechamento": (
+                    {
+                        "id": pend.id,
+                        "servico": servicos.get(pend.servico_id, "—"),
+                        "valor": valores.get(pend.servico_id, 0.0),
+                        "quando": _quando_fmt(pend.inicio, hoje),
+                        "quando_iso": pend.inicio,
+                    }
+                    if pend
+                    else None
+                ),
+                "fechado": (
+                    {
+                        "id": feito.id,
+                        "resultado": feito.status,
+                        "servico": servicos.get(feito.servico_id, "—"),
+                        "quando": _quando_fmt(feito.inicio, hoje),
+                        "quando_iso": feito.inicio,
+                        "valor": lanc.valor if lanc else None,
+                        "forma": db.FORMAS_PAGAMENTO.get(lanc.forma, "") if lanc else "",
+                        "pago": bool(lanc.pago) if lanc else True,
+                    }
+                    if feito
                     else None
                 ),
             }
@@ -961,8 +1180,15 @@ def _quadro_estado() -> dict:
     # Agendado ordena pela agenda; o resto pelo tempo parado (quem espera mais
     # aparece primeiro). Esfriada sempre no pé da coluna.
     cards["agendado"].sort(key=lambda x: x["agendamento"]["quando_iso"])
-    for chave in ("bot", "cliente", "atendido"):
+    for chave in ("bot", "cliente"):
         cards[chave].sort(key=lambda x: (x["esfriada"], -(x["parado_min"] or 0)))
+    # Fechar: pendentes no topo (mais antigo primeiro, é quem espera há mais
+    # tempo), fechados embaixo (mais recente primeiro).
+    pendentes = [x for x in cards["fechar"] if x["fechamento"]]
+    prontos = [x for x in cards["fechar"] if not x["fechamento"]]
+    pendentes.sort(key=lambda x: x["fechamento"]["quando_iso"])
+    prontos.sort(key=lambda x: x["fechado"]["quando_iso"], reverse=True)
+    cards["fechar"] = pendentes + prontos
 
     return {
         "colunas": [

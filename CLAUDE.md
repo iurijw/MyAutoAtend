@@ -21,7 +21,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/agente.py` | Agente pydantic-ai: tools, memória (SQLite), system prompt |
 | `myAutoAtendMCP/app/ia.py` | Provedores de IA (config no SQLite), transcrição, visão, listagem de modelos |
 | `myAutoAtendMCP/app/evolution.py` | Cliente Evolution: painel (sync), pipeline (async), bootstrap da instância |
-| `myAutoAtendMCP/app/tools.py` | 16 tools (FastMCP): 14 de agendamento + 2 da ficha de cadastro — usadas pelo agente E expostas em `/mcp` |
+| `myAutoAtendMCP/app/tools.py` | 18 tools (FastMCP): 16 de agendamento (incl. `concluir_atendimento`/`reabrir_atendimento`) + 2 da ficha de cadastro — usadas pelo agente E expostas em `/mcp` |
 | `myAutoAtendMCP/app/tarefas.py` | Worker de ações proativas (fila `Tarefa`): bot inicia conversa (ex.: remanejar dia) |
 | `myAutoAtendMCP/app/midia.py` | Mídia da conversa: desembrulha o payload Baileys (efêmera/ver-uma-vez/doc com legenda), classifica o tipo e guarda o arquivo em `/data/midia` (teto de 25 MB) |
 | `myAutoAtendMCP/app/ficha.py` | Ficha de cadastro: tipos de campo, validação/normalização por tipo, montagem da ficha de um contato |
@@ -92,9 +92,10 @@ primeiro `docker compose up -d`.
 - Tools = funções originais de `app/tools.py` (o decorator FastMCP devolve a
   função intacta). **Toolset por remetente** (defesa em profundidade; o auth
   fino continua em `auth.py`): `_TOOLS_CLIENTE` (6: listar_servicos, consultar,
-  agendar, meus_agendamentos, reagendar, cancelar) e `_TOOLS_DONO` (14 = as 6 +
+  agendar, meus_agendamentos, reagendar, cancelar) e `_TOOLS_DONO` (16 = as 6 +
   gestão: fechar/abrir_data, bloquear_horario, remanejar_dia, criar/editar_
-  servico, ver_agenda_completa, pausar_bot). Agent montado a cada mensagem.
+  servico, ver_agenda_completa, concluir_atendimento, reabrir_atendimento,
+  pausar_bot). Agent montado a cada mensagem.
   `_TOOLS_FICHA` (ver_ficha, preencher_ficha) entra nos DOIS perfis, mas só
   com `Config.ficha_ativa` — desligada, o modelo nem vê que a ficha existe.
 - **Memória por contato**: tabela `Conversa` (SQLite), histórico serializado
@@ -240,6 +241,17 @@ primeiro `docker compose up -d`.
   3. `Atendido` — o último agendamento passou há menos de `kanban_atendido_dias`.
   4. `Esperando o cliente` — o bot falou por último.
   Contato sem conversa e sem agenda não entra (não há passo nenhum).
+  - **Fechar atendimento** é a coluna 2 na ordem das regras (`pend or feito`):
+    horário que passou e ninguém disse o que aconteceu. O par de botões
+    (Compareceu / Faltou) mora no CARD, não na coluna — quem mandou mensagem
+    depois está em "Vez do bot" e o dono fecha de lá também. "Compareceu"
+    troca os botões pelo formulário no lugar (valor já preenchido com o preço
+    do serviço, chips de forma de pagamento com a última lembrada em
+    localStorage, chave "Já recebido"); "Faltou" passa pela confirmação e não
+    lança nada. Enquanto o formulário está aberto o poll PARA (repintar
+    apagaria o que está sendo digitado). O card fechado vira recibo (`✓
+    Compareceu · R$ 35,50 · Pix`), fica apagado no pé da coluna pelos dias de
+    `kanban_atendido_dias` e leva **Desfazer**.
   - **O que é "esfriado" é do dono** (`Config.kanban_*`, ALTER em `_migrar`,
     form "Ajustes do quadro" → `POST /admin/kanban/ajustes`):
     `kanban_janela_dias` (7) tira do quadro quem parou há mais tempo — menos
@@ -279,6 +291,25 @@ primeiro `docker compose up -d`.
   novo (`avatars.js` exporta `pintarAvatares(raiz)`, cache por número) e o
   contador/badge do menu acompanham. Aba em segundo plano não gasta poll
   (`document.hidden`; volta a atualizar no `visibilitychange`).
+  - **Filtros** — desfecho na linha de cima (`ag-filtros`: Ativos (padrão) ·
+    Concluídos · Faltas · Cancelados · Todos) e o refino na de baixo
+    (`ag-refino`): período (chips Tudo/Hoje/Semana/Mês **ou** o par de datas —
+    data digitada ganha do atalho, e um sempre limpa o outro), serviço e busca
+    por nome/telefone (debounce de 250 ms, casa também só os dígitos). Tudo
+    vira query string do MESMO endpoint (`periodo|de|ate|servico|q`) — nada é
+    filtrado no navegador, então contador e linhas nunca discordam. O atalho de
+    período é resolvido no SERVIDOR (`_intervalo_periodo`, fuso da Config):
+    "hoje" é o hoje do negócio, não o do celular que abriu o painel. Com filtro
+    ligado a lista vazia diz "Nada encontrado com esses filtros" (e não que não
+    existe nada) e aparece o "Limpar filtros".
+    O JS manda `?status=` para o mesmo endpoint;
+    `admin._contexto_agenda` monta o contexto do partial — ativos ordenados
+    pelos próximos primeiro (fila de trabalho), histórico do mais recente para
+    o mais antigo. Linha ativa é operável (reagendar/cancelar); linha com
+    desfecho vira leitura: pill do status, valor e forma vindos do `Lancamento`
+    ligado (nunca recalcula preço), "a receber" quando não pago, e Desfazer.
+    O badge do menu conta SEMPRE os ativos (campo `ativos` na resposta), senão
+    mudaria só por alguém ter ido olhar os cancelados.
   - **Ação do painel não recarrega mais a página**: form com `data-sem-reload`
     (cancelar e reagendar) faz o `forms.js` trocar o `location.reload()` por um
     toast — o texto do atributo é a confirmação, já que sem reload o toast é o
@@ -310,6 +341,31 @@ primeiro `docker compose up -d`.
   valida os `campo_<chave>` ANTES de criar o agendamento — erro → 400
   `{erros}` e nada é criado — e grava depois com origem "painel"; campo enviado
   vazio APAGA o valor (mesma semântica do modal da ficha).
+- **Conclusão do atendimento + base do financeiro**: `Agendamento.status` agora
+  é `ativo · concluido · faltou · cancelado` (+ `concluido_em`, ALTER em
+  `_migrar`). O desfecho é SEMPRE informado — nada de concluir por decurso de
+  prazo: dinheiro não se marca como recebido pelo relógio. `db.concluir_
+  agendamento(id, compareceu, agora_iso, valor, forma, pago)` grava o status e,
+  só quando compareceu e há valor, cria o `Lancamento`; `db.reabrir_
+  agendamento` desfaz os dois (é a janela de correção do clique errado).
+  `_conflita` passou a considerar `concluido`/`faltou` como ocupados — o
+  horário aconteceu.
+  - **`Lancamento` é tabela separada do agendamento** de propósito: caixa tem
+    dinheiro que não é atendimento (produto, gorjeta, aluguel, insumo), um
+    atendimento pode virar mais de um lançamento (serviço + produto, pagamento
+    dividido) e estorno é lançamento novo, não reescrita do histórico. `valor`
+    sempre positivo (o sinal vem de `tipo` receita/despesa); `data` é a
+    COMPETÊNCIA (dia do atendimento) e `criado_em` é quando registraram —
+    fechar hoje a agenda de ontem cai no caixa de ontem. O valor é CÓPIA do
+    preço no fechamento, nunca join com `Servico`: subir preço em março não
+    pode reescrever o que entrou em janeiro. `db.FORMAS_PAGAMENTO` /
+    `CATEGORIAS_LANCAMENTO`, `listar_lancamentos(de, ate)` e `resumo_caixa`
+    já existem — a seção Caixa (fase 2) só precisa de tela.
+  - Rotas: `POST /admin/agendamento/{id}/concluir` (form `compareceu`,
+    `valor` — aceita "45,50" via `_valor_brl` —, `forma`, `pago`) e
+    `/{id}/reabrir`. Tools do dono: `concluir_atendimento` (sem `valor` usa o
+    preço do serviço; 0 = cortesia; `pago=false` = a receber) e
+    `reabrir_atendimento`; `ver_agenda_completa` devolve também `a_fechar`.
 - **Aviso ao dono** (`app/notificacoes.py`): WhatsApp do dono recebe template
   fixo (sem IA) quando o BOT agenda/reagenda/cancela. Liga/desliga só pelo
   painel (checkbox na Configuração geral → `Config.avisar_dono`, ALTER em

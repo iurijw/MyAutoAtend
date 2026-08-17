@@ -322,6 +322,51 @@ html[data-theme="dark"] .pill.off{background:rgba(180,166,138,.14);}
 .acts{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;}
 .empty{padding:30px 12px; text-align:center; color:var(--ink-soft); font-style:italic;}
 
+/* ---------- filtros da agenda ----------
+   Duas alturas: o desfecho é o eixo principal (pílulas cheias, acento da
+   seção); período, serviço e busca afinam dentro dele e por isso vêm em tom
+   menor, atrás de um fio. */
+.ag-filtros{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px;}
+.ag-refino{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  margin:0 0 16px; padding:10px 0 0; border-top:1px solid var(--line);}
+.ag-refino-rot{font:700 10px/1 "Hanken Grotesk"; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-soft); margin-right:2px;}
+.ag-periodo{display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
+.ag-chip{padding:4px 10px; border-radius:999px; border:1px solid var(--line);
+  background:transparent; color:var(--ink-soft); font-size:12px; font-weight:600;}
+.ag-chip:hover{border-color:var(--accent); color:var(--accent);}
+.ag-chip[aria-pressed="true"]{background:color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color:color-mix(in srgb, var(--accent) 45%, transparent); color:var(--accent);}
+.ag-data{width:auto; flex:none; padding:5px 9px; font:500 12px/1.2 "JetBrains Mono",monospace;}
+.ag-data::-webkit-calendar-picker-indicator{opacity:.45; cursor:pointer;}
+.ag-data:hover::-webkit-calendar-picker-indicator{opacity:.9;}
+.ag-ate{font-size:12px; color:var(--ink-soft);}
+.ag-select{width:auto; flex:none; max-width:210px; padding:6px 10px; font-size:13px;}
+.ag-busca{margin:0 0 0 auto; width:min(260px,100%);}
+.ag-limpar{flex:none; padding:5px 10px; border:none; background:transparent;
+  color:var(--accent); font-size:12.5px; font-weight:600; text-decoration:underline;
+  text-underline-offset:3px;}
+@media (max-width:900px){
+  .ag-busca{margin-left:0;}
+}
+.ag-filtro{padding:6px 13px; border-radius:999px; border:1px solid var(--line);
+  background:transparent; color:var(--ink-soft); font-size:12.5px; font-weight:600;}
+.ag-filtro:hover{border-color:var(--accent); color:var(--accent);}
+.ag-filtro[aria-pressed="true"]{background:var(--accent-solid); border-color:var(--accent-solid);
+  color:var(--accent-on);}
+/* histórico é leitura: recua um pouco em relação à fila ativa */
+.ag-linha.ag-cancelado td{opacity:.62;}
+.pill.st-concluido{background:rgba(63,107,76,.16); color:var(--green);}
+.pill.st-faltou{background:rgba(138,42,47,.13); color:var(--oxblood);}
+.pill.st-cancelado{background:rgba(92,84,71,.14); color:var(--ink-soft);}
+.pill.st-receber{background:rgba(184,134,47,.18); color:var(--gold);}
+html[data-theme="dark"] .pill.st-concluido{background:rgba(120,183,141,.16);}
+html[data-theme="dark"] .pill.st-cancelado{background:rgba(180,166,138,.14);}
+/* desfecho encosta à esquerda da célula; os botões seguem à direita */
+.acts-desfecho{margin-right:auto; display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;}
+.acts-desfecho .price{font-size:16px;}
+.acts-desfecho .meta{font-size:12px;}
+
 .reagenda{display:none; margin-top:10px; gap:8px; align-items:center; flex-wrap:wrap;}
 .reagenda.open{display:flex;}
 .reagenda input{max-width:220px; padding:7px 10px;}
@@ -458,6 +503,56 @@ html[data-theme="dark"] .proat-erro{color:var(--oxblood);}
 .qd-acao{flex:none; padding:4px 10px; border-radius:999px; background:transparent;
   border:1px dashed var(--line); color:var(--ink-soft); font-size:11.5px; font-weight:600;}
 .qd-acao:hover{border-style:solid; border-color:var(--accent); color:var(--accent);}
+
+/* ---------- fechamento do atendimento ----------
+   Mora dentro do card porque o desfecho é do atendimento, não da coluna: quem
+   tem atendimento em aberto pode estar em "Vez do bot" e o dono fecha de lá.
+   O par de botões é substituído pelo formulário no mesmo lugar — nada de
+   modal, porque fechar o dia é repetição e cada clique a mais pesa. */
+.qd-fechar{margin-top:9px; padding-top:9px; border-top:1px dashed var(--line);}
+.qd-fechar-ref{margin:0 0 7px; font:500 11.5px/1.3 "JetBrains Mono",monospace;
+  color:var(--ink-soft);}
+.qd-fechar-linha{display:flex; gap:6px;}
+.qd-btn-veio,.qd-btn-faltou{flex:1; padding:6px 10px; border-radius:8px;
+  font-size:12.5px; font-weight:600; border:1px solid transparent;}
+.qd-btn-veio{background:color-mix(in srgb, var(--green) 18%, transparent); color:var(--green);
+  border-color:color-mix(in srgb, var(--green) 34%, transparent);}
+.qd-btn-veio:hover{background:var(--green); color:var(--paper);}
+.qd-btn-faltou{width:100%; background:transparent; color:var(--ink-soft); border-color:var(--line);}
+.qd-btn-faltou:hover{border-color:var(--oxblood); color:var(--oxblood);}
+.qd-fechar-linha form{flex:1; display:flex;}
+
+.qd-fechar-form{display:flex; flex-direction:column; gap:8px;}
+.qd-fechar-rot{margin:0; font-size:10px;}
+.qd-valor{display:flex; align-items:center; gap:7px; padding:6px 10px; border-radius:9px;
+  background:var(--paper-2); border:1px solid var(--line);}
+.qd-valor:focus-within{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);}
+.qd-valor-cifra{font:600 12px/1 "Hanken Grotesk"; color:var(--ink-soft);}
+.qd-valor input{flex:1; min-width:0; width:auto; padding:0; border:none; background:transparent;
+  font:600 16px/1.2 "JetBrains Mono",monospace; color:var(--ink);}
+.qd-valor input:focus{outline:none; box-shadow:none;}
+.qd-formas{display:flex; flex-wrap:wrap; gap:5px;}
+.qd-forma{padding:4px 9px; border-radius:999px; border:1px solid var(--line);
+  background:transparent; color:var(--ink-soft); font-size:11.5px; font-weight:600;}
+.qd-forma:hover{border-color:var(--accent); color:var(--accent);}
+.qd-forma[aria-pressed="true"]{background:var(--accent-solid); border-color:var(--accent-solid);
+  color:var(--accent-on);}
+.qd-pago{display:flex; align-items:center; gap:8px; margin:0; cursor:pointer;
+  font-size:12.5px; font-weight:500; letter-spacing:0; text-transform:none; color:var(--ink);}
+.qd-pago input{--sw-w:30px; --sw-h:18px; --sw-pad:2.5px; margin:0;}
+.qd-fechar-acoes{display:flex; justify-content:flex-end; gap:6px;}
+
+.qd-fechado{display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+  margin-top:9px; padding-top:9px; border-top:1px dashed var(--line);}
+.qd-fechado-txt{font:600 12px/1.3 "JetBrains Mono",monospace; color:var(--green);}
+.qd-fechado.faltou .qd-fechado-txt{color:var(--ink-soft);}
+.qd-fechado form{margin-left:auto;}
+.qd-desfazer{padding:3px 9px; font-size:11px;}
+/* card já fechado é recibo, não tarefa: recua para o fundo */
+.qd-card:has(.qd-fechado){opacity:.72;}
+.qd-card:has(.qd-fechado)::before{background:var(--ink-soft);}
+.qd-card:has(.qd-fechado):hover{opacity:1;}
 
 /* "respondendo…" — os três pontinhos do WhatsApp, que é onde isso acontece */
 .qd-digitando{flex:none; display:inline-flex; align-items:center; gap:3px; padding:0 2px;}

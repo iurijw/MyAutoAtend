@@ -14,6 +14,10 @@ import { pintarAvatares } from './avatars.js';
 
 const POLL_MS = 6000;
 
+// Formas de pagamento na ordem em que se usa no balcão.
+const FORMAS = [['dinheiro', 'Dinheiro'], ['pix', 'Pix'], ['debito', 'Débito'], ['credito', 'Crédito']];
+const FORMA_LEMBRADA = 'maa_forma_pgto';
+
 const card = document.getElementById('quadro-card');
 if (card) iniciar();
 
@@ -22,6 +26,11 @@ function esc(s) {
   d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
 }
+
+const brl = v => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+// Valor para dentro do input: vírgula decimal, sem "R$" (o campo já mostra).
+const paraCampo = v => (v || 0).toFixed(2).replace('.', ',').replace(',00', '');
 
 function iniciar() {
   const caixa = document.getElementById('qd-colunas');
@@ -117,12 +126,88 @@ function iniciar() {
         ${tempo}
       </button>
       ${msg}
+      ${fecharHTML(c)}
+      ${fechadoHTML(c)}
       <div class="qd-card-pe">
         <div class="qd-chips">${chips.join('')}</div>
         <button type="button" class="qd-acao" data-agendar="${esc(c.telefone)}"
                 data-nome="${esc(c.nome)}">Agendar</button>
       </div>
     </article>`;
+  }
+
+  /* Desfecho pendente: os dois botões ficam no CARD, não na coluna — quem tem
+     atendimento para fechar pode estar em "Vez do bot" (mandou mensagem depois)
+     e o dono precisa poder fechar de lá também. "Compareceu" abre o formulário
+     no lugar; "Faltou" passa pela confirmação e não lança nada. */
+  function fecharHTML(c) {
+    const f = c.fechamento;
+    if (!f) return '';
+    const quem = esc(c.nome || c.telefone_fmt);
+    return `<div class="qd-fechar" data-fechar="${f.id}">
+      <p class="qd-fechar-ref">${esc(f.servico)} · ${esc(f.quando)}</p>
+      <div class="qd-fechar-linha">
+        <button type="button" class="qd-btn-veio" data-veio="${f.id}"
+                data-valor="${f.valor}">Compareceu</button>
+        <form method="post" action="/admin/agendamento/${f.id}/concluir"
+              data-sem-reload="Falta registrada."
+              data-confirmar="Marcar falta de ${quem}?"
+              data-confirmar-texto="${esc(f.servico)} · ${esc(f.quando)}"
+              data-confirmar-nota="Falta não lança nada no caixa."
+              data-confirmar-acao="Marcar falta" data-confirmar-seguro>
+          <input type="hidden" name="compareceu" value="0">
+          <button class="qd-btn-faltou">Faltou</button>
+        </form>
+      </div>
+    </div>`;
+  }
+
+  /* Recibo do que já foi fechado: fica no quadro pelos dias configurados em
+     "Atendido fica no quadro por" — é a confirmação de que o clique valeu, e
+     a janela para desfazer um desfecho informado errado. */
+  function fechadoHTML(c) {
+    const f = c.fechado;
+    if (!f) return '';
+    const veio = f.resultado === 'concluido';
+    const partes = [veio ? 'Compareceu' : 'Faltou'];
+    if (veio && f.valor != null) partes.push(brl(f.valor));
+    if (veio && f.forma) partes.push(f.forma);
+    return `<div class="qd-fechado${veio ? '' : ' faltou'}">
+      <span class="qd-fechado-txt">${veio ? '✓' : '✕'} ${esc(partes.join(' · '))}</span>
+      ${veio && f.valor != null && !f.pago ? '<span class="qd-chip alerta">a receber</span>' : ''}
+      <form method="post" action="/admin/agendamento/${f.id}/reabrir"
+            data-sem-reload="Fechamento desfeito.">
+        <button class="qd-acao qd-desfazer">Desfazer</button>
+      </form>
+    </div>`;
+  }
+
+  /* Formulário de fechamento — trocado pelo par de botões no próprio card.
+     Valor já vem preenchido com o preço do serviço e a forma de pagamento
+     lembra a última usada neste navegador: fechar o dia é repetição. */
+  function formularioHTML(id, valor) {
+    const ultima = localStorage.getItem(FORMA_LEMBRADA) || '';
+    const chips = FORMAS.map(([v, r]) =>
+      `<button type="button" class="qd-forma" data-forma="${v}"
+               aria-pressed="${v === ultima}">${r}</button>`).join('');
+    return `<form class="qd-fechar-form" method="post"
+                  action="/admin/agendamento/${id}/concluir"
+                  data-sem-reload="Atendimento fechado.">
+      <input type="hidden" name="compareceu" value="1">
+      <input type="hidden" name="forma" value="${esc(ultima)}">
+      <label class="qd-fechar-rot" for="qd-valor-${id}">Valor cobrado</label>
+      <div class="qd-valor">
+        <span class="qd-valor-cifra">R$</span>
+        <input id="qd-valor-${id}" name="valor" inputmode="decimal" autocomplete="off"
+               value="${esc(paraCampo(valor))}">
+      </div>
+      <div class="qd-formas" role="group" aria-label="Forma de pagamento">${chips}</div>
+      <label class="qd-pago"><input type="checkbox" name="pago" value="1" checked> Já recebido</label>
+      <div class="qd-fechar-acoes">
+        <button type="button" class="qd-acao" data-cancelar-fechar>Cancelar</button>
+        <button class="btn-sm btn-acento">Confirmar</button>
+      </div>
+    </form>`;
   }
 
   function colunaHTML(col) {
@@ -153,10 +238,11 @@ function iniciar() {
       ? '1 conversa esfriada está fora'
       : `${d.fora} conversas esfriadas estão fora`;
 
-    // O badge do menu conta só o que pede ação: bot devendo resposta ou
-    // conversa em que você assumiu.
+    // O badge do menu conta só o que pede ação: atendimento esperando
+    // desfecho, bot devendo resposta ou conversa em que você assumiu.
     const pedindo = d.colunas.reduce((s, col) => s + col.cards.filter(c =>
-      c.pausado || (c.limite_min && (c.parado_min || 0) >= c.limite_min && !c.esfriada)
+      c.fechamento || c.pausado ||
+      (c.limite_min && (c.parado_min || 0) >= c.limite_min && !c.esfriada)
     ).length, 0);
     if (navBadge) {
       navBadge.textContent = pedindo || '';
@@ -167,6 +253,10 @@ function iniciar() {
 
   async function carregar(forcar = false) {
     if (document.hidden && !forcar) return;
+    // Formulário de fechamento aberto: o poll espera. Repintar apagaria o
+    // valor que o dono está digitando — quadro um pouco velho é melhor que
+    // formulário sumindo na mão.
+    if (!forcar && caixa.querySelector('.qd-fechar-form')) return;
     let d;
     try {
       const r = await fetch('/admin/kanban/estado', { headers: { Accept: 'application/json' } });
@@ -187,9 +277,30 @@ function iniciar() {
     pintar(d);
   }
 
-  // Atalhos: o card leva para a conversa e para um agendamento novo, que são
-  // as duas coisas que se faz olhando o quadro.
+  // Atalhos do card: conversa, agendamento novo e o fechamento do atendimento.
   caixa.addEventListener('click', e => {
+    const veio = e.target.closest('[data-veio]');
+    if (veio) {
+      const bloco = veio.closest('.qd-fechar');
+      bloco.innerHTML = formularioHTML(veio.dataset.veio, parseFloat(veio.dataset.valor) || 0);
+      bloco.querySelector('input[name="valor"]').select();
+      return;
+    }
+    const cancelar = e.target.closest('[data-cancelar-fechar]');
+    if (cancelar) { carregar(true); return; }
+
+    const forma = e.target.closest('.qd-forma');
+    if (forma) {
+      const grupo = forma.closest('.qd-formas');
+      const jaEra = forma.getAttribute('aria-pressed') === 'true';
+      grupo.querySelectorAll('.qd-forma').forEach(b => b.setAttribute('aria-pressed', 'false'));
+      if (!jaEra) forma.setAttribute('aria-pressed', 'true');
+      const valor = jaEra ? '' : forma.dataset.forma;
+      grupo.closest('form').querySelector('input[name="forma"]').value = valor;
+      localStorage.setItem(FORMA_LEMBRADA, valor);
+      return;
+    }
+
     const conversa = e.target.closest('[data-conversa]');
     if (conversa && window.abrirConversa) { window.abrirConversa(conversa.dataset.conversa); return; }
     const agendar = e.target.closest('[data-agendar]');

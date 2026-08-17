@@ -570,10 +570,87 @@ def editar_servico(
 
 @mcp.tool()
 def ver_agenda_completa(telefone_solicitante: str | None = None) -> dict:
-    """[DONO] Retorna todos os agendamentos ativos e bloqueios."""
+    """[DONO] Todos os agendamentos ativos, os bloqueios e a fila de fechamento.
+
+    `a_fechar` são os atendimentos cujo horário já passou e que ninguém disse
+    o que aconteceu — use `concluir_atendimento` em cada um.
+    """
     if not auth.eh_dono(telefone_solicitante):
         return auth.NEGADO_DONO
+    agora = _agora_local().isoformat(timespec="minutes")
     return {
         "agendamentos": [db.como_dict(a) for a in db.listar_agendamentos()],
         "bloqueios": [db.como_dict(b) for b in db.listar_bloqueios()],
+        "a_fechar": [db.como_dict(a) for a in db.agendamentos_a_fechar(agora)],
     }
+
+
+@mcp.tool()
+def concluir_atendimento(
+    agendamento_id: int,
+    compareceu: bool = True,
+    valor: float | None = None,
+    forma_pagamento: str | None = None,
+    pago: bool = True,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """[DONO] Informa o desfecho de um atendimento que já aconteceu.
+
+    `compareceu` True fecha como atendido e lança o valor no caixa; False marca
+    falta e NÃO lança nada. `valor` em reais — omita para usar o preço atual do
+    serviço; mande 0 para fechar sem cobrança (cortesia). `forma_pagamento`:
+    dinheiro, pix, debito, credito ou outro. `pago` False registra como a
+    receber (fiado).
+
+    Use `ver_agenda_completa` para descobrir o id do que está em `a_fechar`.
+    Fechamento errado se desfaz com `reabrir_atendimento`.
+    """
+    if not auth.eh_dono(telefone_solicitante):
+        return auth.NEGADO_DONO
+    ag = db.get_agendamento(agendamento_id)
+    if not ag:
+        return {"erro": "Agendamento não encontrado."}
+    if ag.status != "ativo":
+        return {"erro": f"Este atendimento já está como '{ag.status}'."}
+    if compareceu and valor is None:
+        servico = db.get_servico(ag.servico_id)
+        valor = servico.valor if servico else 0.0
+    forma = (forma_pagamento or "").strip().lower()
+    if forma and forma not in db.FORMAS_PAGAMENTO:
+        return {
+            "erro": "Forma de pagamento inválida.",
+            "opcoes": list(db.FORMAS_PAGAMENTO),
+        }
+
+    fechado = db.concluir_agendamento(
+        agendamento_id,
+        compareceu=compareceu,
+        agora_iso=_agora_local().isoformat(timespec="minutes"),
+        valor=valor,
+        forma=forma,
+        pago=pago,
+    )
+    if not fechado:
+        return {"erro": "Não foi possível fechar este atendimento."}
+    return {
+        "ok": True,
+        "agendamento_id": agendamento_id,
+        "cliente": fechado.nome_cliente,
+        "status": fechado.status,
+        "valor_lancado": valor if compareceu else None,
+        "pago": pago if compareceu else None,
+    }
+
+
+@mcp.tool()
+def reabrir_atendimento(
+    agendamento_id: int,
+    telefone_solicitante: str | None = None,
+) -> dict:
+    """[DONO] Desfaz o fechamento de um atendimento (volta a ficar em aberto e
+    apaga o que ele lançou no caixa). Para corrigir desfecho informado errado."""
+    if not auth.eh_dono(telefone_solicitante):
+        return auth.NEGADO_DONO
+    if not db.reabrir_agendamento(agendamento_id):
+        return {"erro": "Este atendimento não está fechado."}
+    return {"ok": True, "agendamento_id": agendamento_id, "status": "ativo"}

@@ -5,6 +5,41 @@
     <span class="tag" id="ag-count">{{ agendamentos|length }} marcado{{ '' if agendamentos|length == 1 else 's' }}</span>
     <button type="button" class="btn-acento btn-sm card-acao" id="ag-novo-abrir">+ Novo agendamento</button>
   </div>
+
+  <!-- Filtros. Desfecho é o eixo principal (linha de cima); período, serviço e
+       busca afinam dentro dele. Tudo vira query string no MESMO endpoint que
+       repinta a tabela — nada é filtrado no navegador, então o contador e as
+       linhas nunca discordam. -->
+  <div class="ag-filtros" id="ag-filtros" role="group" aria-label="Filtrar por desfecho">
+    {% for chave, rotulo in [('ativo','Ativos'), ('concluido','Concluídos'), ('faltou','Faltas'),
+                             ('cancelado','Cancelados'), ('todos','Todos')] %}
+    <button type="button" class="ag-filtro" data-status="{{ chave }}"
+            aria-pressed="{{ 'true' if chave == 'ativo' else 'false' }}">{{ rotulo }}</button>
+    {% endfor %}
+  </div>
+
+  <div class="ag-refino" id="ag-refino">
+    <div class="ag-periodo" role="group" aria-label="Período">
+      <span class="ag-refino-rot">Período</span>
+      {% for chave, rotulo in [('tudo','Tudo'), ('hoje','Hoje'), ('semana','Semana'), ('mes','Mês')] %}
+      <button type="button" class="ag-chip" data-periodo="{{ chave }}"
+              aria-pressed="{{ 'true' if chave == 'tudo' else 'false' }}">{{ rotulo }}</button>
+      {% endfor %}
+      <input type="date" id="ag-de" class="ag-data" aria-label="A partir de">
+      <span class="ag-ate">até</span>
+      <input type="date" id="ag-ate" class="ag-data" aria-label="Até">
+    </div>
+
+    <select id="ag-servico" class="ag-select" aria-label="Serviço">
+      <option value="">Todos os serviços</option>
+      {% for s in servicos %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}
+    </select>
+
+    <input type="search" id="ag-busca" class="card-busca ag-busca" autocomplete="off"
+           placeholder="Buscar por cliente ou telefone" aria-label="Buscar cliente">
+
+    <button type="button" class="ag-limpar" id="ag-limpar" hidden>Limpar filtros</button>
+  </div>
   <div class="tbl-rolagem">
   <table class="tbl">
     <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Quando</th><th></th></tr></thead>
