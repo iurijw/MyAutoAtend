@@ -759,7 +759,8 @@ def _resumo_conversas() -> list[dict]:
         vistos.add(norm)
         bolhas = agente.historico_para_bolhas(conv.historico)
         # mensagem recém-chegada (ainda no debounce/agente) manda no preview
-        for texto in whatsapp.mensagens_pendentes(norm):
+        pendentes = whatsapp.mensagens_pendentes(norm)
+        for texto in pendentes:
             bolhas.append({"quem": "cliente", "texto": texto, "hora": ""})
         ultima = bolhas[-1] if bolhas else None
         cli = clientes.get(norm)
@@ -772,7 +773,11 @@ def _resumo_conversas() -> list[dict]:
                 "quem": ultima["quem"] if ultima else "",
                 "auto": bool(ultima.get("auto")) if ultima else False,
                 "hora": ultima["hora"] if ultima else "",
-                "_ordem": conv.atualizado_em or "",
+                # `respondendo`: tem lote no debounce/no agente agora — é o que
+                # o quadro pinta como "respondendo…". `atualizado_em` é a hora
+                # cheia da última escrita na memória (o `hora` é só HH:MM).
+                "respondendo": bool(pendentes),
+                "atualizado_em": conv.atualizado_em or "",
             }
         )
     for tel, cli in clientes.items():
@@ -787,18 +792,218 @@ def _resumo_conversas() -> list[dict]:
                 "quem": "",
                 "auto": False,
                 "hora": "",
-                "_ordem": "",
+                "respondendo": False,
+                "atualizado_em": "",
             }
         )
-    itens.sort(key=lambda x: x["_ordem"], reverse=True)
-    for it in itens:
-        it.pop("_ordem", None)
+    itens.sort(key=lambda x: x["atualizado_em"], reverse=True)
     return itens
 
 
 @router.get("/admin/conversas")
 def listar_conversas(_: str = Depends(autenticar)):
     return {"conversas": _resumo_conversas()}
+
+
+# ---------------------------------------------------------------------------
+# Quadro de atendimento (seção "Quadro")
+#
+# Um card por contato, na coluna do passo em que o bot está com ele. A coluna
+# NÃO é um campo gravado: sai do estado real (quem falou por último, o que tem
+# marcado na agenda), então nada precisa ser arrastado e o quadro nunca fica
+# mentindo. As conversas frias ficam de fora — e o que é "frio" é do dono, em
+# Ajustes do quadro (Config.kanban_*).
+# ---------------------------------------------------------------------------
+
+# chave, rótulo, subtítulo, acento (tokens do admin.css)
+COLUNAS_QUADRO = (
+    ("bot", "Vez do bot", "o cliente falou por último", "zap"),
+    ("cliente", "Esperando o cliente", "o bot falou por último", "ouro"),
+    ("agendado", "Agendado", "com horário marcado", "mata"),
+    ("atendido", "Atendido", "o horário já passou", "neutro"),
+)
+
+
+def _minutos_desde(iso: str, agora: datetime) -> int | None:
+    """Minutos entre um ISO local e agora (None quando não dá para ler)."""
+    if not iso:
+        return None
+    try:
+        return max(int((agora - datetime.fromisoformat(iso)).total_seconds() // 60), 0)
+    except ValueError:
+        return None
+
+
+def _ha_quanto(minutos: int | None) -> str:
+    if minutos is None:
+        return ""
+    if minutos < 1:
+        return "agora"
+    if minutos < 60:
+        return f"há {minutos}min"
+    if minutos < 60 * 24:
+        return f"há {minutos // 60}h"
+    return f"há {minutos // (60 * 24)}d"
+
+
+def _quando_fmt(iso: str, hoje: date) -> str:
+    """'hoje 14:00' / 'amanhã 09:30' / '12/08 14:00' — o dono lê data assim."""
+    dia_txt, _, hora = iso.partition("T")
+    try:
+        dia = date.fromisoformat(dia_txt)
+    except ValueError:
+        return iso
+    dias = (dia - hoje).days
+    if dias == 0:
+        return f"hoje {hora}"
+    if dias == 1:
+        return f"amanhã {hora}"
+    if dias == -1:
+        return f"ontem {hora}"
+    return f"{dia.strftime('%d/%m')} {hora}"
+
+
+def _faixa(valor: int, minimo: int, maximo: int) -> int:
+    return max(minimo, min(maximo, valor))
+
+
+def _quadro_estado() -> dict:
+    cfg = db.get_config()
+    # DOIS relógios, de propósito — misturar os dois foi o bug que mandava um
+    # agendamento de hoje à tarde para "Atendido":
+    #   `agora`       = relógio do container (UTC na imagem), que é o mesmo que
+    #                   escreve `Conversa.atualizado_em`. Serve para medir a
+    #                   IDADE da conversa.
+    #   `agora_local` = hora do fuso da Config, que é como `Agendamento.inicio`
+    #                   está gravado. Serve para tudo que fala com a AGENDA.
+    agora = datetime.now()
+    agora_local = _agora_local()
+    hoje = agora_local.date()
+    agora_iso = agora_local.isoformat(timespec="minutes")
+
+    # Por contato: o próximo agendamento e o último que já passou.
+    servicos = {s.id: s.nome for s in db.listar_todos_servicos()}
+    proximo: dict[str, db.Agendamento] = {}
+    anterior: dict[str, db.Agendamento] = {}
+    for a in db.listar_agendamentos():
+        tel = normalizar(a.telefone_cliente) or a.telefone_cliente
+        if a.inicio >= agora_iso:
+            if tel not in proximo or a.inicio < proximo[tel].inicio:
+                proximo[tel] = a
+        elif tel not in anterior or a.inicio > anterior[tel].inicio:
+            anterior[tel] = a
+
+    cards: dict[str, list] = {chave: [] for chave, *_ in COLUNAS_QUADRO}
+    fora = 0
+
+    for c in _resumo_conversas():
+        tel = c["telefone"]
+        parado = _minutos_desde(c["atualizado_em"], agora)
+        ag = proximo.get(tel)
+        ant = anterior.get(tel)
+        desde_atendimento = _minutos_desde(ant.inicio, agora_local) if ant else None
+        esfriada = False
+
+        # A ordem importa: uma pergunta sem resposta ganha de qualquer outra
+        # coisa — mesmo de quem já tem horário marcado, porque o bot está
+        # devendo resposta AGORA.
+        if c["respondendo"] or c["quem"] == "cliente":
+            coluna, limite = "bot", max(cfg.kanban_travado_min, 1)
+        elif ag:
+            coluna, limite = "agendado", None
+        elif desde_atendimento is not None and (
+            desde_atendimento <= cfg.kanban_atendido_dias * 24 * 60
+        ):
+            coluna, limite = "atendido", None
+        elif c["quem"] in ("bot", "sistema"):
+            coluna = "cliente"
+            limite = cfg.kanban_esfria_h * 60
+            esfriada = parado is not None and parado > limite
+        else:
+            continue  # contato sem conversa e sem agenda: não há passo nenhum
+
+        # Fora da janela de atividade = esfriou, salvo se tem horário marcado
+        # (aí o card é informação viva, não conversa parada).
+        if not ag and parado is not None and parado > cfg.kanban_janela_dias * 24 * 60:
+            esfriada = True
+        if esfriada and not cfg.kanban_mostrar_esfriadas:
+            fora += 1
+            continue
+
+        ref = ag or (ant if coluna == "atendido" else None)
+        cards[coluna].append(
+            {
+                "telefone": tel,
+                "telefone_fmt": formatar_internacional(tel) or tel,
+                "nome": c["nome"],
+                "inicial": (c["nome"] or "?")[:1].upper(),
+                "preview": c["preview"],
+                "quem": c["quem"],
+                "pausado": c["pausado"],
+                "respondendo": c["respondendo"],
+                "parado_min": parado,
+                "parado_txt": _ha_quanto(parado),
+                "limite_min": limite,  # o JS mede o "calor" do card por ele
+                "esfriada": esfriada,
+                "agendamento": (
+                    {
+                        "servico": servicos.get(ref.servico_id, "—"),
+                        "quando": _quando_fmt(ref.inicio, hoje),
+                        "quando_iso": ref.inicio,
+                        "hoje": ref.inicio[:10] == hoje.isoformat(),
+                    }
+                    if ref
+                    else None
+                ),
+            }
+        )
+
+    # Agendado ordena pela agenda; o resto pelo tempo parado (quem espera mais
+    # aparece primeiro). Esfriada sempre no pé da coluna.
+    cards["agendado"].sort(key=lambda x: x["agendamento"]["quando_iso"])
+    for chave in ("bot", "cliente", "atendido"):
+        cards[chave].sort(key=lambda x: (x["esfriada"], -(x["parado_min"] or 0)))
+
+    return {
+        "colunas": [
+            {"chave": ch, "rotulo": rot, "sub": sub, "accent": ac, "cards": cards[ch]}
+            for ch, rot, sub, ac in COLUNAS_QUADRO
+        ],
+        "fora": fora,
+        "ajustes": {
+            "janela_dias": cfg.kanban_janela_dias,
+            "esfria_h": cfg.kanban_esfria_h,
+            "travado_min": cfg.kanban_travado_min,
+            "atendido_dias": cfg.kanban_atendido_dias,
+            "mostrar_esfriadas": cfg.kanban_mostrar_esfriadas,
+        },
+    }
+
+
+@router.get("/admin/kanban/estado")
+def kanban_estado(_: str = Depends(autenticar)):
+    return _quadro_estado()
+
+
+@router.post("/admin/kanban/ajustes")
+def kanban_ajustes(
+    _: str = Depends(autenticar),
+    janela_dias: int = Form(7),
+    esfria_h: int = Form(24),
+    travado_min: int = Form(5),
+    atendido_dias: int = Form(2),
+    mostrar_esfriadas: str = Form(""),
+):
+    """Limites do quadro. Faixas amplas de propósito — quem manda no que é
+    'esfriado' é o negócio do dono, não o painel."""
+    db.update_config(
+        kanban_janela_dias=_faixa(janela_dias, 1, 365),
+        kanban_esfria_h=_faixa(esfria_h, 1, 720),
+        kanban_travado_min=_faixa(travado_min, 1, 1440),
+        kanban_atendido_dias=_faixa(atendido_dias, 0, 90),
+        kanban_mostrar_esfriadas=bool(mostrar_esfriadas),
+    )
+    return {"ok": True}
 
 
 def _por_bolha(itens: list, chave) -> dict[tuple[str, str], list]:

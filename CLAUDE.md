@@ -28,7 +28,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/sessao.py` | Sessão do painel: JWT HS256 (só stdlib) em cookie httpOnly, freio de força bruta por IP, exceção `SessaoInvalida` |
 | `myAutoAtendMCP/app/templates/login.html` | Tela de entrada (`/login`), fora do shell do painel — usa `admin.css` (tokens) + `login.css` |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css — o `/static` também vai com `Cache-Control: no-cache`, ver `EstaticosRevalidados` em `main.py`, senão o browser fica com o JS velho depois do deploy) |
-| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG), `onboarding` (guia da 1ª execução, incluído só quando `Config.onboarding_visto` é falso) e `agendamentos_linhas` (só as `<tr>` da agenda — servidas na carga E em `/admin/agendamentos/estado`) |
+| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `kanban` (Quadro) · `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG), `onboarding` (guia da 1ª execução, incluído só quando `Config.onboarding_visto` é falso) e `agendamentos_linhas` (só as `<tr>` da agenda — servidas na carga E em `/admin/agendamentos/estado`) |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
@@ -225,6 +225,45 @@ primeiro `docker compose up -d`.
     ("recebida agora", tracejada) — sem buraco entre receber e responder.
   - Poll: lista 6s, modal 2,5s. Repintar só quando a resposta muda
     (assinatura JSON em `mudou()`) — sem piscar nem perder a rolagem.
+- **Quadro de atendimento** (seção "Quadro", `partials/kanban.html` +
+  `js/kanban.js`, poll 6s — é a seção que o painel abre, `INICIAL` em
+  `nav.js`): um card por contato, na coluna do passo em que o bot está com ele.
+  `GET /admin/kanban/estado` monta tudo em `admin._quadro_estado` a partir de
+  `_resumo_conversas()` (que agora devolve também `atualizado_em` e
+  `respondendo`) + agendamentos ativos. **A coluna não é campo gravado**: sai do
+  estado real, por isso não há arrastar — mover card à mão só faria o quadro
+  mentir. Ordem das regras em `COLUNAS_QUADRO`/`_quadro_estado`:
+  1. `Vez do bot` — o cliente falou por último (ou tem lote no debounce/agente,
+     que vira "respondendo…"). Ganha até de quem tem horário marcado: o bot
+     está devendo resposta AGORA.
+  2. `Agendado` — tem agendamento ativo futuro (ordena pela agenda).
+  3. `Atendido` — o último agendamento passou há menos de `kanban_atendido_dias`.
+  4. `Esperando o cliente` — o bot falou por último.
+  Contato sem conversa e sem agenda não entra (não há passo nenhum).
+  - **O que é "esfriado" é do dono** (`Config.kanban_*`, ALTER em `_migrar`,
+    form "Ajustes do quadro" → `POST /admin/kanban/ajustes`):
+    `kanban_janela_dias` (7) tira do quadro quem parou há mais tempo — menos
+    quem tem horário marcado, que é informação viva; `kanban_esfria_h` (24)
+    esfria quem está em "Esperando o cliente"; `kanban_travado_min` (5) vira
+    alerta em "Vez do bot"; `kanban_atendido_dias` (2); e
+    `kanban_mostrar_esfriadas` traz os esfriados de volta, apagados no pé da
+    coluna. O que ficou de fora aparece contado na barra ("3 conversas
+    esfriadas estão fora").
+  - **`--calor` (0→1)**: quanto do limite da coluna o card já gastou. O fio da
+    esquerda e o relógio vão do acento da coluna ao oxblood
+    (`color-mix(... calc(var(--calor) * 100%) ...)`), e a coluna ordena por
+    tempo parado — quem espera mais sobe. É o que faz o quadro ser triagem e
+    não lista em quatro pedaços.
+  - Card leva a `window.abrirConversa` (clique no topo) e a
+    `window.abrirNovoAgendamento` ("Agendar"); badge do menu = quem espera
+    você (bot travado ou conversa pausada).
+  - **DOIS relógios** (já quebrou: agendamento de hoje 13:30 caiu em
+    "Atendido"). O container roda em UTC e é esse relógio que escreve
+    `Conversa.atualizado_em` — então idade de conversa se mede com
+    `datetime.now()`. Já `Agendamento.inicio` é hora local do negócio, então
+    tudo que compara com a AGENDA (passado/futuro, "hoje") usa
+    `tools._agora_local()` (fuso da Config). Misturar os dois dá exatamente o
+    offset do fuso.
 - **Provedores de IA no painel**: `GET /admin/ia/estado`, `GET /admin/ia/modelos`,
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.

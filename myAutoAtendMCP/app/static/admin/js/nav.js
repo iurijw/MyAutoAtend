@@ -6,7 +6,8 @@
    de salvar, e deixa cada seção linkável. Abaixo de 1000px a lateral vira
    gaveta (botão ☰ no topo). */
 
-const INICIAL = 'conversas';
+// O quadro é a visão geral do atendimento — é por ele que o painel abre.
+const INICIAL = 'quadro';
 
 const side = document.getElementById('side');
 const veu = document.getElementById('side-veu');

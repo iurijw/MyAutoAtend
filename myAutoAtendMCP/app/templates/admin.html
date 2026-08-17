@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/admin/admin.css?v=27">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=28">
 </head>
 <body>
   {% include "partials/icones.html" %}
@@ -36,6 +36,11 @@
 
       <nav class="nav" id="nav" aria-label="Seções do painel">
         <p class="nav-grupo">Atendimento</p>
+        <a class="nav-item" href="#quadro" data-accent="mare">
+          <svg class="nav-icone" aria-hidden="true"><use href="#i-quadro"></use></svg>
+          <span class="nav-rotulo">Quadro</span>
+          <span class="nav-badge" id="nav-badge-quadro" hidden></span>
+        </a>
         <a class="nav-item" href="#conversas" data-accent="zap">
           <svg class="nav-icone" aria-hidden="true"><use href="#i-chat"></use></svg>
           <span class="nav-rotulo">Conversas</span>
@@ -131,6 +136,12 @@
       </header>
 
       <main class="conteudo" id="conteudo">
+        <section class="view" id="view-quadro" data-accent="mare" data-grupo="Atendimento"
+                 data-titulo="Quadro de atendimento"
+                 data-desc="Em que passo o bot está com cada contato.">
+          {% include "partials/kanban.html" %}
+        </section>
+
         <section class="view" id="view-conversas" data-accent="zap" data-grupo="Atendimento"
                  data-titulo="Conversas"
                  data-desc="Tudo que passou pelo bot no WhatsApp.">

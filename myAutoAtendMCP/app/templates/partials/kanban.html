@@ -1,0 +1,59 @@
+<!-- ============ QUADRO DE ATENDIMENTO ============
+     As colunas e os cards são desenhados por js/kanban.js a partir de
+     GET /admin/kanban/estado (poll). Aqui fica só o esqueleto e o form de
+     ajustes, que é POST clássico (data-sem-reload → toast + repinte). -->
+<div class="card" id="quadro-card">
+  <div class="bloco-barra">
+    <span class="qd-live" id="qd-live" title="Atualiza sozinho"><span class="qd-live-dot"></span>ao vivo</span>
+    <span class="tag" id="qd-total">—</span>
+    <span class="qd-fora" id="qd-fora" hidden></span>
+    <button type="button" class="btn-sm btn-ghost card-acao" id="qd-ajustes-abrir"
+            aria-expanded="false" aria-controls="qd-ajustes">Ajustes do quadro</button>
+  </div>
+
+  <form class="qd-ajustes" id="qd-ajustes" method="post" action="/admin/kanban/ajustes"
+        data-sem-reload="Ajustes do quadro salvos." hidden>
+    <p class="qd-ajustes-nota">Cada negócio esfria num ritmo. Estes limites decidem quem
+      continua no quadro e quando um card vira alerta.</p>
+    <div class="qd-ajustes-grade">
+      <div class="qd-campo">
+        <label for="qd-janela">Tira do quadro depois de</label>
+        <div class="qd-campo-linha">
+          <input id="qd-janela" name="janela_dias" type="number" min="1" max="365" step="1" required>
+          <span class="qd-unidade">dias sem conversa</span>
+        </div>
+      </div>
+      <div class="qd-campo">
+        <label for="qd-esfria">Esperando o cliente esfria em</label>
+        <div class="qd-campo-linha">
+          <input id="qd-esfria" name="esfria_h" type="number" min="1" max="720" step="1" required>
+          <span class="qd-unidade">horas sem resposta</span>
+        </div>
+      </div>
+      <div class="qd-campo">
+        <label for="qd-travado">Vira alerta se o bot não responder em</label>
+        <div class="qd-campo-linha">
+          <input id="qd-travado" name="travado_min" type="number" min="1" max="1440" step="1" required>
+          <span class="qd-unidade">minutos</span>
+        </div>
+      </div>
+      <div class="qd-campo">
+        <label for="qd-atendido">Atendido fica no quadro por</label>
+        <div class="qd-campo-linha">
+          <input id="qd-atendido" name="atendido_dias" type="number" min="0" max="90" step="1" required>
+          <span class="qd-unidade">dias</span>
+        </div>
+      </div>
+    </div>
+    <label class="check-linha qd-check">
+      <input type="checkbox" name="mostrar_esfriadas" value="1" id="qd-mostrar">
+      Mostrar as conversas esfriadas, apagadas no pé da coluna
+    </label>
+    <div class="qd-ajustes-acoes">
+      <button type="button" class="btn-sm btn-ghost" id="qd-ajustes-fechar">Fechar</button>
+      <button class="btn-sm btn-acento">Salvar ajustes</button>
+    </div>
+  </form>
+
+  <div class="qd-colunas" id="qd-colunas" aria-busy="true"></div>
+</div>

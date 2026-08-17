@@ -42,6 +42,13 @@ class Config(SQLModel, table=True):
     # Guia de primeiros passos: aparece uma vez, na instalação nova (ver
     # `_migrar` — banco já existente nasce com a coluna em 1 e nunca vê).
     onboarding_visto: bool = False
+    # Quadro de atendimento (seção "Quadro"). Os limites são do dono: é ele que
+    # sabe em quanto tempo uma conversa do negócio dele esfria de verdade.
+    kanban_janela_dias: int = 7  # sem atividade nesse prazo, o contato sai do quadro
+    kanban_esfria_h: int = 24  # esperando o cliente há mais que isso = esfriou
+    kanban_travado_min: int = 5  # o cliente falou e o bot não respondeu = travou
+    kanban_atendido_dias: int = 2  # quanto tempo o atendido fica no quadro
+    kanban_mostrar_esfriadas: bool = False  # trazer as esfriadas de volta, apagadas
 
 
 class HorarioFuncionamento(SQLModel, table=True):
@@ -324,6 +331,20 @@ def _migrar() -> None:
                 "ALTER TABLE config ADD COLUMN onboarding_visto BOOLEAN NOT NULL DEFAULT 1"
             )
             conn.commit()
+        # Ajustes do quadro de atendimento: o default do ALTER é o mesmo do
+        # modelo, então banco antigo e instalação nova começam iguais.
+        for coluna, tipo, padrao in (
+            ("kanban_janela_dias", "INTEGER", "7"),
+            ("kanban_esfria_h", "INTEGER", "24"),
+            ("kanban_travado_min", "INTEGER", "5"),
+            ("kanban_atendido_dias", "INTEGER", "2"),
+            ("kanban_mostrar_esfriadas", "BOOLEAN", "0"),
+        ):
+            if cols and coluna not in cols:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE config ADD COLUMN {coluna} {tipo} NOT NULL DEFAULT {padrao}"
+                )
+                conn.commit()
 
 
 # ---------------------------------------------------------------------------

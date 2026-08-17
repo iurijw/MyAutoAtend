@@ -341,14 +341,14 @@ html[data-theme="dark"] .pill.off{background:rgba(180,166,138,.14);}
 /* ===========================================================================
    Proatividade (fila ao vivo do bot)
    =========================================================================== */
-.proat-live,.conv-live,.ag-live{display:inline-flex; align-items:center; gap:6px;
+.proat-live,.conv-live,.ag-live,.qd-live{display:inline-flex; align-items:center; gap:6px;
   font:600 10px/1 "Hanken Grotesk"; letter-spacing:.16em; text-transform:uppercase; color:var(--green);}
-.proat-live.off,.conv-live.off,.ag-live.off{color:var(--ink-soft); opacity:.5;}
-.proat-live + .tag,.conv-live + .tag,.ag-live + .tag{margin-left:2px;}
-.proat-live-dot,.conv-live-dot,.ag-live-dot{width:7px; height:7px; border-radius:50%; background:var(--green);
+.proat-live.off,.conv-live.off,.ag-live.off,.qd-live.off{color:var(--ink-soft); opacity:.5;}
+.proat-live + .tag,.conv-live + .tag,.ag-live + .tag,.qd-live + .tag{margin-left:2px;}
+.proat-live-dot,.conv-live-dot,.ag-live-dot,.qd-live-dot{width:7px; height:7px; border-radius:50%; background:var(--green);
   box-shadow:0 0 0 0 rgba(63,107,76,.5); animation:proat-pulse 2s infinite;}
-.proat-live.off .proat-live-dot,.conv-live.off .conv-live-dot,.ag-live.off .ag-live-dot{background:var(--ink-soft);
-  animation:none; box-shadow:none;}
+.proat-live.off .proat-live-dot,.conv-live.off .conv-live-dot,.ag-live.off .ag-live-dot,
+.qd-live.off .qd-live-dot{background:var(--ink-soft); animation:none; box-shadow:none;}
 @keyframes proat-pulse{
   0%{box-shadow:0 0 0 0 rgba(63,107,76,.45);}
   70%{box-shadow:0 0 0 7px rgba(63,107,76,0);}
@@ -380,6 +380,117 @@ html[data-theme="dark"] .proat-erro{color:var(--oxblood);}
 .proat-badge.falhou{background:rgba(138,42,47,.14); color:var(--oxblood);}
 .proat-cancel{flex:none; align-self:center;}
 .proat-empty{padding:24px 4px; text-align:center; color:var(--ink-soft); font-style:italic;}
+
+/* ===========================================================================
+   Quadro de atendimento (kanban ao vivo)
+
+   Cada coluna veste o acento do passo (data-accent no <section>), e é a cor
+   que diz de quem é a vez. O card carrega --calor (0→1, quanto do limite da
+   coluna ele já gastou): o fio da esquerda e o relógio esquentam do acento
+   para o oxblood conforme o contato espera. Sem isso o quadro seria só uma
+   lista em quatro pedaços.
+   =========================================================================== */
+.qd-fora{font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--gold);}
+
+.qd-colunas{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px;
+  align-items:start;}
+.qd-colunas[aria-busy="true"]{min-height:180px;}
+
+.qd-col{display:flex; flex-direction:column; gap:12px; min-width:0;}
+.qd-col-topo{display:flex; align-items:flex-start; gap:10px; padding:0 2px 11px;
+  border-bottom:2px solid color-mix(in srgb, var(--accent) 55%, transparent);}
+.qd-col-id{min-width:0; flex:1;}
+.qd-col-rotulo{margin:0; font:600 13.5px/1.2 "Hanken Grotesk"; letter-spacing:.01em;
+  color:var(--accent);}
+.qd-col-sub{margin:3px 0 0; font-size:11.5px; line-height:1.35; color:var(--ink-soft);}
+/* o único serif fora do topo: a contagem é o número que se lê de longe */
+.qd-col-n{flex:none; font-family:"DM Serif Display",serif; font-size:26px; line-height:.9;
+  color:var(--accent); opacity:.85;}
+.qd-col-cards{display:flex; flex-direction:column; gap:10px;}
+.qd-vazio{margin:0; padding:16px 2px; font-size:13px; font-style:italic; color:var(--ink-soft);
+  opacity:.7;}
+
+/* ---------- card ---------- */
+.qd-card{--calor:0; position:relative; padding:11px 12px 10px 15px; border-radius:12px;
+  background:var(--card); border:1px solid var(--line);
+  transition:border-color .15s, box-shadow .15s, transform .08s;}
+.qd-card:hover{box-shadow:0 10px 22px -18px var(--shadow-pop);
+  border-color:color-mix(in srgb, var(--accent) 40%, var(--line));}
+/* o fio que envelhece */
+.qd-card::before{content:""; position:absolute; left:0; top:11px; bottom:11px; width:3px;
+  border-radius:0 3px 3px 0; background:var(--accent);
+  background:color-mix(in srgb, var(--oxblood) calc(var(--calor) * 100%), var(--accent));}
+.qd-card.alerta{border-color:color-mix(in srgb, var(--oxblood) 45%, transparent);
+  background:color-mix(in srgb, var(--oxblood) 6%, var(--card));}
+.qd-card.esfriada{opacity:.55;}
+.qd-card.esfriada::before{background:var(--ink-soft);}
+.qd-card.respondendo{border-color:color-mix(in srgb, var(--accent) 55%, transparent);}
+
+.qd-card-abrir{display:flex; align-items:center; gap:9px; width:100%; padding:0; margin:0;
+  background:transparent; border:none; border-radius:8px; text-align:left; color:inherit;
+  font:inherit; cursor:pointer;}
+.qd-card-abrir .ava{width:32px; height:32px; font-size:13px;}
+.qd-card-quem{min-width:0; flex:1; display:flex; flex-direction:column;}
+.qd-card-nome{font-weight:600; font-size:14.5px; line-height:1.25;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.qd-card-tel{font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--ink-soft);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.qd-card-tempo{flex:none; font:500 12px/1 "JetBrains Mono",monospace; white-space:nowrap;
+  color:var(--ink-soft);
+  color:color-mix(in srgb, var(--oxblood) calc(var(--calor) * 100%), var(--ink-soft));}
+.qd-card.alerta .qd-card-tempo{font-weight:600;}
+
+.qd-card-msg{margin:8px 0 0; font-size:13px; line-height:1.4; color:var(--ink-soft);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.qd-card-msg.do-cliente{color:var(--ink);}
+.qd-card-msg.vazia{font-style:italic; opacity:.75;}
+
+.qd-card-pe{display:flex; align-items:center; gap:8px; margin-top:9px;}
+.qd-chips{display:flex; flex-wrap:wrap; gap:5px; min-width:0; flex:1;}
+.qd-chip{font:600 10px/1.5 "Hanken Grotesk"; letter-spacing:.06em; text-transform:uppercase;
+  padding:3px 8px; border-radius:999px; white-space:nowrap;
+  color:var(--ink-soft); background:color-mix(in srgb, var(--ink-soft) 13%, transparent);}
+.qd-chip.agenda{color:var(--accent); background:color-mix(in srgb, var(--accent) 15%, transparent);
+  text-transform:none; letter-spacing:.01em; font-size:11px;}
+.qd-chip.agenda.hoje{background:var(--accent-solid); color:var(--accent-on);}
+.qd-chip.alerta{color:var(--oxblood); background:color-mix(in srgb, var(--oxblood) 14%, transparent);}
+.qd-chip.fria{font-style:italic; text-transform:none; letter-spacing:0;}
+.qd-acao{flex:none; padding:4px 10px; border-radius:999px; background:transparent;
+  border:1px dashed var(--line); color:var(--ink-soft); font-size:11.5px; font-weight:600;}
+.qd-acao:hover{border-style:solid; border-color:var(--accent); color:var(--accent);}
+
+/* "respondendo…" — os três pontinhos do WhatsApp, que é onde isso acontece */
+.qd-digitando{flex:none; display:inline-flex; align-items:center; gap:3px; padding:0 2px;}
+.qd-digitando i{width:4px; height:4px; border-radius:50%; background:var(--accent);
+  animation:qd-pisca 1.2s infinite;}
+.qd-digitando i:nth-child(2){animation-delay:.15s;}
+.qd-digitando i:nth-child(3){animation-delay:.3s;}
+@keyframes qd-pisca{0%,60%,100%{opacity:.25; transform:translateY(0);}
+  30%{opacity:1; transform:translateY(-2px);}}
+
+/* ---------- ajustes do quadro ---------- */
+.qd-ajustes{margin:0 0 22px; padding:16px 18px; border-radius:14px;
+  background:var(--card); border:1px dashed color-mix(in srgb, var(--accent) 45%, transparent);}
+.qd-ajustes-nota{margin:0 0 14px; font-size:13.5px; color:var(--ink-soft); max-width:66ch;}
+.qd-ajustes-grade{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px 20px;}
+.qd-campo label{margin:0 0 6px;}
+.qd-campo-linha{display:flex; align-items:center; gap:9px;}
+.qd-campo-linha input{width:84px; flex:none; padding:8px 10px; text-align:center;
+  font-family:"JetBrains Mono",monospace;}
+.qd-unidade{font-size:13px; color:var(--ink-soft);}
+.qd-ajustes .qd-check{margin-top:16px;}
+.qd-ajustes-acoes{display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
+  padding-top:14px; border-top:1px solid var(--line);}
+
+@media (max-width:1100px){
+  .qd-colunas{grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px;}
+}
+@media (max-width:640px){
+  .qd-colunas{grid-template-columns:minmax(0,1fr);}
+}
+@media (prefers-reduced-motion:reduce){
+  .qd-digitando i{animation:none; opacity:.7;}
+}
 
 /* ===========================================================================
    Conversas (lista ao vivo + modal estilo WhatsApp)
