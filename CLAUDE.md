@@ -28,7 +28,7 @@ primeiro `docker compose up -d`.
 | `myAutoAtendMCP/app/sessao.py` | Sessão do painel: JWT HS256 (só stdlib) em cookie httpOnly, freio de força bruta por IP, exceção `SessaoInvalida` |
 | `myAutoAtendMCP/app/templates/login.html` | Tela de entrada (`/login`), fora do shell do painel — usa `admin.css` (tokens) + `login.css` |
 | `myAutoAtendMCP/app/templates/admin.html` | Shell do painel: head (tema antes do paint), barra lateral (nav), topo, uma `<section class="view">` por seção, ponte `window.__ADMIN__`; CSS com cache-bust `?v=N` (subir ao mexer no admin.css — o `/static` também vai com `Cache-Control: no-cache`, ver `EstaticosRevalidados` em `main.py`, senão o browser fica com o JS velho depois do deploy) |
-| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG) e `onboarding` (guia da 1ª execução, incluído só quando `Config.onboarding_visto` é falso) |
+| `myAutoAtendMCP/app/templates/partials/` | Conteúdo de cada seção: `conversas` · `agendamentos` · `clientes` · `ficha` · `servicos` · `horarios` · `bloqueios` · `ia` + `prompt` (seção Agente) · `proatividade` · `whatsapp` · `config`; mais `icones` (sprite SVG), `onboarding` (guia da 1ª execução, incluído só quando `Config.onboarding_visto` é falso) e `agendamentos_linhas` (só as `<tr>` da agenda — servidas na carga E em `/admin/agendamentos/estado`) |
 | `myAutoAtendMCP/app/static/admin/` | `admin.css` (estilo todo, tokens em `:root` + dark em `html[data-theme="dark"]` + acento por seção em `[data-accent]`) + `js/` (ES modules, 1 por feature; entrada `js/admin.js`) |
 
 ---
@@ -229,6 +229,25 @@ primeiro `docker compose up -d`.
   `POST /admin/ia/modelos-preview` (chave transiente), `POST /admin/ia/credencial`,
   `POST /admin/ia/modelo`.
 - **Instruções do agente**: `GET/POST /admin/agente/prompt` (SQLite direto).
+- **Agenda ao vivo** (`js/agendamentos.js`, poll 8s): `GET /admin/agendamentos/
+  estado` devolve `{total, linhas}` — `linhas` é HTML, renderizado do MESMO
+  partial `agendamentos_linhas.html` da carga inicial (montar a linha de novo em
+  JS deixaria dois markups — form de reagendar, `data-confirmar` do
+  cancelamento — para manter em sincronia). O JS compara a string com a anterior
+  e só troca o `<tbody>` quando muda: agendamento que o bot marcou no WhatsApp
+  aparece sozinho, sem F5. Ao repintar, o form de reagendar que estiver ABERTO é
+  preservado (data digitada + "avisar cliente"), os avatares são pintados de
+  novo (`avatars.js` exporta `pintarAvatares(raiz)`, cache por número) e o
+  contador/badge do menu acompanham. Aba em segundo plano não gasta poll
+  (`document.hidden`; volta a atualizar no `visibilitychange`).
+  - **Ação do painel não recarrega mais a página**: form com `data-sem-reload`
+    (cancelar e reagendar) faz o `forms.js` trocar o `location.reload()` por um
+    toast — o texto do atributo é a confirmação, já que sem reload o toast é o
+    único sinal de sucesso — e disparar o evento `painel:atualizar`, que o
+    módulo da agenda escuta para repintar na hora. O modal de novo agendamento
+    dispara o mesmo evento. **Efeito colateral conhecido**: a seção Clientes
+    continua vindo pronta do servidor, então contato criado por um agendamento
+    novo só aparece lá no próximo carregamento da página.
 - **Cadastro manual de agendamento**: botão "+ Novo agendamento" na seção abre
   MODAL (`js/agendamento.js`) com seletor de horário em quadrados — `GET
   /admin/agenda/slots?data=&servico_id=` (mesma lógica da tool de consulta;
@@ -430,7 +449,8 @@ primeiro `docker compose up -d`.
   tags, `.btn-acento` e o foco dos campos herdam (fundos suaves via
   `color-mix`). Tema claro/escuro por tokens (`data-theme`, default escuro,
   `js/tema.js`, botão no pé da lateral). Toasts (`js/toast.js`) + interceptação
-  de forms POST (`js/forms.js`, opt-out `data-nativo`) + validação
+  de forms POST (`js/forms.js`, opt-out `data-nativo`; `data-sem-reload="texto"`
+  troca o reload por toast + evento `painel:atualizar`) + validação
   (`js/validar.js`) + máscara/checagem de telefone (`js/telefone.js`). Modais
   (conversas, agendamento) são realocados pro `body` — a view de origem fica
   `display:none` quando outra seção está aberta.

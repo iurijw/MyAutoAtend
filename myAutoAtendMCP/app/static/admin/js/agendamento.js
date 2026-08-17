@@ -6,7 +6,10 @@
 
    O telefone é tratado por telefone.js (máscara + checagem de WhatsApp) e o
    nome do cliente tem autocomplete de contato já cadastrado (autocomplete.js);
-   aqui só cuidamos do modal, dos slots e do envio. */
+   aqui só cuidamos do modal, dos slots e do envio.
+
+   Sucesso NÃO recarrega a página: dispara 'painel:atualizar' e quem mantém a
+   tabela ao vivo (js/agendamentos.js) repinta só o corpo dela. */
 
 import { toast } from './toast.js';
 import { ligarAutocompleteCliente } from './autocomplete.js';
@@ -241,7 +244,10 @@ if (modal) {
       });
       if (r.type === 'opaqueredirect' || r.ok) {
         toast('ok', 'Agendamento criado.');
-        location.reload();
+        fechar();               // abrir() zera o form inteiro na próxima vez
+        // A tabela se repinta sozinha (js/agendamentos.js) — sem reload.
+        document.dispatchEvent(new CustomEvent('painel:atualizar'));
+        salvarBtn.disabled = false;
         return;
       }
       let d = null;

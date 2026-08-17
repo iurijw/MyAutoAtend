@@ -10,6 +10,7 @@ import './whatsapp.js';
 import './ia.js';
 import './prompt.js';
 import './horarios.js';
+import './agendamentos.js';
 import './proatividade.js';
 import './conversas.js';
 import './clientes.js';

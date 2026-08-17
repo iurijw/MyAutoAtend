@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/admin/admin.css?v=26">
+  <link rel="stylesheet" href="/static/admin/admin.css?v=27">
 </head>
 <body>
   {% include "partials/icones.html" %}
@@ -44,7 +44,7 @@
         <a class="nav-item" href="#agendamentos" data-accent="marca">
           <svg class="nav-icone" aria-hidden="true"><use href="#i-agenda"></use></svg>
           <span class="nav-rotulo">Agendamentos</span>
-          {% if agendamentos %}<span class="nav-badge">{{ agendamentos|length }}</span>{% endif %}
+          <span class="nav-badge" id="nav-badge-agendamentos"{% if not agendamentos %} hidden{% endif %}>{{ agendamentos|length or '' }}</span>
         </a>
         <a class="nav-item" href="#clientes" data-accent="mare">
           <svg class="nav-icone" aria-hidden="true"><use href="#i-clientes"></use></svg>

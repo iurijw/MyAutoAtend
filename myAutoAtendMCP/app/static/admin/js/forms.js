@@ -23,6 +23,17 @@ async function enviar(form, btn) {
       headers: { 'Accept': 'application/json' },
     });
     if (r.type === 'opaqueredirect' || r.ok) {
+      // Seção que se repinta sozinha não quer o reload: o módulo dela escuta
+      // 'painel:atualizar' e busca só o pedaço que mudou. O valor do atributo
+      // é a confirmação — sem o reload, o toast é o único sinal de que deu
+      // certo. (data-sem-reload="" cai no texto genérico.)
+      const aviso = form.getAttribute('data-sem-reload');
+      if (aviso !== null) {
+        toast('ok', aviso || 'Alteração salva.');
+        document.dispatchEvent(new CustomEvent('painel:atualizar', { detail: { form } }));
+        if (btn) btn.disabled = false;
+        return;
+      }
       location.reload();
       return;
     }

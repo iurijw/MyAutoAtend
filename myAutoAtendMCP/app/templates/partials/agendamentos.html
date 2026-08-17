@@ -1,56 +1,17 @@
 <!-- ============ AGENDAMENTOS ============ -->
 <div class="card">
   <div class="bloco-barra">
-    <span class="tag">{{ agendamentos|length }} marcado{{ '' if agendamentos|length == 1 else 's' }}</span>
+    <span class="ag-live" id="ag-live" title="Atualiza sozinho"><span class="ag-live-dot"></span>ao vivo</span>
+    <span class="tag" id="ag-count">{{ agendamentos|length }} marcado{{ '' if agendamentos|length == 1 else 's' }}</span>
     <button type="button" class="btn-acento btn-sm card-acao" id="ag-novo-abrir">+ Novo agendamento</button>
   </div>
   <div class="tbl-rolagem">
   <table class="tbl">
     <thead><tr><th>#</th><th>Cliente</th><th>Serviço</th><th>Quando</th><th></th></tr></thead>
-    <tbody>
-    {% for a in agendamentos %}
-      <tr>
-        <td class="id">{{ a.id }}</td>
-        <td>
-          <div class="cli">
-            <div class="ava" data-num="{{ a.telefone_cliente }}">{{ (a.nome_cliente or '?')[:1]|upper }}</div>
-            <div><div class="who">{{ a.nome_cliente }}</div><div class="meta">{{ a.telefone_cliente }}</div></div>
-          </div>
-        </td>
-        <td>
-          {{ servico_nome.get(a.servico_id, '—') }}
-          {% if a.observacoes %}<div class="meta" title="Observações">📝 {{ a.observacoes }}</div>{% endif %}
-        </td>
-        <td class="when-cell">
-          <span class="d">{{ a.inicio.split('T')[0] }}</span>
-          <span class="t">{{ a.inicio.split('T')[1] }}–{{ a.fim.split('T')[1] }}</span>
-          <form class="reagenda" id="rg{{ a.id }}" method="post" action="/admin/agendamento/{{ a.id }}/reagendar">
-            <input type="datetime-local" name="novo_inicio" value="{{ a.inicio }}" required>
-            <label class="avisar-cli" title="A IA manda mensagem no WhatsApp do cliente avisando a mudança"><input type="checkbox" name="avisar_cliente" value="1"> Avisar cliente</label>
-            <button class="btn-sm btn-primary" style="margin:0">Confirmar</button>
-          </form>
-        </td>
-        <td>
-          <div class="acts">
-            <button type="button" class="btn-sm btn-ghost" onclick="window.abrirConversa('{{ a.telefone_cliente }}')">Conversa</button>
-            <button type="button" class="btn-sm btn-ghost" onclick="document.getElementById('rg{{ a.id }}').classList.toggle('open')">Reagendar</button>
-            <form method="post" action="/admin/agendamento/{{ a.id }}/cancelar"
-                  data-confirmar="Cancelar o agendamento de {{ a.nome_cliente }}?"
-                  data-confirmar-texto="{{ servico_nome.get(a.servico_id, 'Serviço') }} · {{ a.inicio.replace('T', ' às ') }}"
-                  data-confirmar-acao="Cancelar agendamento"
-                  data-confirmar2="Avisar {{ a.nome_cliente }} pelo WhatsApp?"
-                  data-confirmar2-texto="A IA escreve e envia a mensagem do cancelamento."
-                  data-confirmar2-campo="avisar_cliente">
-              <input type="hidden" name="avisar_cliente" value="">
-              <button class="btn-sm btn-danger">Cancelar</button>
-            </form>
-          </div>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5" class="empty">Nenhum agendamento ativo. Marque o primeiro em <b>+ Novo agendamento</b>.</td></tr>
-    {% endfor %}
-    </tbody>
+    <!-- As linhas vivem em partials/agendamentos_linhas.html: o mesmo trecho é
+         renderizado de novo por /admin/agendamentos/estado quando o painel
+         repinta a tabela sozinho (js/agendamentos.js). -->
+    <tbody id="ag-tbody">{% include "partials/agendamentos_linhas.html" %}</tbody>
   </table>
   </div>
 </div>

@@ -341,13 +341,13 @@ html[data-theme="dark"] .pill.off{background:rgba(180,166,138,.14);}
 /* ===========================================================================
    Proatividade (fila ao vivo do bot)
    =========================================================================== */
-.proat-live,.conv-live{display:inline-flex; align-items:center; gap:6px;
+.proat-live,.conv-live,.ag-live{display:inline-flex; align-items:center; gap:6px;
   font:600 10px/1 "Hanken Grotesk"; letter-spacing:.16em; text-transform:uppercase; color:var(--green);}
-.proat-live.off,.conv-live.off{color:var(--ink-soft); opacity:.5;}
-.proat-live + .tag,.conv-live + .tag{margin-left:2px;}
-.proat-live-dot,.conv-live-dot{width:7px; height:7px; border-radius:50%; background:var(--green);
+.proat-live.off,.conv-live.off,.ag-live.off{color:var(--ink-soft); opacity:.5;}
+.proat-live + .tag,.conv-live + .tag,.ag-live + .tag{margin-left:2px;}
+.proat-live-dot,.conv-live-dot,.ag-live-dot{width:7px; height:7px; border-radius:50%; background:var(--green);
   box-shadow:0 0 0 0 rgba(63,107,76,.5); animation:proat-pulse 2s infinite;}
-.proat-live.off .proat-live-dot,.conv-live.off .conv-live-dot{background:var(--ink-soft);
+.proat-live.off .proat-live-dot,.conv-live.off .conv-live-dot,.ag-live.off .ag-live-dot{background:var(--ink-soft);
   animation:none; box-shadow:none;}
 @keyframes proat-pulse{
   0%{box-shadow:0 0 0 0 rgba(63,107,76,.45);}

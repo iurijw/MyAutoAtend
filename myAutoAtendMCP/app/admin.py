@@ -205,6 +205,32 @@ def painel(request: Request, _: str = Depends(autenticar)):
 
 
 # ---------------------------------------------------------------------------
+# Agendamentos ao vivo
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/agendamentos/estado")
+def agendamentos_estado(_: str = Depends(autenticar)):
+    """Corpo da tabela de agendamentos, pronto para o painel trocar sozinho.
+
+    Devolve HTML e não JSON de propósito: as linhas saem do MESMO partial da
+    carga inicial (`partials/agendamentos_linhas.html`), então não existe uma
+    segunda cópia do markup (form de reagendar, data-confirmar do cancelamento)
+    para sair de sincronia. O JS compara a string com a anterior e só repinta
+    quando ela muda — agendamento marcado pelo bot no WhatsApp aparece aqui sem
+    ninguém apertar F5.
+    """
+    agendamentos = sorted(db.listar_agendamentos(), key=lambda a: a.inicio)
+    linhas = templates.get_template("partials/agendamentos_linhas.html").render(
+        {
+            "agendamentos": agendamentos,
+            "servico_nome": {s.id: s.nome for s in db.listar_todos_servicos()},
+        }
+    )
+    return {"total": len(agendamentos), "linhas": linhas}
+
+
+# ---------------------------------------------------------------------------
 # WhatsApp (pareamento via Evolution API) — consumido por JS no painel
 # ---------------------------------------------------------------------------
 
