@@ -564,19 +564,163 @@ html[data-theme="dark"] #wa-qr{background:#fff;}
 .prompt-avancado .ia-acts{margin-bottom:16px;}
 
 /* ===========================================================================
-   Horários de funcionamento
+   Horários de funcionamento — régua da semana + editor por dia
+
+   A régua é a peça da seção: sete trilhos numa escala de horas, redesenhados
+   pelo JS a cada tecla (js/horarios.js). Ela não é decoração — é a única
+   leitura possível da semana inteira; o editor abaixo é onde se digita.
+   Escala e barras são posicionadas em %, e o passo das linhas de hora chega
+   pela variável --hf-tick (calculada em JS, porque depende do intervalo
+   que a grade ocupa).
    =========================================================================== */
-.hf-dia{padding:12px 0; border-bottom:1px solid var(--line);}
-.hf-dia:last-of-type{border-bottom:none;}
-.hf-dia-head{display:flex; align-items:center; gap:12px;}
-.hf-dia-nome{font-weight:600; flex:none; min-width:130px;}
-.hf-fechado{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--ink-soft); font-style:italic;}
-.hf-dia-head .hf-add{margin-left:auto;}
-.hf-intervalos{display:flex; flex-direction:column; gap:8px;}
-.hf-int{display:flex; align-items:center; gap:10px; margin-top:8px;}
-.hf-int input[type="time"]{width:auto; flex:none;}
-.hf-ate{font-size:13px; color:var(--ink-soft);}
-.hf-rm{flex:none; padding:7px 10px;}
+.hf-resumo-det{font-family:"JetBrains Mono",monospace; font-size:12.5px; color:var(--ink-soft);}
+.hf-acoes-topo{display:flex; gap:8px;}
+
+/* ---------- aviso de semana vazia ---------- */
+.hf-vazio{display:none; align-items:center; gap:18px; flex-wrap:wrap;
+  margin:0 0 22px; padding:16px 18px; border-radius:14px;
+  background:color-mix(in srgb, var(--gold) 10%, var(--card));
+  border:1px dashed color-mix(in srgb, var(--gold) 46%, transparent);}
+#horarios-card.hf-sem-nada .hf-vazio{display:flex;}
+.hf-vazio-tit{margin:0; font-weight:600;}
+.hf-vazio-txt{margin:3px 0 0; font-size:13.5px; color:var(--ink-soft); max-width:56ch;}
+.hf-vazio .btn-acento{margin-left:auto;}
+
+/* ---------- régua ---------- */
+.hf-regua{--hf-tick:12.5%; display:flex; flex-direction:column; gap:5px;
+  margin:0 0 28px; padding:14px 18px 16px; border-radius:14px;
+  background:var(--card); border:1px solid var(--line);}
+.hf-regua:empty{display:none;}
+.hf-regua-linha{display:grid; grid-template-columns:38px minmax(0,1fr); align-items:center; gap:12px;}
+.hf-regua-dia{font:500 10.5px/1 "JetBrains Mono",monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-soft); text-align:right; opacity:.72;}
+.hf-regua-linha.aberta .hf-regua-dia{color:var(--accent); opacity:1;}
+
+.hf-regua-escala{margin-bottom:2px;}
+.hf-regua-horas{position:relative; height:13px;}
+.hf-regua-horas span{position:absolute; top:0; transform:translateX(-50%);
+  font:500 10px/1.3 "JetBrains Mono",monospace; color:var(--ink-soft); opacity:.7;}
+
+.hf-regua-trilho{position:relative; height:26px; border-radius:7px; overflow:hidden;
+  background:
+    repeating-linear-gradient(90deg,
+      color-mix(in srgb, var(--line) 85%, transparent) 0 1px, transparent 1px var(--hf-tick)),
+    var(--paper-2);}
+/* dia fechado: hachura, não bloco cinza — some do olho sem virar buraco */
+.hf-regua-linha:not(.aberta) .hf-regua-trilho{
+  background:
+    repeating-linear-gradient(135deg, transparent 0 5px,
+      color-mix(in srgb, var(--line) 70%, transparent) 5px 6px),
+    color-mix(in srgb, var(--paper-2) 60%, transparent);}
+.hf-regua-off{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font:500 10.5px/1 "JetBrains Mono",monospace; letter-spacing:.08em;
+  color:var(--ink-soft); opacity:.6;}
+.hf-regua-linha.destaque .hf-regua-trilho{
+  box-shadow:inset 0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent);}
+
+.hf-barra{position:absolute; top:3px; bottom:3px; border-radius:5px; overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--accent); color:var(--paper);
+  transition:left .16s cubic-bezier(.2,.7,.2,1), width .16s cubic-bezier(.2,.7,.2,1);}
+.hf-barra-txt{font:500 10.5px/1 "JetBrains Mono",monospace; letter-spacing:.02em; white-space:nowrap;}
+.hf-barra.curta .hf-barra-txt{display:none;}
+.hf-barra.ruim{background:var(--oxblood); color:#f6ead2;}
+
+/* ---------- editor por dia ---------- */
+.hf-grade{border-top:1px solid var(--line);}
+.hf-dia{display:grid; grid-template-columns:214px minmax(0,1fr); gap:10px 20px; align-items:start;
+  padding:15px 4px; border-bottom:1px solid var(--line);}
+.hf-dia-id{display:flex; flex-direction:column; gap:5px; padding-top:3px;}
+.hf-chave{display:flex; align-items:center; gap:11px; margin:0; cursor:pointer;
+  font-size:15px; font-weight:600; letter-spacing:0; text-transform:none; color:var(--ink);}
+.hf-chave input{--sw-w:34px; --sw-h:20px; --sw-pad:2.5px; margin:0;}
+.hf-dia[data-fechado] .hf-chave{color:var(--ink-soft);}
+.hf-dia-total{padding-left:45px; font:500 11.5px/1 "JetBrains Mono",monospace;
+  letter-spacing:.06em; color:var(--accent);}
+.hf-dia[data-fechado] .hf-dia-total{color:var(--ink-soft); opacity:.7;}
+.hf-dia-total.ruim{color:var(--oxblood);}
+
+.hf-corpo{grid-column:2; display:flex; flex-wrap:wrap; align-items:center; gap:9px;}
+.hf-dia[data-fechado] .hf-corpo{display:none;}
+.hf-dia-off{grid-column:2; margin:2px 0 0; font-size:13.5px; color:var(--ink-soft); font-style:italic;}
+.hf-dia:not([data-fechado]) .hf-dia-off{display:none;}
+.hf-intervalos{display:contents;}
+
+/* Intervalo é uma pastilha, não uma linha de formulário: o par de horas é uma
+   coisa só, e vários pares cabem na mesma linha do dia. */
+.hf-int{display:flex; align-items:center; gap:4px; padding:4px 5px 4px 9px;
+  border-radius:999px; background:var(--card); border:1px solid var(--line);
+  transition:border-color .15s, box-shadow .15s;}
+.hf-int input[type="time"]{width:auto; flex:none; border:none; background:transparent;
+  padding:3px 5px; border-radius:6px; color:var(--ink);
+  font:500 13.5px/1 "JetBrains Mono",monospace;}
+.hf-int input[type="time"]:focus{outline:none; box-shadow:none;
+  background:color-mix(in srgb, var(--accent) 15%, transparent);}
+/* o reloginho do Chrome dobrado em cada pastilha vira ruído: a hora continua
+   digitável e ajustável pelas setas, que é como se mexe nela de verdade */
+.hf-int input[type="time"]::-webkit-calendar-picker-indicator{display:none;}
+.hf-int:focus-within{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);}
+.hf-int.ruim{border-color:var(--oxblood);
+  background:color-mix(in srgb, var(--oxblood) 9%, var(--card));}
+.hf-ate{font-size:12px; color:var(--ink-soft);}
+.hf-rm{flex:none; width:22px; height:22px; padding:0; border:none; border-radius:50%;
+  background:transparent; color:var(--ink-soft); font-size:10px; line-height:1;}
+.hf-rm:hover{background:color-mix(in srgb, var(--oxblood) 18%, transparent); color:var(--oxblood);}
+
+.hf-dia-acoes{position:relative; display:flex; align-items:center; gap:7px;}
+.hf-add,.hf-copiar{padding:6px 12px; border-radius:999px; background:transparent;
+  border:1px dashed var(--line); color:var(--ink-soft); font-size:12.5px; font-weight:600;}
+.hf-add:hover,.hf-copiar:hover{border-style:solid; border-color:var(--accent); color:var(--accent);}
+
+/* ---------- popover "copiar para…" ---------- */
+.hf-pop{position:absolute; z-index:30; top:calc(100% + 9px); left:0; width:246px; padding:14px;
+  border-radius:13px; background:var(--card); border:1px solid var(--line);
+  box-shadow:0 22px 40px -22px var(--shadow-pop);}
+.hf-pop-tit{margin:0 0 10px; font:700 10px/1.4 "Hanken Grotesk"; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-soft);}
+.hf-pop-dias{display:flex; flex-wrap:wrap; gap:6px;}
+.hf-pop-dia{padding:5px 11px; border-radius:999px; border:1px solid var(--line);
+  background:transparent; color:var(--ink-soft);
+  font:500 12px/1 "JetBrains Mono",monospace;}
+.hf-pop-dia:hover{border-color:var(--accent); color:var(--accent);}
+.hf-pop-dia[aria-pressed="true"]{background:var(--accent-solid); border-color:var(--accent-solid);
+  color:var(--accent-on);}
+.hf-pop-atalhos{display:flex; gap:14px; margin-top:11px;}
+.hf-pop-link{padding:0; border:none; background:transparent; color:var(--accent);
+  font-size:12.5px; font-weight:600; text-decoration:underline; text-underline-offset:3px;}
+.hf-pop-acts{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;
+  padding-top:12px; border-top:1px solid var(--line);}
+
+/* ---------- barra de salvar ---------- */
+.hf-salvar{position:sticky; bottom:16px; z-index:20; display:flex; align-items:center; gap:12px;
+  margin-top:22px; padding:11px 14px; border-radius:13px;
+  background:var(--card); border:1px solid var(--line);
+  box-shadow:0 18px 34px -24px var(--shadow-pop);}
+.hf-salvar.sujo{border-color:color-mix(in srgb, var(--gold) 55%, transparent);}
+.hf-salvar-txt{margin-right:auto; display:flex; align-items:center; gap:9px;
+  font-size:13.5px; color:var(--ink-soft);}
+.hf-salvar.sujo .hf-salvar-txt{color:var(--ink); font-weight:600;}
+.hf-salvar-dot{flex:none; width:8px; height:8px; border-radius:50%; background:var(--green);}
+.hf-salvar.sujo .hf-salvar-dot{background:var(--gold); animation:hf-pulso 1.9s infinite;}
+.hf-salvar button:disabled{opacity:.45; cursor:default;}
+@keyframes hf-pulso{
+  0%{box-shadow:0 0 0 0 rgba(184,134,47,.5);}
+  70%{box-shadow:0 0 0 7px rgba(184,134,47,0);}
+  100%{box-shadow:0 0 0 0 rgba(184,134,47,0);}
+}
+@media (prefers-reduced-motion:reduce){
+  .hf-salvar.sujo .hf-salvar-dot{animation:none;}
+  .hf-barra{transition:none;}
+}
+
+@media (max-width:820px){
+  .hf-dia{grid-template-columns:minmax(0,1fr); gap:10px;}
+  .hf-corpo,.hf-dia-off{grid-column:1;}
+  .hf-dia-total{padding-left:45px;}
+  .hf-vazio .btn-acento{margin-left:0;}
+  .hf-pop{left:auto; right:0;}
+}
 .hf-acoes{display:flex; gap:10px; justify-content:flex-end; margin-top:18px;
   border-top:1px solid var(--line); padding-top:16px;}
 

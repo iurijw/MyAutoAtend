@@ -312,6 +312,23 @@ primeiro `docker compose up -d`.
   `/admin/horarios/limpar`. Seed do padrão SÓ na criação da tabela (vazia ≠
   nova). Tools `consultar_horarios_disponiveis`/`agendar`/`reagendar`
   respeitam a grade; `Config.abertura/fechamento` viraram colunas órfãs.
+  - **UI** (`partials/horarios.html` + `js/horarios.js`): no topo a **régua da
+    semana** — sete trilhos numa escala de horas desenhada pelo JS a cada tecla
+    (a escala se ajusta ao que a grade ocupa; dia fechado vira hachura). É a
+    única leitura da semana inteira; `aria-hidden`, porque repete o form.
+    Abaixo, uma linha por dia: chave liga/desliga + total do dia + os
+    intervalos como pastilhas (par de `input[type=time]`, sem o reloginho do
+    Chrome) + "+ intervalo" + "copiar para…" (popover com chips dos outros
+    dias, atalhos "dias úteis"/"todos").
+  - Fechar um dia NÃO apaga os intervalos: o JS só marca os inputs
+    `disabled` — input disabled não vai no POST, e o dia volta intacto ao
+    religar. Reabrir dia sem intervalo herda a jornada do dia aberto mais
+    próximo. O envio segue sendo o form clássico (trincas paralelas).
+  - Barra de salvar grudada no rodapé da seção: diz se há mudança pendente
+    ("Alterações não salvas."), com Descartar (reload) e Salvar; `beforeunload`
+    segura a saída acidental. Validação client-side ANTES do POST (hora cheia,
+    fim > início, sem sobreposição) marca a pastilha e a barra em oxblood e
+    manda o motivo no toast — o servidor continua validando igual.
 - **Ficha de cadastro** (feature OPCIONAL, `Config.ficha_ativa`, ALTER em
   `_migrar`): cadastro por contato com campos definidos pelo dono. `CampoFicha`
   (chave slug estável + rótulo + tipo + dica p/ o agente + obrigatorio + ordem

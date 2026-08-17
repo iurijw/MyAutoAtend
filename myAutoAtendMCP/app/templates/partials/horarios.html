@@ -1,34 +1,14 @@
-<!-- ============ HORÁRIOS DE FUNCIONAMENTO ============ -->
-<div class="card" id="horarios-card">
-  <div class="bloco-barra" id="horarios-head"><span class="tag">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span></div>
-  <div id="horarios-body">
-    <p class="card-sub">O agente só oferece e aceita horários dentro destes intervalos. Dia sem intervalo fica fechado.</p>
-    {% set dias_nomes = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'] %}
-    <form method="post" action="/admin/horarios" id="horarios-form">
-      {% for d in range(7) %}
-      <div class="hf-dia" data-dia="{{ d }}">
-        <div class="hf-dia-head">
-          <span class="hf-dia-nome">{{ dias_nomes[d] }}</span>
-          <span class="hf-fechado"{% if horarios_por_dia[d] %} style="display:none"{% endif %}>fechado</span>
-          <button type="button" class="btn-sm btn-ghost hf-add">+ Intervalo</button>
-        </div>
-        <div class="hf-intervalos">
-          {% for h in horarios_por_dia[d] %}
-          <div class="hf-int">
-            <input type="hidden" name="dia" value="{{ d }}">
-            <input name="inicio" type="time" value="{{ h.inicio }}" required>
-            <span class="hf-ate">às</span>
-            <input name="fim" type="time" value="{{ h.fim }}" required>
-            <button type="button" class="btn-sm btn-danger hf-rm" title="Remover intervalo" aria-label="Remover intervalo">✕</button>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      {% endfor %}
-      <button class="btn-acento">Salvar horários</button>
-    </form>
-    <div class="hf-acoes">
-      <form method="post" action="/admin/horarios/restaurar"
+<!-- ============ HORÁRIOS DE FUNCIONAMENTO ============
+     A grade é um POST de replace-all (trincas paralelas dia/inicio/fim): o que
+     está na tela vira a verdade. Tudo é renderizado pelo servidor — o JS
+     (js/horarios.js) desenha a régua da semana por cima e cuida do resto. -->
+{% set dias_nomes = ['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'] %}
+<div class="card{% if not n_horarios %} hf-sem-nada{% endif %}" id="horarios-card">
+  <div class="bloco-barra">
+    <span class="tag" id="hf-resumo">{{ n_horarios }} intervalo{{ '' if n_horarios == 1 else 's' }}</span>
+    <span class="hf-resumo-det" id="hf-resumo-det"></span>
+    <div class="card-acao hf-acoes-topo">
+      <form method="post" action="/admin/horarios/restaurar" id="hf-restaurar"
             data-confirmar="Restaurar a grade padrão?"
             data-confirmar-texto="Segunda a sexta, 08:00–12:00 e 13:30–18:00."
             data-confirmar-nota="Substitui a grade atual inteira."
@@ -36,12 +16,71 @@
         <button class="btn-sm btn-ghost">Restaurar padrão</button>
       </form>
       <form method="post" action="/admin/horarios/limpar"
-            data-confirmar="Apagar todos os horários?"
+            data-confirmar="Fechar a semana inteira?"
             data-confirmar-texto="Todos os dias ficam sem expediente."
             data-confirmar-nota="Enquanto a grade estiver vazia, o agente não oferece horário nenhum."
-            data-confirmar-acao="Apagar tudo">
-        <button class="btn-sm btn-danger">Apagar tudo</button>
+            data-confirmar-acao="Fechar a semana">
+        <button class="btn-sm btn-danger">Fechar a semana</button>
       </form>
     </div>
   </div>
+
+  <p class="card-sub">O agente só oferece e aceita horários dentro desta grade. Dia sem intervalo fica fechado.</p>
+
+  <form method="post" action="/admin/horarios" id="horarios-form">
+    <div class="hf-vazio">
+      <div>
+        <p class="hf-vazio-tit">A semana está fechada.</p>
+        <p class="hf-vazio-txt">Sem nenhum intervalo, o agente responde a todo mundo que não há horário disponível.</p>
+      </div>
+      <button type="submit" form="hf-restaurar" class="btn-sm btn-acento">Usar horário comercial</button>
+    </div>
+
+    <!-- Régua da semana: desenhada pelo JS a partir dos campos abaixo (por isso
+         aria-hidden — é a mesma informação, em forma de barra). -->
+    <div class="hf-regua" id="hf-regua" aria-hidden="true"></div>
+
+    <div class="hf-grade">
+      {% for d in range(7) %}
+      <div class="hf-dia" data-dia="{{ d }}"{% if not horarios_por_dia[d] %} data-fechado{% endif %}>
+        <div class="hf-dia-id">
+          <label class="hf-chave">
+            <input type="checkbox" class="hf-abrir"{% if horarios_por_dia[d] %} checked{% endif %}>
+            <span class="hf-dia-nome">{{ dias_nomes[d] }}</span>
+          </label>
+          <span class="hf-dia-total"></span>
+        </div>
+
+        <div class="hf-corpo">
+          <div class="hf-intervalos">
+            {% for h in horarios_por_dia[d] %}
+            <div class="hf-int">
+              <input type="hidden" name="dia" value="{{ d }}">
+              <input name="inicio" type="time" value="{{ h.inicio }}" required
+                     aria-label="{{ dias_nomes[d] }}: início do intervalo">
+              <span class="hf-ate">–</span>
+              <input name="fim" type="time" value="{{ h.fim }}" required
+                     aria-label="{{ dias_nomes[d] }}: fim do intervalo">
+              <button type="button" class="hf-rm" title="Remover intervalo"
+                      aria-label="Remover este intervalo de {{ dias_nomes[d] }}">✕</button>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="hf-dia-acoes">
+            <button type="button" class="hf-add">+ intervalo</button>
+            <button type="button" class="hf-copiar" aria-expanded="false">copiar para…</button>
+          </div>
+        </div>
+
+        <p class="hf-dia-off">Fechado — o agente não oferece horário neste dia.</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="hf-salvar" id="hf-salvar">
+      <span class="hf-salvar-txt"><i class="hf-salvar-dot"></i><span>Grade salva.</span></span>
+      <button type="button" class="btn-sm btn-ghost" id="hf-descartar" hidden>Descartar</button>
+      <button class="btn-sm btn-acento" id="hf-salvar-btn">Salvar grade</button>
+    </div>
+  </form>
 </div>
